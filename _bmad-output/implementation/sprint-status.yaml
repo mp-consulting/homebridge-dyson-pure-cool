@@ -1,0 +1,80 @@
+# Sprint Status - homebridge-dyson-pure-cool
+# Track current sprint progress
+
+sprint:
+  number: 1
+  goal: "Establish the development foundation - TypeScript, testing, linting, CI/CD"
+  start_date: 2025-01-13
+  status: active
+
+epic:
+  id: E1
+  title: Project Infrastructure
+  total_points: 8
+
+stories:
+  - id: E1-S1
+    title: Configure TypeScript Project
+    status: pending
+    points: 2
+    priority: P0
+    assignee: dev
+    notes: "Update tsconfig.json, verify ES2022/ESM setup"
+
+  - id: E1-S2
+    title: Configure ESLint
+    status: pending
+    points: 1
+    priority: P0
+    assignee: dev
+    notes: "Verify ESLint 9.x flat config, stricter rules"
+
+  - id: E1-S3
+    title: Configure Jest Testing Framework
+    status: pending
+    points: 2
+    priority: P0
+    assignee: dev
+    notes: "Add Jest, ts-jest, sample test, coverage config"
+
+  - id: E1-S4
+    title: Configure GitHub Actions CI
+    status: pending
+    points: 2
+    priority: P0
+    assignee: dev
+    notes: "Update build.yml with test step, multi-node matrix"
+
+  - id: E1-S5
+    title: Update Package Metadata
+    status: pending
+    points: 1
+    priority: P0
+    assignee: dev
+    notes: "Update package.json for npm publishing"
+
+metrics:
+  total_points: 8
+  completed_points: 0
+  in_progress_points: 0
+  velocity_target: 8
+
+board:
+  todo: [E1-S1, E1-S2, E1-S3, E1-S4, E1-S5]
+  in_progress: []
+  in_review: []
+  done: []
+
+definition_of_done:
+  - Code compiles with zero TypeScript errors
+  - ESLint passes with zero warnings
+  - All unit tests pass
+  - CI pipeline runs successfully
+  - Documentation updated if applicable
+
+blockers: []
+
+notes:
+  - "Sprint 1 kicked off on 2025-01-13"
+  - "Focus: Establish solid infrastructure for future development"
+  - "All stories are P0 - critical path for subsequent epics"
