@@ -1,13 +1,13 @@
 import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
 
-import type { ExampleHomebridgePlatform } from './platform.js';
+import type { DysonPureCoolPlatform } from './platform.js';
 
 /**
- * Platform Accessory
- * An instance of this class is created for each accessory your platform registers
- * Each accessory may expose multiple services of different service types.
+ * DysonPlatformAccessory
+ * Base accessory class for Dyson devices.
+ * This is a placeholder that will be replaced with device-specific implementations.
  */
-export class ExamplePlatformAccessory {
+export class DysonPlatformAccessory {
   private service: Service;
 
   /**
@@ -20,7 +20,7 @@ export class ExamplePlatformAccessory {
   };
 
   constructor(
-    private readonly platform: ExampleHomebridgePlatform,
+    private readonly platform: DysonPureCoolPlatform,
     private readonly accessory: PlatformAccessory,
   ) {
     // set accessory information
