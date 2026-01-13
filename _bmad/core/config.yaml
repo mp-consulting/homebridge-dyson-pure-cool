@@ -1,0 +1,26 @@
+# BMad™ Core Configuration
+# This file contains foundational settings for the BMad Method
+# Applied to: homebridge-dyson-pure-cool
+
+# User/Team Configuration
+user_name: "Developer"
+
+# Language Settings
+communication_language: "English"
+document_output_language: "English"
+
+# Output Directory (relative to project root)
+output_folder: "_bmad-output"
+
+# Project Metadata
+project:
+  name: "homebridge-dyson-pure-cool"
+  description: "Homebridge plugin for Dyson Pure Cool air purifiers and fans"
+  type: "homebridge-plugin"
+
+# Development Configuration
+development:
+  language: "TypeScript"
+  runtime: "Node.js"
+  framework: "Homebridge"
+  target_platform: "Apple HomeKit"

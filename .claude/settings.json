@@ -1,0 +1,17 @@
+{
+  "project": {
+    "name": "homebridge-dyson-pure-cool",
+    "description": "Homebridge plugin for Dyson Pure Cool air purifiers and fans"
+  },
+  "bmad": {
+    "enabled": true,
+    "version": "6.0",
+    "modules": ["core", "bmm"],
+    "outputFolder": "_bmad-output"
+  },
+  "preferences": {
+    "codeStyle": "typescript",
+    "testFramework": "jest",
+    "linter": "eslint"
+  }
+}

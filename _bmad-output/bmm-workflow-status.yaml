@@ -1,0 +1,60 @@
+# BMad Method Workflow Status
+# Track progress through the development phases
+
+project:
+  name: homebridge-dyson-pure-cool
+  description: Homebridge plugin for Dyson Pure Cool air purifiers and fans
+  created: 2025-01-13
+  track: bmad-method  # quick-flow | bmad-method | enterprise
+
+current_phase: 1-analysis
+status: initialized
+
+phases:
+  1-analysis:
+    status: pending
+    workflows:
+      - name: workflow-init
+        status: pending
+      - name: research-dyson
+        status: pending
+      - name: analyze-ecosystem
+        status: pending
+      - name: create-brief
+        status: pending
+    artifacts: []
+
+  2-planning:
+    status: pending
+    workflows:
+      - name: create-prd
+        status: pending
+      - name: validate-prd
+        status: pending
+      - name: create-epics
+        status: pending
+      - name: implementation-readiness
+        status: pending
+    artifacts: []
+
+  3-solutioning:
+    status: pending
+    workflows:
+      - name: create-architecture
+        status: pending
+      - name: design-device-layer
+        status: pending
+      - name: design-homekit-mapping
+        status: pending
+      - name: review-architecture
+        status: pending
+    artifacts: []
+
+  4-implementation:
+    status: pending
+    sprints: []
+    completed_stories: []
+
+notes:
+  - "Project initialized with BMad Method on 2025-01-13"
+  - "Ready to begin analysis phase with /analyst agent"

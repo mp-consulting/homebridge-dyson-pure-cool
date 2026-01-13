@@ -1,0 +1,54 @@
+# BMad Method™ Module Definition
+# Agile-AI Driven Development for homebridge-dyson-pure-cool
+
+code: bmm
+name: "BMad Method™ Agile-AI Driven Development"
+header: "BMad Method™: Breakthrough Method of Agile-AI Driven Development"
+subheader: |
+  This module implements the BMad Method for structured, AI-assisted
+  software development covering analysis, planning, solutioning, and implementation.
+
+default_selected: true
+
+# Inherit from core configuration
+inherits:
+  - user_name
+  - communication_language
+  - document_output_language
+  - output_folder
+
+# Project-Specific Configuration
+config:
+  project_name: "homebridge-dyson-pure-cool"
+
+  # Skill level affects explanation depth
+  # Options: beginner, intermediate, expert
+  user_skill_level: "intermediate"
+
+  # Artifact Locations (relative to output_folder)
+  planning_artifacts: "planning"
+  implementation_artifacts: "implementation"
+  project_knowledge: "knowledge"
+
+# Module Agents
+agents:
+  - analyst
+  - pm
+  - architect
+  - dev
+  - sm
+  - tea
+  - tech-writer
+
+# Workflow Phases
+workflow_phases:
+  - 1-analysis
+  - 2-planning
+  - 3-solutioning
+  - 4-implementation
+
+# Features enabled for this project
+features:
+  homebridge_integration: true
+  typescript_support: true
+  homekit_testing: true

@@ -1,0 +1,23 @@
+# BMad™ Core Module Definition
+# Core module configuration for homebridge-dyson-pure-cool
+
+code: core
+name: "BMad™ Core Module"
+header: "BMad™ Core Configuration"
+subheader: |
+  These foundational settings are used by all modules and agents.
+  Configure these once and they will be inherited across the project.
+
+# Variable References (inherited by all modules)
+variables:
+  - user_name
+  - communication_language
+  - document_output_language
+  - output_folder
+
+# Core Features
+features:
+  - workflow_tracking
+  - agent_orchestration
+  - document_generation
+  - progress_monitoring
