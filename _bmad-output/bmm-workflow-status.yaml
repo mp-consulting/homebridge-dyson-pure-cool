@@ -34,12 +34,14 @@ phases:
       - planning/project-brief.md
 
   2-planning:
-    status: pending
+    status: in-progress
     workflows:
       - name: create-prd
-        status: pending
+        status: completed
+        completed_date: 2025-01-13
       - name: validate-prd
-        status: pending
+        status: completed
+        completed_date: 2025-01-13
       - name: create-epics
         status: pending
       - name: implementation-readiness
