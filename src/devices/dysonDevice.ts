@@ -88,6 +88,12 @@ export abstract class DysonDevice extends EventEmitter {
   /** Optional MQTT connect function for testing */
   private readonly mqttConnectFn?: MqttConnectFn;
 
+  /** Polling interval handle for periodic state requests */
+  private pollingIntervalHandle?: ReturnType<typeof setInterval>;
+
+  /** Polling interval in milliseconds (default: 60000ms = 60 seconds) */
+  private pollingIntervalMs: number = 60000;
+
   /**
    * Create a new DysonDevice
    *
@@ -105,6 +111,50 @@ export abstract class DysonDevice extends EventEmitter {
     this.state = createDefaultState();
     this.mqttClientFactory = mqttClientFactory;
     this.mqttConnectFn = mqttConnectFn;
+  }
+
+  /**
+   * Set the polling interval for state updates
+   *
+   * @param seconds - Interval in seconds (10-300, default 60)
+   */
+  setPollingInterval(seconds: number): void {
+    // Clamp to valid range (10-300 seconds)
+    const clampedSeconds = Math.max(10, Math.min(300, seconds));
+    this.pollingIntervalMs = clampedSeconds * 1000;
+
+    // If already polling, restart with new interval
+    if (this.pollingIntervalHandle) {
+      this.stopPolling();
+      this.startPolling();
+    }
+  }
+
+  /**
+   * Start periodic polling for state updates
+   */
+  private startPolling(): void {
+    if (this.pollingIntervalHandle) {
+      return; // Already polling
+    }
+
+    this.pollingIntervalHandle = setInterval(() => {
+      if (this.mqttClient?.isConnected()) {
+        this.mqttClient.requestCurrentState().catch(() => {
+          // Silently ignore errors during polling
+        });
+      }
+    }, this.pollingIntervalMs);
+  }
+
+  /**
+   * Stop periodic polling
+   */
+  private stopPolling(): void {
+    if (this.pollingIntervalHandle) {
+      clearInterval(this.pollingIntervalHandle);
+      this.pollingIntervalHandle = undefined;
+    }
   }
 
   /**
@@ -145,6 +195,9 @@ export abstract class DysonDevice extends EventEmitter {
     // Request current state
     await this.mqttClient.requestCurrentState();
 
+    // Start periodic polling for state updates
+    this.startPolling();
+
     // Update connection state
     this.updateState({ connected: true });
     this.emit('connect');
@@ -154,6 +207,9 @@ export abstract class DysonDevice extends EventEmitter {
    * Disconnect from the device
    */
   async disconnect(): Promise<void> {
+    // Stop polling
+    this.stopPolling();
+
     if (this.mqttClient) {
       await this.mqttClient.disconnect();
       this.mqttClient = null;
