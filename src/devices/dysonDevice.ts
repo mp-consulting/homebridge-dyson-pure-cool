@@ -1,0 +1,375 @@
+/**
+ * Base Device Class for Dyson Devices
+ *
+ * Abstract class that provides common functionality for all Dyson device types.
+ * Manages MQTT connection, state, and event emission.
+ */
+
+import { EventEmitter } from 'events';
+
+import { DysonMqttClient } from '../protocol/mqttClient.js';
+import type { MqttMessage, MqttConnectFn } from '../protocol/mqttClient.js';
+
+import type {
+  DeviceInfo,
+  DeviceState,
+  DeviceFeatures,
+  DeviceEvents,
+} from './types.js';
+import { createDefaultState, DEFAULT_FEATURES } from './types.js';
+
+/**
+ * MQTT client factory type for dependency injection
+ */
+export type MqttClientFactory = (
+  host: string,
+  serial: string,
+  credentials: string,
+  productType: string,
+  mqttConnect?: MqttConnectFn,
+) => DysonMqttClient;
+
+/**
+ * Default MQTT client factory
+ */
+const defaultMqttClientFactory: MqttClientFactory = (
+  host,
+  serial,
+  credentials,
+  productType,
+  mqttConnect?,
+) => {
+  const options = { host, serial, credentials, productType };
+  return mqttConnect
+    ? new DysonMqttClient(options, mqttConnect)
+    : new DysonMqttClient(options);
+};
+
+/**
+ * Abstract base class for all Dyson devices
+ *
+ * Provides:
+ * - MQTT client management
+ * - Device state management
+ * - Event emission for state changes
+ * - Abstract methods for device-specific behavior
+ *
+ * @example
+ * ```typescript
+ * class PureCoolDevice extends DysonDevice {
+ *   readonly productType = '438';
+ *   readonly supportedFeatures = { ...DEFAULT_FEATURES, airQualitySensor: true };
+ *
+ *   protected handleStateMessage(data: unknown): void {
+ *     // Parse device-specific state
+ *   }
+ * }
+ * ```
+ */
+export abstract class DysonDevice extends EventEmitter {
+  /** Dyson product type code (e.g., '438' for TP04) */
+  abstract readonly productType: string;
+
+  /** Features supported by this device type */
+  abstract readonly supportedFeatures: DeviceFeatures;
+
+  /** Device information */
+  protected readonly deviceInfo: DeviceInfo;
+
+  /** MQTT client for device communication */
+  protected mqttClient: DysonMqttClient | null = null;
+
+  /** Current device state */
+  protected state: DeviceState;
+
+  /** MQTT client factory for dependency injection */
+  private readonly mqttClientFactory: MqttClientFactory;
+
+  /** Optional MQTT connect function for testing */
+  private readonly mqttConnectFn?: MqttConnectFn;
+
+  /**
+   * Create a new DysonDevice
+   *
+   * @param deviceInfo - Device information from discovery
+   * @param mqttClientFactory - Optional factory for creating MQTT client (for testing)
+   * @param mqttConnectFn - Optional MQTT connect function (for testing)
+   */
+  constructor(
+    deviceInfo: DeviceInfo,
+    mqttClientFactory: MqttClientFactory = defaultMqttClientFactory,
+    mqttConnectFn?: MqttConnectFn,
+  ) {
+    super();
+    this.deviceInfo = deviceInfo;
+    this.state = createDefaultState();
+    this.mqttClientFactory = mqttClientFactory;
+    this.mqttConnectFn = mqttConnectFn;
+  }
+
+  /**
+   * Connect to the device
+   *
+   * Establishes MQTT connection, subscribes to status topic,
+   * and requests current state.
+   *
+   * @throws {Error} If connection fails or device IP is not set
+   */
+  async connect(): Promise<void> {
+    if (!this.deviceInfo.ipAddress) {
+      throw new Error(`No IP address for device ${this.deviceInfo.serial}`);
+    }
+
+    if (this.mqttClient?.isConnected()) {
+      return; // Already connected
+    }
+
+    // Create MQTT client
+    this.mqttClient = this.mqttClientFactory(
+      this.deviceInfo.ipAddress,
+      this.deviceInfo.serial,
+      this.deviceInfo.credentials,
+      this.productType,
+      this.mqttConnectFn,
+    );
+
+    // Set up event handlers
+    this.setupMqttHandlers();
+
+    // Connect to device
+    await this.mqttClient.connect();
+
+    // Subscribe to status topic
+    await this.mqttClient.subscribeToStatus();
+
+    // Request current state
+    await this.mqttClient.requestCurrentState();
+
+    // Update connection state
+    this.updateState({ connected: true });
+    this.emit('connect');
+  }
+
+  /**
+   * Disconnect from the device
+   */
+  async disconnect(): Promise<void> {
+    if (this.mqttClient) {
+      await this.mqttClient.disconnect();
+      this.mqttClient = null;
+    }
+
+    this.updateState({ connected: false });
+    this.emit('disconnect');
+  }
+
+  /**
+   * Check if device is connected
+   */
+  isConnected(): boolean {
+    return this.mqttClient?.isConnected() ?? false;
+  }
+
+  /**
+   * Get current device state
+   */
+  getState(): Readonly<DeviceState> {
+    return { ...this.state };
+  }
+
+  /**
+   * Get device serial number
+   */
+  getSerial(): string {
+    return this.deviceInfo.serial;
+  }
+
+  /**
+   * Get device name
+   */
+  getName(): string {
+    return this.deviceInfo.name;
+  }
+
+  /**
+   * Get device IP address
+   */
+  getIpAddress(): string | undefined {
+    return this.deviceInfo.ipAddress;
+  }
+
+  /**
+   * Send a command to the device
+   *
+   * @param data - Command data to send
+   * @throws {Error} If not connected
+   */
+  protected async sendCommand(data: Record<string, unknown>): Promise<void> {
+    if (!this.mqttClient?.isConnected()) {
+      throw new Error('Device not connected');
+    }
+
+    const command = {
+      msg: 'STATE-SET',
+      time: new Date().toISOString(),
+      'mode-reason': 'LAPP',
+      data,
+    };
+
+    await this.mqttClient.publishCommand(command);
+  }
+
+  /**
+   * Update device state and emit stateChange event
+   *
+   * @param partial - Partial state to merge
+   */
+  protected updateState(partial: Partial<DeviceState>): void {
+    this.state = { ...this.state, ...partial };
+    this.emit('stateChange', this.state);
+  }
+
+  /**
+   * Handle incoming MQTT message
+   *
+   * Routes messages to appropriate handlers based on message type.
+   *
+   * @param message - MQTT message received
+   */
+  protected handleMessage(message: MqttMessage): void {
+    if (!message.data || typeof message.data !== 'object') {
+      return;
+    }
+
+    const data = message.data as Record<string, unknown>;
+    const msgType = data.msg as string | undefined;
+
+    switch (msgType) {
+      case 'CURRENT-STATE':
+      case 'STATE-CHANGE':
+        this.handleStateMessage(data);
+        break;
+      case 'ENVIRONMENTAL-CURRENT-SENSOR-DATA':
+        this.handleEnvironmentalMessage(data);
+        break;
+      default:
+        // Unknown message type - ignore
+        break;
+    }
+  }
+
+  /**
+   * Handle state message from device
+   *
+   * Must be implemented by subclasses to parse device-specific state.
+   *
+   * @param data - Parsed message data
+   */
+  protected abstract handleStateMessage(data: Record<string, unknown>): void;
+
+  /**
+   * Handle environmental sensor data
+   *
+   * Can be overridden by subclasses that support environmental sensors.
+   *
+   * @param data - Parsed sensor data
+   */
+  protected handleEnvironmentalMessage(data: Record<string, unknown>): void {
+    // Default implementation - subclasses can override
+    const sensorData = (data.data as Record<string, unknown>) || data;
+
+    const stateUpdate: Partial<DeviceState> = {};
+
+    // Temperature (in Kelvin * 10)
+    if ('tact' in sensorData) {
+      const temp = sensorData.tact;
+      if (typeof temp === 'string' && temp !== 'OFF') {
+        stateUpdate.temperature = parseInt(temp, 10);
+      }
+    }
+
+    // Humidity percentage
+    if ('hact' in sensorData) {
+      const humidity = sensorData.hact;
+      if (typeof humidity === 'string' && humidity !== 'OFF') {
+        stateUpdate.humidity = parseInt(humidity, 10);
+      }
+    }
+
+    // PM2.5
+    if ('pm25' in sensorData) {
+      const pm25 = sensorData.pm25;
+      if (typeof pm25 === 'string') {
+        stateUpdate.pm25 = parseInt(pm25, 10);
+      }
+    }
+
+    // PM10
+    if ('pm10' in sensorData) {
+      const pm10 = sensorData.pm10;
+      if (typeof pm10 === 'string') {
+        stateUpdate.pm10 = parseInt(pm10, 10);
+      }
+    }
+
+    // VOC index
+    if ('va10' in sensorData) {
+      const voc = sensorData.va10;
+      if (typeof voc === 'string') {
+        stateUpdate.vocIndex = parseInt(voc, 10);
+      }
+    }
+
+    // NO2 index
+    if ('noxl' in sensorData) {
+      const no2 = sensorData.noxl;
+      if (typeof no2 === 'string') {
+        stateUpdate.no2Index = parseInt(no2, 10);
+      }
+    }
+
+    if (Object.keys(stateUpdate).length > 0) {
+      this.updateState(stateUpdate);
+    }
+  }
+
+  /**
+   * Set up MQTT client event handlers
+   */
+  private setupMqttHandlers(): void {
+    if (!this.mqttClient) {
+      return;
+    }
+
+    this.mqttClient.on('message', (message: MqttMessage) => {
+      this.handleMessage(message);
+    });
+
+    this.mqttClient.on('disconnect', () => {
+      this.updateState({ connected: false });
+      this.emit('disconnect');
+    });
+
+    this.mqttClient.on('connect', () => {
+      this.updateState({ connected: true });
+      this.emit('connect');
+    });
+
+    this.mqttClient.on('error', (error: Error) => {
+      this.emit('error', error);
+    });
+
+    this.mqttClient.on('offline', () => {
+      this.updateState({ connected: false });
+    });
+
+    this.mqttClient.on('reconnectFailed', () => {
+      this.updateState({ connected: false });
+      this.emit('error', new Error('Failed to reconnect to device'));
+    });
+  }
+}
+
+// Re-export types for convenience
+export type { DeviceInfo, DeviceState, DeviceFeatures, DeviceEvents };
+export { createDefaultState, DEFAULT_FEATURES };
