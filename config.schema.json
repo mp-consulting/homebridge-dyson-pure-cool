@@ -1,18 +1,180 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "DysonPureCool",
   "pluginType": "platform",
   "singular": true,
-  "strictValidation": false,
+  "headerDisplay": "Homebridge plugin for Dyson Pure Cool air purifiers and fans. Supports automatic device discovery via Dyson Cloud or manual configuration.",
+  "footerDisplay": "For help, see the [README](https://github.com/homebridge/homebridge-dyson-pure-cool#readme)",
   "schema": {
     "type": "object",
-    "required": ["name"],
-    "additionalProperties": false,
     "properties": {
       "name": {
-        "title": "Name",
+        "title": "Platform Name",
         "type": "string",
-        "default": "Example Dynamic Platform"
+        "default": "Dyson Pure Cool",
+        "description": "The name that will appear in Homebridge logs"
+      },
+      "email": {
+        "title": "Dyson Account Email",
+        "type": "string",
+        "format": "email",
+        "description": "Your Dyson account email (optional if using manual device configuration)"
+      },
+      "password": {
+        "title": "Dyson Account Password",
+        "type": "string",
+        "description": "Your Dyson account password"
+      },
+      "countryCode": {
+        "title": "Country Code",
+        "type": "string",
+        "default": "US",
+        "description": "Your Dyson account country code (e.g., US, GB, DE, FR)"
+      },
+      "discoveryTimeout": {
+        "title": "Discovery Timeout",
+        "type": "integer",
+        "default": 30,
+        "minimum": 5,
+        "maximum": 120,
+        "description": "Timeout in seconds for mDNS device discovery on local network"
+      },
+      "pollInterval": {
+        "title": "Poll Interval",
+        "type": "integer",
+        "default": 60,
+        "minimum": 10,
+        "maximum": 300,
+        "description": "Interval in seconds to poll device state"
+      },
+      "devices": {
+        "title": "Manual Device Configuration",
+        "type": "array",
+        "description": "Manually configure devices instead of using Dyson Cloud (optional)",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Device Name",
+              "type": "string",
+              "description": "Display name for this device"
+            },
+            "serial": {
+              "title": "Serial Number",
+              "type": "string",
+              "description": "Device serial number (format: ABC-AB-12345678)"
+            },
+            "productType": {
+              "title": "Product Type",
+              "type": "string",
+              "description": "Dyson product type code (e.g., 438 for TP04, 455 for HP02)"
+            },
+            "credentials": {
+              "title": "Local Credentials",
+              "type": "string",
+              "description": "Device local MQTT password (from Dyson Cloud API)"
+            },
+            "ipAddress": {
+              "title": "IP Address",
+              "type": "string",
+              "format": "ipv4",
+              "description": "Device IP address on local network"
+            }
+          },
+          "required": ["serial", "productType", "credentials", "ipAddress"]
+        }
+      },
+      "enableTemperature": {
+        "title": "Enable Temperature Sensor",
+        "type": "boolean",
+        "default": true,
+        "description": "Show temperature sensor in HomeKit"
+      },
+      "enableHumidity": {
+        "title": "Enable Humidity Sensor",
+        "type": "boolean",
+        "default": true,
+        "description": "Show humidity sensor in HomeKit"
+      },
+      "enableAirQuality": {
+        "title": "Enable Air Quality Sensor",
+        "type": "boolean",
+        "default": true,
+        "description": "Show air quality sensor (PM2.5, PM10, VOC) in HomeKit"
+      },
+      "enableNightMode": {
+        "title": "Enable Night Mode Switch",
+        "type": "boolean",
+        "default": true,
+        "description": "Show night mode toggle switch in HomeKit"
+      },
+      "enableContinuousMonitoring": {
+        "title": "Enable Continuous Monitoring Switch",
+        "type": "boolean",
+        "default": false,
+        "description": "Show continuous monitoring toggle switch in HomeKit"
+      },
+      "enableFilter": {
+        "title": "Enable Filter Status",
+        "type": "boolean",
+        "default": true,
+        "description": "Show filter life remaining in HomeKit"
       }
+    },
+    "required": ["name"]
+  },
+  "layout": [
+    {
+      "type": "fieldset",
+      "title": "Dyson Account",
+      "description": "Enter your Dyson account credentials for automatic device discovery",
+      "items": [
+        "email",
+        "password",
+        "countryCode"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Discovery Settings",
+      "expandable": true,
+      "items": [
+        "discoveryTimeout",
+        "pollInterval"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "HomeKit Features",
+      "description": "Choose which features to expose in HomeKit",
+      "expandable": true,
+      "items": [
+        "enableTemperature",
+        "enableHumidity",
+        "enableAirQuality",
+        "enableNightMode",
+        "enableContinuousMonitoring",
+        "enableFilter"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Manual Device Configuration",
+      "description": "Optional: Configure devices manually without Dyson Cloud",
+      "expandable": true,
+      "items": [
+        {
+          "key": "devices",
+          "type": "array",
+          "buttonText": "Add Device",
+          "items": [
+            "devices[].name",
+            "devices[].serial",
+            "devices[].productType",
+            "devices[].credentials",
+            "devices[].ipAddress"
+          ]
+        }
+      ]
     }
-  }
+  ]
 }

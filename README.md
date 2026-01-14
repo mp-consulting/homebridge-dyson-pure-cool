@@ -1,215 +1,204 @@
-<p align="center">
+# homebridge-dyson-pure-cool
 
-<img src="https://github.com/homebridge/branding/raw/latest/logos/homebridge-wordmark-logo-vertical.png" width="150">
+[![npm version](https://img.shields.io/npm/v/homebridge-dyson-pure-cool.svg)](https://www.npmjs.com/package/homebridge-dyson-pure-cool)
+[![License](https://img.shields.io/npm/l/homebridge-dyson-pure-cool.svg)](https://github.com/homebridge/homebridge-dyson-pure-cool/blob/main/LICENSE)
 
-</p>
+Homebridge plugin for Dyson Pure Cool air purifiers and fans. Control your Dyson devices through Apple HomeKit.
 
-<span align="center">
+## Features
 
-# Homebridge Platform Plugin Template
+- **Fan Control** - Power on/off, speed (0-100%), oscillation, auto mode
+- **Temperature Sensor** - Room temperature in Celsius
+- **Humidity Sensor** - Relative humidity percentage
+- **Air Quality Sensor** - PM2.5, PM10, VOC levels with overall air quality rating
+- **Filter Status** - Filter life remaining with replacement indicator
+- **Night Mode** - Toggle quiet operation with dimmed display
+- **Continuous Monitoring** - Keep sensors active when fan is off
 
-</span>
+## Supported Devices
 
-> [!IMPORTANT]
-> **Homebridge v2.0 Information**
->
-> This template currently has a
-> - `package.json -> engines.homebridge` value of `"^1.8.0 || ^2.0.0-beta.0"`
-> - `package.json -> devDependencies.homebridge` value of `"^2.0.0-beta.0"`
->
-> This is to ensure that your plugin will build and run on both Homebridge v1 and v2.
->
-> Once Homebridge v2.0 has been released, you can remove the `-beta.0` in both places.
+| Model | Product Type | Features |
+|-------|--------------|----------|
+| Pure Cool Tower (TP04) | 438 | Fan, Air Quality, Temp, Humidity |
+| Purifier Cool (TP07) | 438E | Fan, Air Quality, Temp, Humidity |
+| Pure Hot+Cool Link (HP02) | 455 | Fan, Heating, Air Quality, Temp, Humidity |
 
----
+More Dyson Link-series devices may work but are untested.
 
-This is a template Homebridge dynamic platform plugin and can be used as a base to help you get started developing your own plugin.
+## Installation
 
-This template should be used in conjunction with the [developer documentation](https://developers.homebridge.io/). A full list of all supported service types, and their characteristics is available on this site.
+### Using Homebridge Config UI X (Recommended)
 
-### Clone As Template
+1. Search for `homebridge-dyson-pure-cool` in the Plugins tab
+2. Click **Install**
+3. Configure the plugin in the Settings
 
-Click the link below to create a new GitHub Repository using this template, or click the *Use This Template* button above.
+### Manual Installation
 
-<span align="center">
-
-### [Create New Repository From Template](https://github.com/homebridge/homebridge-plugin-template/generate)
-
-</span>
-
-### Setup Development Environment
-
-To develop Homebridge plugins you must have Node.js 20 or later installed, and a modern code editor such as [VS Code](https://code.visualstudio.com/). This plugin template uses [TypeScript](https://www.typescriptlang.org/) to make development easier and comes with pre-configured settings for [VS Code](https://code.visualstudio.com/) and ESLint. If you are using VS Code install these extensions:
-
-- [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
-
-### Install Development Dependencies
-
-Using a terminal, navigate to the project folder and run this command to install the development dependencies:
-
-```shell
-npm install
+```bash
+npm install -g homebridge-dyson-pure-cool
 ```
 
-### Update package.json
+## Configuration
 
-Open the [`package.json`](./package.json) and change the following attributes:
+### Using Dyson Account (Recommended)
 
-- `name` - this should be prefixed with `homebridge-` or `@username/homebridge-`, is case-sensitive, and contains no spaces nor special characters apart from a dash `-`
-- `displayName` - this is the "nice" name displayed in the Homebridge UI
-- `homepage` - link to your GitHub repo's `README.md`
-- `repository.url` - link to your GitHub repo
-- `bugs.url` - link to your GitHub repo issues page
+The easiest way to set up the plugin is using your Dyson account credentials. The plugin will automatically discover your devices.
 
-When you are ready to publish the plugin you should set `private` to false, or remove the attribute entirely.
-
-### Update Plugin Defaults
-
-Open the [`src/settings.ts`](./src/settings.ts) file and change the default values:
-
-- `PLATFORM_NAME` - Set this to be the name of your platform. This is the name of the platform that users will use to register the plugin in the Homebridge `config.json`.
-- `PLUGIN_NAME` - Set this to be the same name you set in the [`package.json`](./package.json) file.
-
-Open the [`config.schema.json`](./config.schema.json) file and change the following attribute:
-
-- `pluginAlias` - set this to match the `PLATFORM_NAME` you defined in the previous step.
-
-See the [Homebridge API docs](https://developers.homebridge.io/#/config-schema#default-values) for more details on the other attributes you can set in the `config.schema.json` file.
-
-### Build Plugin
-
-TypeScript needs to be compiled into JavaScript before it can run. The following command will compile the contents of your [`src`](./src) directory and put the resulting code into the `dist` folder.
-
-```shell
-npm run build
-```
-
-### Link To Homebridge
-
-Run this command so your global installation of Homebridge can discover the plugin in your development environment:
-
-```shell
-npm link
-```
-
-You can now start Homebridge, use the `-D` flag, so you can see debug log messages in your plugin:
-
-```shell
-homebridge -D
-```
-
-### Watch For Changes and Build Automatically
-
-If you want to have your code compile automatically as you make changes, and restart Homebridge automatically between changes, you first need to add your plugin as a platform in `./test/hbConfig/config.json`:
-```
+```json
 {
-...
-    "platforms": [
-        {
-            "name": "Config",
-            "port": 8581,
-            "platform": "config"
-        },
-        {
-            "name": "<PLUGIN_NAME>",
-            //... any other options, as listed in config.schema.json ...
-            "platform": "<PLATFORM_NAME>"
-        }
-    ]
+  "platforms": [
+    {
+      "platform": "DysonPureCool",
+      "name": "Dyson Pure Cool",
+      "email": "your-email@example.com",
+      "password": "your-dyson-password",
+      "countryCode": "US"
+    }
+  ]
 }
 ```
 
-and then you can run:
+#### Two-Factor Authentication (2FA)
 
-```shell
-npm run watch
+If your Dyson account uses 2FA, you'll need to complete the verification process. Check the Homebridge logs for the OTP prompt during first setup.
+
+### Manual Device Configuration
+
+If you prefer not to use your Dyson account, you can configure devices manually:
+
+```json
+{
+  "platforms": [
+    {
+      "platform": "DysonPureCool",
+      "name": "Dyson Pure Cool",
+      "devices": [
+        {
+          "name": "Living Room Purifier",
+          "serial": "ABC-AB-12345678",
+          "productType": "438",
+          "credentials": "your-local-credentials",
+          "ipAddress": "192.168.1.100"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-This will launch an instance of Homebridge in debug mode which will restart every time you make a change to the source code. It will load the config stored in the default location under `~/.homebridge`. You may need to stop other running instances of Homebridge while using this command to prevent conflicts. You can adjust the Homebridge startup command in the [`nodemon.json`](./nodemon.json) file.
+To find your device credentials, you'll need to extract them from the Dyson API. See the [Troubleshooting](#finding-device-credentials) section.
 
-### Customise Plugin
+### Configuration Options
 
-You can now start customising the plugin template to suit your requirements.
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `email` | string | - | Dyson account email |
+| `password` | string | - | Dyson account password |
+| `countryCode` | string | `US` | Account country code (US, GB, DE, etc.) |
+| `discoveryTimeout` | number | `30` | mDNS discovery timeout in seconds |
+| `pollInterval` | number | `60` | State polling interval in seconds |
+| `enableTemperature` | boolean | `true` | Show temperature sensor |
+| `enableHumidity` | boolean | `true` | Show humidity sensor |
+| `enableAirQuality` | boolean | `true` | Show air quality sensor |
+| `enableNightMode` | boolean | `true` | Show night mode switch |
+| `enableContinuousMonitoring` | boolean | `false` | Show continuous monitoring switch |
+| `enableFilter` | boolean | `true` | Show filter status |
 
-- [`src/platform.ts`](./src/platform.ts) - this is where your device setup and discovery should go.
-- [`src/platformAccessory.ts`](./src/platformAccessory.ts) - this is where your accessory control logic should go, you can rename or create multiple instances of this file for each accessory type you need to implement as part of your platform plugin. You can refer to the [developer documentation](https://developers.homebridge.io/) to see what characteristics you need to implement for each service type.
-- [`config.schema.json`](./config.schema.json) - update the config schema to match the config you expect from the user. See the [Plugin Config Schema Documentation](https://developers.homebridge.io/#/config-schema).
+## HomeKit Controls
 
-### Versioning Your Plugin
+### Fan
 
-Given a version number `MAJOR`.`MINOR`.`PATCH`, such as `1.4.3`, increment the:
+- **Power**: Turn the fan on/off
+- **Speed**: Adjust fan speed from 10% to 100% (maps to Dyson speeds 1-10)
+- **Oscillation**: Toggle left-right oscillation
+- **Auto Mode**: Let the fan automatically adjust based on air quality
 
-1. **MAJOR** version when you make breaking changes to your plugin,
-2. **MINOR** version when you add functionality in a backwards compatible manner, and
-3. **PATCH** version when you make backwards compatible bug fixes.
+### Sensors
 
-You can use the `npm version` command to help you with this:
+- **Temperature**: Displays room temperature (read-only)
+- **Humidity**: Displays relative humidity percentage (read-only)
+- **Air Quality**: Overall rating (Excellent, Good, Fair, Inferior, Poor) calculated from PM2.5
 
-```shell
-# major update / breaking changes
-npm version major
+### Switches
 
-# minor update / new features
-npm version update
+- **Night Mode**: Enables quiet operation with dimmed display
+- **Continuous Monitoring**: Keeps sensors active even when fan is off
 
-# patch / bugfixes
-npm version patch
+### Filter
+
+- **Filter Life Level**: Percentage of filter life remaining (0-100%)
+- **Filter Change Indication**: Alert when filter needs replacement (<=10%)
+
+## Troubleshooting
+
+### Device Not Discovered
+
+1. Ensure your Dyson device is on the same network as Homebridge
+2. Check that mDNS/Bonjour is working on your network
+3. Try increasing `discoveryTimeout` to 60 seconds
+4. Use manual device configuration as a fallback
+
+### Authentication Failed
+
+1. Verify your Dyson account email and password
+2. Check the `countryCode` matches your account region
+3. If using 2FA, complete the verification in Homebridge logs
+4. Try logging into the Dyson app to verify credentials work
+
+### Device Shows "Not Responding"
+
+1. Check that the device is powered on and connected to WiFi
+2. Verify the device IP address hasn't changed (use static IP or manual config)
+3. Restart Homebridge to re-establish MQTT connection
+4. Check Homebridge logs for connection errors
+
+### Sensors Not Updating
+
+1. Ensure continuous monitoring is enabled on the device
+2. Check `pollInterval` isn't set too high
+3. Some sensors take time to initialize after power-on
+
+### Finding Device Credentials
+
+To manually configure devices, you need the local MQTT credentials. You can extract these by:
+
+1. Using a network proxy to intercept Dyson app traffic
+2. Using the Dyson Cloud API directly with your account
+3. Using community tools that extract credentials
+
+The credentials are a local password specific to each device, not your Dyson account password.
+
+### Debug Logging
+
+Enable debug logging in Homebridge to see detailed plugin output:
+
+```bash
+homebridge -D
 ```
 
-### Publish Package
+Or set the `DEBUG` environment variable:
 
-When you are ready to publish your plugin to [npm](https://www.npmjs.com/), make sure you have removed the `private` attribute from the [`package.json`](./package.json) file then run:
-
-```shell
-npm publish
+```bash
+DEBUG=* homebridge
 ```
 
-If you are publishing a scoped plugin, i.e. `@username/homebridge-xxx` you will need to add `--access=public` to command the first time you publish.
+## Contributing
 
-#### Publishing Beta Versions
+Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
 
-You can publish *beta* versions of your plugin for other users to test before you release it to everyone.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests: `npm test`
+5. Submit a pull request
 
-```shell
-# create a new pre-release version (eg. 2.1.0-beta.1)
-npm version prepatch --preid beta
+## License
 
-# publish to @beta
-npm publish --tag beta
-```
+This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENSE) file for details.
 
-Users can then install the  *beta* version by appending `@beta` to the install command, for example:
+## Acknowledgments
 
-```shell
-sudo npm install -g homebridge-example-plugin@beta
-```
-
-### Best Practices
-
-Consider creating your plugin with the [Homebridge Verified](https://github.com/homebridge/verified) criteria in mind. This will help you to create a plugin that is easy to use and works well with Homebridge.
-You can then submit your plugin to the Homebridge Verified list for review.
-The most up-to-date criteria can be found [here](https://github.com/homebridge/verified#requirements).
-For reference, the current criteria are:
-
-- **General**
-  - The plugin must be of type [dynamic platform](https://developers.homebridge.io/#/#dynamic-platform-template).
-  - The plugin must not offer the same nor less functionality than that of any existing **verified** plugin.
-- **Repo**
-  - The plugin must be published to NPM and the source code available on a GitHub repository, with issues enabled.
-  - A GitHub release should be created for every new version of your plugin, with release notes.
-- **Environment**
-  - The plugin must run on all [supported LTS versions of Node.js](https://github.com/homebridge/homebridge/wiki/How-To-Update-Node.js), at the time of writing this is Node v18, v20 and v22.
-  - The plugin must successfully install and not start unless it is configured.
-  - The plugin must not execute post-install scripts that modify the users' system in any way.
-  - The plugin must not require the user to run Homebridge in a TTY or with non-standard startup parameters, even for initial configuration.
-- **Codebase**
-  - The plugin must implement the [Homebridge Plugin Settings GUI](https://developers.homebridge.io/#/config-schema).
-  - The plugin must not contain any analytics or calls that enable you to track the user.
-  - If the plugin needs to write files to disk (cache, keys, etc.), it must store them inside the Homebridge storage directory.
-  - The plugin must not throw unhandled exceptions, the plugin must catch and log its own errors.
-
-### Useful Links
-
-Note these links are here for help but are not supported/verified by the Homebridge team
-
-- [Custom Characteristics](https://github.com/homebridge/homebridge-plugin-template/issues/20)
+- [Homebridge](https://homebridge.io/) for the amazing platform
+- The Dyson community for reverse-engineering the protocol
+- All contributors and testers
