@@ -24,6 +24,7 @@ const LINK_DEVICE_FEATURES: DeviceFeatures = {
   oscillation: true,
   autoMode: true,
   nightMode: true,
+  continuousMonitoring: true,
   frontAirflow: false,
   temperatureSensor: true,
   humiditySensor: true,
@@ -129,6 +130,17 @@ export class DysonLinkDevice extends DysonDevice {
    */
   async setNightMode(on: boolean): Promise<void> {
     await this.sendCommand({ nmod: on ? 'ON' : 'OFF' });
+  }
+
+  /**
+   * Set continuous monitoring on or off
+   *
+   * When enabled, sensors remain active even when the fan is off.
+   *
+   * @param on - True to enable continuous monitoring, false to disable
+   */
+  async setContinuousMonitoring(on: boolean): Promise<void> {
+    await this.sendCommand({ rhtm: on ? 'ON' : 'OFF' });
   }
 
   /**

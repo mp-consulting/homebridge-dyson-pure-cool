@@ -46,6 +46,10 @@ export interface DeviceState {
   /** Night mode enabled */
   nightMode: boolean;
 
+  // Continuous monitoring
+  /** Continuous monitoring enabled (sensors active when fan off) */
+  continuousMonitoring?: boolean;
+
   // Airflow direction (for models that support it)
   /** Front airflow enabled */
   frontAirflow?: boolean;
@@ -113,6 +117,8 @@ export interface DeviceFeatures {
   autoMode: boolean;
   /** Supports night mode */
   nightMode: boolean;
+  /** Supports continuous monitoring */
+  continuousMonitoring: boolean;
   /** Supports front airflow direction */
   frontAirflow: boolean;
   /** Has temperature sensor */
@@ -139,6 +145,7 @@ export const DEFAULT_FEATURES: DeviceFeatures = {
   oscillation: true,
   autoMode: true,
   nightMode: true,
+  continuousMonitoring: true,
   frontAirflow: false,
   temperatureSensor: false,
   humiditySensor: false,

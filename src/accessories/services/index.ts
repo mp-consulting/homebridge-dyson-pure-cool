@@ -13,3 +13,6 @@ export type { HumidityServiceConfig } from './humidityService.js';
 
 export { NightModeService } from './nightModeService.js';
 export type { NightModeServiceConfig } from './nightModeService.js';
+
+export { ContinuousMonitoringService } from './continuousMonitoringService.js';
+export type { ContinuousMonitoringServiceConfig } from './continuousMonitoringService.js';

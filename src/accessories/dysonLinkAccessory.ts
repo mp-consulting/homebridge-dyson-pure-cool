@@ -17,6 +17,7 @@ import { FanService } from './services/fanService.js';
 import { TemperatureService } from './services/temperatureService.js';
 import { HumidityService } from './services/humidityService.js';
 import { NightModeService } from './services/nightModeService.js';
+import { ContinuousMonitoringService } from './services/continuousMonitoringService.js';
 import type { DysonLinkDevice } from '../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../devices/types.js';
 
@@ -44,6 +45,7 @@ export class DysonLinkAccessory extends DysonAccessory {
   private temperatureService?: TemperatureService;
   private humidityService?: HumidityService;
   private nightModeService?: NightModeService;
+  private continuousMonitoringService?: ContinuousMonitoringService;
 
   /**
    * Create a new DysonLinkAccessory
@@ -102,6 +104,16 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
+    // Create ContinuousMonitoringService if device supports it
+    if (features.continuousMonitoring) {
+      this.continuousMonitoringService = new ContinuousMonitoringService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+      });
+    }
+
     this.log.debug('DysonLinkAccessory services configured');
   }
 
@@ -141,6 +153,7 @@ export class DysonLinkAccessory extends DysonAccessory {
     this.temperatureService?.updateFromState();
     this.humidityService?.updateFromState();
     this.nightModeService?.updateFromState();
+    this.continuousMonitoringService?.updateFromState();
     this.log.info('DysonLinkAccessory: Device reconnected, state synced');
   }
 
@@ -170,5 +183,12 @@ export class DysonLinkAccessory extends DysonAccessory {
    */
   getNightModeService(): NightModeService | undefined {
     return this.nightModeService;
+  }
+
+  /**
+   * Get the ContinuousMonitoringService instance (if enabled)
+   */
+  getContinuousMonitoringService(): ContinuousMonitoringService | undefined {
+    return this.continuousMonitoringService;
   }
 }

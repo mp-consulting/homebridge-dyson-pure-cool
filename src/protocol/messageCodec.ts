@@ -240,6 +240,11 @@ export class MessageCodec {
       state.nightMode = raw.nmod === 'ON';
     }
 
+    // Continuous monitoring
+    if (raw.rhtm !== undefined) {
+      state.continuousMonitoring = raw.rhtm === 'ON';
+    }
+
     // Front airflow
     if (raw.ffoc !== undefined) {
       state.frontAirflow = raw.ffoc === 'ON';
