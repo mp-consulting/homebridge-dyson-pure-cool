@@ -10,3 +10,10 @@ export type {
   MqttClientEvents,
   MqttConnectFn,
 } from './mqttClient.js';
+
+export { MessageCodec, messageCodec } from './messageCodec.js';
+export type {
+  CommandData,
+  RawStateData,
+  DysonMessage,
+} from './messageCodec.js';

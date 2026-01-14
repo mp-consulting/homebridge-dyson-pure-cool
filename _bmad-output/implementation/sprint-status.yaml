@@ -30,18 +30,26 @@ stories:
     assignee: dev
     notes: "DysonDevice abstract class with MQTT client, state management, event emission"
 
+  - id: E3-S2
+    title: Implement Message Codec
+    status: completed
+    points: 2
+    priority: P0
+    assignee: dev
+    notes: "MessageCodec class - encodes commands, decodes state, speed/temp conversion, 62 tests"
+
 metrics:
   total_points: 8
-  completed_points: 4
+  completed_points: 6
   in_progress_points: 0
   velocity_target: 8
   sprint_2_velocity: 8
 
 board:
-  todo: [E3-S2, E2-S6]
+  todo: [E2-S6]
   in_progress: []
   in_review: []
-  done: [E2-S4, E3-S1]
+  done: [E2-S4, E3-S1, E3-S2]
 
 definition_of_done:
   - Code compiles with zero TypeScript errors
