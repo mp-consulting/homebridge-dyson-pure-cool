@@ -451,7 +451,7 @@ describe('deviceFactory', () => {
       };
 
       expect(() => createDevice(deviceInfo, mockMqttClientFactory)).toThrow(
-        'Unsupported product type: 999',
+        'Unsupported product type: Dyson Device (999)',
       );
     });
   });

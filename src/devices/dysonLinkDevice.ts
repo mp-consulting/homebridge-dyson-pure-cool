@@ -11,171 +11,55 @@ import { DEFAULT_FEATURES } from './types.js';
 import { MessageCodec } from '../protocol/messageCodec.js';
 import type { MqttClientFactory } from './dysonDevice.js';
 import type { MqttConnectFn } from '../protocol/mqttClient.js';
+import { getDeviceFeatures } from './deviceCatalog.js';
 
-/**
- * Base features for Pure Cool devices (fans without heating/humidification)
- */
-const PURE_COOL_FEATURES: DeviceFeatures = {
-  ...DEFAULT_FEATURES,
-  fan: true,
-  oscillation: true,
-  autoMode: true,
-  nightMode: true,
-  continuousMonitoring: true,
-  frontAirflow: false,
-  temperatureSensor: true,
-  humiditySensor: true,
-  airQualitySensor: true,
-  no2Sensor: false,
-  heating: false,
-  humidifier: false,
-  hepaFilter: true,
-  carbonFilter: true,
-};
+// ============================================================================
+// Constants - No Magic Numbers
+// ============================================================================
 
-/**
- * Features for Pure Cool with Jet Focus (newer models like TP04, DP04)
- */
-const PURE_COOL_JET_FOCUS_FEATURES: DeviceFeatures = {
-  ...PURE_COOL_FEATURES,
-  frontAirflow: true,
-};
+/** Fan speed limits */
+const FAN_SPEED = {
+  MIN: 1,
+  MAX: 10,
+  DEFAULT: 4,
+  AUTO: -1,
+} as const;
 
-/**
- * Features for Pure Cool Link (older models like TP02, DP01)
- */
-const PURE_COOL_LINK_FEATURES: DeviceFeatures = {
-  ...PURE_COOL_FEATURES,
-  frontAirflow: false,
-};
+/** Temperature limits for heating (Celsius) */
+const HEATING_TEMP = {
+  MIN_CELSIUS: 1,
+  MAX_CELSIUS: 37,
+  KELVIN_OFFSET: 273.15,
+  KELVIN_MULTIPLIER: 10,
+} as const;
 
-/**
- * Features for Pure Hot+Cool Link (HP02)
- */
-const PURE_HOT_COOL_LINK_FEATURES: DeviceFeatures = {
-  ...PURE_COOL_FEATURES,
-  heating: true,
-  frontAirflow: false,
-};
+/** Humidity limits for humidifier */
+const HUMIDITY = {
+  MIN_PERCENT: 0,
+  MAX_PERCENT: 100,
+  DEFAULT_MIN: 30,
+  DEFAULT_MAX: 70,
+} as const;
 
-/**
- * Features for Pure Hot+Cool (HP04, HP06, HP07, HP09)
- */
-const PURE_HOT_COOL_FEATURES: DeviceFeatures = {
-  ...PURE_COOL_FEATURES,
-  heating: true,
-  frontAirflow: true,
-};
+/** Dyson protocol values */
+const PROTOCOL = {
+  ON: 'ON',
+  OFF: 'OFF',
+  AUTO: 'AUTO',
+  FAN: 'FAN',
+  HEAT: 'HEAT',
+  SPEED_PAD_LENGTH: 4,
+} as const;
 
-/**
- * Features for newer Pure Hot+Cool without Jet Focus (HP1/HP11)
- */
-const PURE_HOT_COOL_NO_JET_FEATURES: DeviceFeatures = {
-  ...PURE_COOL_FEATURES,
-  heating: true,
-  frontAirflow: false,
-};
-
-/**
- * Features for newer Pure Cool without Jet Focus (TP11)
- */
-const PURE_COOL_NO_JET_FEATURES: DeviceFeatures = {
-  ...PURE_COOL_FEATURES,
-  frontAirflow: false,
-};
-
-/**
- * Features for Purifier Humidify+Cool (PH01, PH02, PH03, PH04)
- */
-const PURIFIER_HUMIDIFY_FEATURES: DeviceFeatures = {
-  ...PURE_COOL_FEATURES,
-  humidifier: true,
-  frontAirflow: true,
-};
-
-/**
- * Features for Big+Quiet series (BP02, BP03, BP04, BP06)
- * These are large purifiers without oscillation but with advanced sensors
- */
-const BIG_QUIET_FEATURES: DeviceFeatures = {
-  ...PURE_COOL_FEATURES,
-  oscillation: false,
-  frontAirflow: false,
-  no2Sensor: true,
-};
-
-/**
- * Features for Formaldehyde models (have NO2/HCHO sensors)
- */
-const FORMALDEHYDE_FEATURES: DeviceFeatures = {
-  ...PURE_COOL_JET_FOCUS_FEATURES,
-  no2Sensor: true,
-};
-
-/**
- * Map product types to their feature sets
- */
-const PRODUCT_FEATURES: Record<string, DeviceFeatures> = {
-  // Pure Cool Link Tower (TP02)
-  '475': PURE_COOL_LINK_FEATURES,
-
-  // Pure Cool Desk Link (DP01)
-  '469': PURE_COOL_LINK_FEATURES,
-
-  // Pure Cool Tower (TP04)
-  '438': PURE_COOL_JET_FOCUS_FEATURES,
-
-  // Pure Cool Tower (TP07, TP09)
-  '438E': PURE_COOL_JET_FOCUS_FEATURES,
-  '438K': FORMALDEHYDE_FEATURES,
-
-  // Pure Cool Tower (TP11) - no jet focus
-  '438M': PURE_COOL_NO_JET_FEATURES,
-
-  // Pure Cool Desk (DP04)
-  '520': PURE_COOL_JET_FOCUS_FEATURES,
-
-  // Pure Hot+Cool Link (HP02)
-  '455': PURE_HOT_COOL_LINK_FEATURES,
-
-  // Pure Hot+Cool (HP04, HP06)
-  '527': PURE_HOT_COOL_FEATURES,
-  '358K': PURE_HOT_COOL_FEATURES,
-
-  // Pure Hot+Cool (HP07)
-  '527E': PURE_HOT_COOL_FEATURES,
-
-  // Pure Hot+Cool Formaldehyde (HP09)
-  '527K': { ...PURE_HOT_COOL_FEATURES, no2Sensor: true },
-
-  // Pure Hot+Cool (HP1/HP11) - no jet focus
-  '527M': PURE_HOT_COOL_NO_JET_FEATURES,
-
-  // Pure Humidify+Cool (PH01)
-  '358': PURIFIER_HUMIDIFY_FEATURES,
-
-  // Purifier Humidify+Cool Formaldehyde (PH03, PH04)
-  '358E': { ...PURIFIER_HUMIDIFY_FEATURES, no2Sensor: true },
-
-  // Purifier Humidify+Cool (PH02, PH03)
-  '358J': PURIFIER_HUMIDIFY_FEATURES,
-  '520E': PURIFIER_HUMIDIFY_FEATURES,
-  '358H': PURIFIER_HUMIDIFY_FEATURES,
-
-  // Purifier Humidify+Cool Formaldehyde (PH04)
-  '520F': { ...PURIFIER_HUMIDIFY_FEATURES, no2Sensor: true },
-
-  // Big+Quiet Series (BP02, BP03, BP04, BP06)
-  '664': BIG_QUIET_FEATURES,
-  '664B': BIG_QUIET_FEATURES,
-  '664E': BIG_QUIET_FEATURES,
-  '664F': BIG_QUIET_FEATURES,
-};
+// ============================================================================
+// DysonLinkDevice
+// ============================================================================
 
 /**
  * Dyson Link Device implementation
  *
- * Handles fan control for older Link series Dyson devices.
+ * Handles fan control for all Dyson purifier devices.
+ * Features are determined by the device catalog based on product type.
  */
 export class DysonLinkDevice extends DysonDevice {
   /** Product type for this device */
@@ -201,7 +85,7 @@ export class DysonLinkDevice extends DysonDevice {
   ) {
     super(deviceInfo, mqttClientFactory, mqttConnectFn);
     this.productType = deviceInfo.productType;
-    this.supportedFeatures = PRODUCT_FEATURES[deviceInfo.productType] || PURE_COOL_FEATURES;
+    this.supportedFeatures = getDeviceFeatures(deviceInfo.productType);
     this.codec = new MessageCodec();
   }
 
@@ -211,7 +95,7 @@ export class DysonLinkDevice extends DysonDevice {
    * @param on - True to turn on, false to turn off
    */
   async setFanPower(on: boolean): Promise<void> {
-    await this.sendCommand({ fpwr: on ? 'ON' : 'OFF' });
+    await this.sendCommand({ fpwr: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
@@ -222,14 +106,14 @@ export class DysonLinkDevice extends DysonDevice {
   async setFanSpeed(speed: number): Promise<void> {
     if (speed < 0) {
       // Auto mode
-      await this.sendCommand({ fmod: 'AUTO' });
+      await this.sendCommand({ fmod: PROTOCOL.AUTO });
     } else {
       // Manual speed (1-10)
-      const clampedSpeed = Math.max(1, Math.min(10, speed));
-      const encodedSpeed = String(clampedSpeed).padStart(4, '0');
+      const clampedSpeed = Math.max(FAN_SPEED.MIN, Math.min(FAN_SPEED.MAX, speed));
+      const encodedSpeed = String(clampedSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
       await this.sendCommand({
         fnsp: encodedSpeed,
-        fmod: 'FAN',
+        fmod: PROTOCOL.FAN,
       });
     }
   }
@@ -240,7 +124,7 @@ export class DysonLinkDevice extends DysonDevice {
    * @param on - True to enable oscillation, false to disable
    */
   async setOscillation(on: boolean): Promise<void> {
-    await this.sendCommand({ oson: on ? 'ON' : 'OFF' });
+    await this.sendCommand({ oson: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
@@ -249,7 +133,7 @@ export class DysonLinkDevice extends DysonDevice {
    * @param on - True to enable night mode, false to disable
    */
   async setNightMode(on: boolean): Promise<void> {
-    await this.sendCommand({ nmod: on ? 'ON' : 'OFF' });
+    await this.sendCommand({ nmod: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
@@ -260,7 +144,7 @@ export class DysonLinkDevice extends DysonDevice {
    * @param on - True to enable continuous monitoring, false to disable
    */
   async setContinuousMonitoring(on: boolean): Promise<void> {
-    await this.sendCommand({ rhtm: on ? 'ON' : 'OFF' });
+    await this.sendCommand({ rhtm: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
@@ -270,13 +154,13 @@ export class DysonLinkDevice extends DysonDevice {
    */
   async setAutoMode(on: boolean): Promise<void> {
     if (on) {
-      await this.sendCommand({ fmod: 'AUTO' });
+      await this.sendCommand({ fmod: PROTOCOL.AUTO });
     } else {
       // When disabling auto, set to manual fan mode with current or default speed
-      const currentSpeed = this.state.fanSpeed > 0 ? this.state.fanSpeed : 4;
-      const encodedSpeed = String(currentSpeed).padStart(4, '0');
+      const currentSpeed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
+      const encodedSpeed = String(currentSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
       await this.sendCommand({
-        fmod: 'FAN',
+        fmod: PROTOCOL.FAN,
         fnsp: encodedSpeed,
       });
     }
@@ -291,7 +175,7 @@ export class DysonLinkDevice extends DysonDevice {
    * @param on - True to enable jet focus, false to disable
    */
   async setJetFocus(on: boolean): Promise<void> {
-    await this.sendCommand({ ffoc: on ? 'ON' : 'OFF' });
+    await this.sendCommand({ ffoc: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
@@ -300,7 +184,7 @@ export class DysonLinkDevice extends DysonDevice {
    * @param on - True to enable heating, false to disable
    */
   async setHeating(on: boolean): Promise<void> {
-    await this.sendCommand({ hmod: on ? 'HEAT' : 'OFF' });
+    await this.sendCommand({ hmod: on ? PROTOCOL.HEAT : PROTOCOL.OFF });
   }
 
   /**
@@ -322,10 +206,15 @@ export class DysonLinkDevice extends DysonDevice {
    * @param celsius - Target temperature in Celsius (1-37)
    */
   async setTargetTemperature(celsius: number): Promise<void> {
-    // Clamp to valid range (1-37°C)
-    const clampedTemp = Math.max(1, Math.min(37, celsius));
+    // Clamp to valid range
+    const clampedTemp = Math.max(
+      HEATING_TEMP.MIN_CELSIUS,
+      Math.min(HEATING_TEMP.MAX_CELSIUS, celsius),
+    );
     // Convert to Kelvin * 10
-    const kelvinTimes10 = Math.round((clampedTemp + 273.15) * 10);
+    const kelvinTimes10 = Math.round(
+      (clampedTemp + HEATING_TEMP.KELVIN_OFFSET) * HEATING_TEMP.KELVIN_MULTIPLIER,
+    );
     await this.sendCommand({ hmax: String(kelvinTimes10) });
   }
 
@@ -335,7 +224,7 @@ export class DysonLinkDevice extends DysonDevice {
    * @param on - True to enable humidifier, false to disable
    */
   async setHumidifier(on: boolean): Promise<void> {
-    await this.sendCommand({ hume: on ? 'ON' : 'OFF' });
+    await this.sendCommand({ hume: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
@@ -344,18 +233,22 @@ export class DysonLinkDevice extends DysonDevice {
    * In auto mode, the humidifier maintains optimal humidity automatically.
    */
   async setHumidifierAuto(): Promise<void> {
-    await this.sendCommand({ hume: 'AUTO' });
+    await this.sendCommand({ hume: PROTOCOL.AUTO });
   }
 
   /**
    * Set target humidity percentage (PH models only)
    *
-   * @param percent - Target humidity (30-70, or 0-100 if full range enabled)
+   * @param percent - Target humidity (0-100)
    */
   async setTargetHumidity(percent: number): Promise<void> {
-    // Default range is 30-70%, but can be extended to 0-100%
-    const clampedPercent = Math.max(0, Math.min(100, Math.round(percent)));
-    await this.sendCommand({ humt: String(clampedPercent).padStart(4, '0') });
+    const clampedPercent = Math.max(
+      HUMIDITY.MIN_PERCENT,
+      Math.min(HUMIDITY.MAX_PERCENT, Math.round(percent)),
+    );
+    await this.sendCommand({
+      humt: String(clampedPercent).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0'),
+    });
   }
 
   /**
@@ -390,3 +283,6 @@ export class DysonLinkDevice extends DysonDevice {
     }
   }
 }
+
+// Export constants for use in other modules
+export { FAN_SPEED, HEATING_TEMP, HUMIDITY, PROTOCOL };
