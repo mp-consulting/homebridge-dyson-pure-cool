@@ -6,6 +6,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
+    "useDefineForClassFields": false,
     "declaration": true,
     "declarationMap": true,
     "outDir": "dist",
