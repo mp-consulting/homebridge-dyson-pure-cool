@@ -1,22 +1,36 @@
 {
-  "name": "homebridge-plugin-name",
-  "displayName": "Plugin Name",
+  "name": "homebridge-dyson-pure-cool",
+  "displayName": "Dyson Pure Cool",
   "type": "module",
-  "version": "1.0.0",
-  "private": true,
-  "description": "A short description about what your plugin does.",
-  "author": "Your Name",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Homebridge plugin for Dyson Pure Cool air purifiers and fans. Control fan speed, monitor air quality, temperature, and humidity via HomeKit.",
+  "author": "MP Consulting",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/USERNAME/GITHUB_PROJECT_NAME#readme",
+  "homepage": "https://github.com/mp-consulting/homebridge-dyson-pure-cool#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME.git"
+    "url": "https://github.com/mp-consulting/homebridge-dyson-pure-cool.git"
   },
   "bugs": {
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME/issues"
+    "url": "https://github.com/mp-consulting/homebridge-dyson-pure-cool/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/mp-consulting"
   },
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "homebridge",
+    "homekit",
+    "dyson",
+    "pure-cool",
+    "air-purifier",
+    "fan",
+    "air-quality",
+    "temperature",
+    "humidity",
+    "smart-home"
   ],
   "main": "dist/index.js",
   "engines": {

@@ -5,7 +5,8 @@ sprint:
   number: 1
   goal: "Establish the development foundation - TypeScript, testing, linting, CI/CD"
   start_date: 2025-01-13
-  status: active
+  end_date: 2025-01-13
+  status: completed
 
 epic:
   id: E1
@@ -51,23 +52,25 @@ stories:
 
   - id: E1-S5
     title: Update Package Metadata
-    status: pending
+    status: completed
     points: 1
     priority: P0
     assignee: dev
-    notes: "Update package.json for npm publishing"
+    completed_date: 2025-01-13
+    notes: "Package renamed to homebridge-dyson-pure-cool, ready for npm publish"
 
 metrics:
   total_points: 8
-  completed_points: 7
+  completed_points: 8
   in_progress_points: 0
   velocity_target: 8
+  actual_velocity: 8
 
 board:
-  todo: [E1-S5]
+  todo: []
   in_progress: []
   in_review: []
-  done: [E1-S1, E1-S2, E1-S3, E1-S4]
+  done: [E1-S1, E1-S2, E1-S3, E1-S4, E1-S5]
 
 definition_of_done:
   - Code compiles with zero TypeScript errors
@@ -82,3 +85,5 @@ notes:
   - "Sprint 1 kicked off on 2025-01-13"
   - "Focus: Establish solid infrastructure for future development"
   - "All stories are P0 - critical path for subsequent epics"
+  - "Sprint 1 COMPLETED on 2025-01-13 - All 8 points delivered!"
+  - "Ready for Sprint 2: Epic 2 (Device Discovery & Connection)"
