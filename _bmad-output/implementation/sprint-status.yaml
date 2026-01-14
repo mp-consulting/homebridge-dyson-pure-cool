@@ -24,7 +24,7 @@ stories:
 
   - id: E2-S2
     title: Implement mDNS Discovery
-    status: pending
+    status: completed
     points: 2
     priority: P0
     assignee: dev
@@ -40,16 +40,16 @@ stories:
 
 metrics:
   total_points: 8
-  completed_points: 3
+  completed_points: 5
   in_progress_points: 0
   velocity_target: 8
   sprint_1_velocity: 8
 
 board:
-  todo: [E2-S2, E2-S3]
+  todo: [E2-S3]
   in_progress: []
   in_review: []
-  done: [E2-S1]
+  done: [E2-S1, E2-S2]
 
 definition_of_done:
   - Code compiles with zero TypeScript errors

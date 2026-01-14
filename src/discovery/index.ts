@@ -4,6 +4,11 @@
  */
 
 export { DysonCloudApi } from './cloudApi.js';
+export { MdnsDiscovery } from './mdnsDiscovery.js';
+export type {
+  DiscoveredDevice,
+  DiscoveryOptions,
+} from './mdnsDiscovery.js';
 export type {
   AuthResponse,
   ChallengeResponse,
