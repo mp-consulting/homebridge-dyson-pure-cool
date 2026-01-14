@@ -10,3 +10,6 @@ export type { TemperatureServiceConfig } from './temperatureService.js';
 
 export { HumidityService } from './humidityService.js';
 export type { HumidityServiceConfig } from './humidityService.js';
+
+export { NightModeService } from './nightModeService.js';
+export type { NightModeServiceConfig } from './nightModeService.js';

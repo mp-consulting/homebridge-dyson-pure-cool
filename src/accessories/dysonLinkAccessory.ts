@@ -16,6 +16,7 @@ import type { DysonAccessoryConfig } from './dysonAccessory.js';
 import { FanService } from './services/fanService.js';
 import { TemperatureService } from './services/temperatureService.js';
 import { HumidityService } from './services/humidityService.js';
+import { NightModeService } from './services/nightModeService.js';
 import type { DysonLinkDevice } from '../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../devices/types.js';
 
@@ -42,6 +43,7 @@ export class DysonLinkAccessory extends DysonAccessory {
   private fanService!: FanService;
   private temperatureService?: TemperatureService;
   private humidityService?: HumidityService;
+  private nightModeService?: NightModeService;
 
   /**
    * Create a new DysonLinkAccessory
@@ -90,6 +92,16 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
+    // Create NightModeService if device supports it
+    if (features.nightMode) {
+      this.nightModeService = new NightModeService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+      });
+    }
+
     this.log.debug('DysonLinkAccessory services configured');
   }
 
@@ -128,6 +140,7 @@ export class DysonLinkAccessory extends DysonAccessory {
     this.fanService.updateFromState();
     this.temperatureService?.updateFromState();
     this.humidityService?.updateFromState();
+    this.nightModeService?.updateFromState();
     this.log.info('DysonLinkAccessory: Device reconnected, state synced');
   }
 
@@ -150,5 +163,12 @@ export class DysonLinkAccessory extends DysonAccessory {
    */
   getHumidityService(): HumidityService | undefined {
     return this.humidityService;
+  }
+
+  /**
+   * Get the NightModeService instance (if enabled)
+   */
+  getNightModeService(): NightModeService | undefined {
+    return this.nightModeService;
   }
 }
