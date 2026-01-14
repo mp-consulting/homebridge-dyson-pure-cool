@@ -5,7 +5,7 @@ sprint:
   number: 2
   goal: "Establish core device discovery and MQTT communication"
   start_date: 2025-01-14
-  status: active
+  status: completed
 
 epic:
   id: E2
@@ -32,24 +32,24 @@ stories:
 
   - id: E2-S3
     title: Implement MQTT Client Wrapper
-    status: pending
+    status: completed
     points: 3
     priority: P0
     assignee: dev
-    notes: "MqttClient class wrapping mqtt package with events"
+    notes: "DysonMqttClient class with connect, subscribe, publish, and convenience methods"
 
 metrics:
   total_points: 8
-  completed_points: 5
+  completed_points: 8
   in_progress_points: 0
   velocity_target: 8
   sprint_1_velocity: 8
 
 board:
-  todo: [E2-S3]
+  todo: []
   in_progress: []
   in_review: []
-  done: [E2-S1, E2-S2]
+  done: [E2-S1, E2-S2, E2-S3]
 
 definition_of_done:
   - Code compiles with zero TypeScript errors
@@ -64,10 +64,11 @@ dependencies:
   - "npm packages needed: mqtt, bonjour-service, node-fetch (or built-in fetch)"
 
 notes:
-  - "Sprint 2 kicked off on 2025-01-14"
+  - "Sprint 2 completed on 2025-01-14"
   - "Focus: Core discovery and communication layer"
   - "All stories are P0 - critical path for device control"
   - "Remaining E2 stories (S4-S6, 5 pts) deferred to Sprint 3"
+  - "Sprint 2 velocity: 8 points (matches target)"
 
 previous_sprint:
   number: 1
