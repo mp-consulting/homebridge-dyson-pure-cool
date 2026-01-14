@@ -16,3 +16,6 @@ export type { NightModeServiceConfig } from './nightModeService.js';
 
 export { ContinuousMonitoringService } from './continuousMonitoringService.js';
 export type { ContinuousMonitoringServiceConfig } from './continuousMonitoringService.js';
+
+export { AirQualityService } from './airQualityService.js';
+export type { AirQualityServiceConfig } from './airQualityService.js';

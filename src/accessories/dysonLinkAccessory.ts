@@ -18,6 +18,7 @@ import { TemperatureService } from './services/temperatureService.js';
 import { HumidityService } from './services/humidityService.js';
 import { NightModeService } from './services/nightModeService.js';
 import { ContinuousMonitoringService } from './services/continuousMonitoringService.js';
+import { AirQualityService } from './services/airQualityService.js';
 import type { DysonLinkDevice } from '../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../devices/types.js';
 
@@ -38,7 +39,8 @@ export interface DysonLinkAccessoryConfig {
  * - Fan control (power, speed, oscillation)
  * - Temperature sensor
  * - Humidity sensor
- * - Future: Air quality sensors (E6)
+ * - Air quality sensors (PM2.5, PM10, VOC)
+ * - Night mode and continuous monitoring switches
  */
 export class DysonLinkAccessory extends DysonAccessory {
   private fanService!: FanService;
@@ -46,6 +48,7 @@ export class DysonLinkAccessory extends DysonAccessory {
   private humidityService?: HumidityService;
   private nightModeService?: NightModeService;
   private continuousMonitoringService?: ContinuousMonitoringService;
+  private airQualityService?: AirQualityService;
 
   /**
    * Create a new DysonLinkAccessory
@@ -114,6 +117,16 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
+    // Create AirQualityService if device supports it
+    if (features.airQualitySensor) {
+      this.airQualityService = new AirQualityService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+      });
+    }
+
     this.log.debug('DysonLinkAccessory services configured');
   }
 
@@ -154,6 +167,7 @@ export class DysonLinkAccessory extends DysonAccessory {
     this.humidityService?.updateFromState();
     this.nightModeService?.updateFromState();
     this.continuousMonitoringService?.updateFromState();
+    this.airQualityService?.updateFromState();
     this.log.info('DysonLinkAccessory: Device reconnected, state synced');
   }
 
@@ -190,5 +204,12 @@ export class DysonLinkAccessory extends DysonAccessory {
    */
   getContinuousMonitoringService(): ContinuousMonitoringService | undefined {
     return this.continuousMonitoringService;
+  }
+
+  /**
+   * Get the AirQualityService instance (if enabled)
+   */
+  getAirQualityService(): AirQualityService | undefined {
+    return this.airQualityService;
   }
 }
