@@ -42,11 +42,12 @@ stories:
 
   - id: E1-S4
     title: Configure GitHub Actions CI
-    status: pending
+    status: completed
     points: 2
     priority: P0
     assignee: dev
-    notes: "Update build.yml with test step, multi-node matrix"
+    completed_date: 2025-01-13
+    notes: "CI workflow with lint, build, test on Node 20/22/24 matrix"
 
   - id: E1-S5
     title: Update Package Metadata
@@ -58,15 +59,15 @@ stories:
 
 metrics:
   total_points: 8
-  completed_points: 5
+  completed_points: 7
   in_progress_points: 0
   velocity_target: 8
 
 board:
-  todo: [E1-S4, E1-S5]
+  todo: [E1-S5]
   in_progress: []
   in_review: []
-  done: [E1-S1, E1-S2, E1-S3]
+  done: [E1-S1, E1-S2, E1-S3, E1-S4]
 
 definition_of_done:
   - Code compiles with zero TypeScript errors
