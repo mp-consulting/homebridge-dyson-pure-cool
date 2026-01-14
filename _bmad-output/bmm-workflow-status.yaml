@@ -93,6 +93,15 @@ phases:
         points: 8
         completed_points: 8
         velocity: 8
+      - sprint: 2
+        status: active
+        start_date: 2025-01-14
+        goal: "Establish core device discovery and MQTT communication"
+        epic: E2
+        stories: [E2-S1, E2-S2, E2-S3]
+        points: 8
+        completed_points: 0
+        velocity_target: 8
     completed_stories: [E1-S1, E1-S2, E1-S3, E1-S4, E1-S5]
 
 notes:
@@ -102,4 +111,5 @@ notes:
   - "Solutioning phase completed: Full architecture document with data models, flows, ADRs"
   - "Implementation readiness: GO - All artifacts aligned, Sprint 1 ready"
   - "Sprint 1 COMPLETED: Epic 1 (Infrastructure) - 8/8 points delivered!"
-  - "Next: Use /sm *sprint-planning for Sprint 2 (Epic 2: Device Discovery)"
+  - "Sprint 2 STARTED: Epic 2 (Device Discovery) - 8 points planned"
+  - "Sprint 2 stories: Cloud API (3pt), mDNS Discovery (2pt), MQTT Client (3pt)"

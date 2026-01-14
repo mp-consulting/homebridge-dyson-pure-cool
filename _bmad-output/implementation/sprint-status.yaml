@@ -2,75 +2,54 @@
 # Track current sprint progress
 
 sprint:
-  number: 1
-  goal: "Establish the development foundation - TypeScript, testing, linting, CI/CD"
-  start_date: 2025-01-13
-  end_date: 2025-01-13
-  status: completed
+  number: 2
+  goal: "Establish core device discovery and MQTT communication"
+  start_date: 2025-01-14
+  status: active
 
 epic:
-  id: E1
-  title: Project Infrastructure
-  total_points: 8
+  id: E2
+  title: Device Discovery & Connection
+  total_points: 13
+  sprint_points: 8
 
 stories:
-  - id: E1-S1
-    title: Configure TypeScript Project
-    status: completed
+  - id: E2-S1
+    title: Implement Dyson Cloud API Client
+    status: pending
+    points: 3
+    priority: P0
+    assignee: dev
+    notes: "DysonCloudApi class with auth, device list, credential extraction"
+
+  - id: E2-S2
+    title: Implement mDNS Discovery
+    status: pending
     points: 2
     priority: P0
     assignee: dev
-    completed_date: 2025-01-13
-    notes: "Updated tsconfig.json with strict mode, ES2022/ESM, sourceMap, declarationMap"
+    notes: "MdnsDiscovery class using bonjour-service for _dyson_mqtt._tcp"
 
-  - id: E1-S2
-    title: Configure ESLint
-    status: completed
-    points: 1
+  - id: E2-S3
+    title: Implement MQTT Client Wrapper
+    status: pending
+    points: 3
     priority: P0
     assignee: dev
-    completed_date: 2025-01-13
-    notes: "Updated ESLint 9.x flat config with stricter rules, proper ordering"
-
-  - id: E1-S3
-    title: Configure Jest Testing Framework
-    status: completed
-    points: 2
-    priority: P0
-    assignee: dev
-    completed_date: 2025-01-13
-    notes: "Jest + ts-jest configured for ESM, 7 tests passing, 80% coverage threshold"
-
-  - id: E1-S4
-    title: Configure GitHub Actions CI
-    status: completed
-    points: 2
-    priority: P0
-    assignee: dev
-    completed_date: 2025-01-13
-    notes: "CI workflow with lint, build, test on Node 20/22/24 matrix"
-
-  - id: E1-S5
-    title: Update Package Metadata
-    status: completed
-    points: 1
-    priority: P0
-    assignee: dev
-    completed_date: 2025-01-13
-    notes: "Package renamed to homebridge-dyson-pure-cool, ready for npm publish"
+    notes: "MqttClient class wrapping mqtt package with events"
 
 metrics:
   total_points: 8
-  completed_points: 8
+  completed_points: 0
   in_progress_points: 0
   velocity_target: 8
-  actual_velocity: 8
+  sprint_1_velocity: 8
 
 board:
-  todo: []
+  todo: [E2-S1, E2-S2, E2-S3]
   in_progress: []
   in_review: []
-  done: [E1-S1, E1-S2, E1-S3, E1-S4, E1-S5]
+  done: []
 
 definition_of_done:
   - Code compiles with zero TypeScript errors
@@ -81,9 +60,17 @@ definition_of_done:
 
 blockers: []
 
+dependencies:
+  - "npm packages needed: mqtt, bonjour-service, node-fetch (or built-in fetch)"
+
 notes:
-  - "Sprint 1 kicked off on 2025-01-13"
-  - "Focus: Establish solid infrastructure for future development"
-  - "All stories are P0 - critical path for subsequent epics"
-  - "Sprint 1 COMPLETED on 2025-01-13 - All 8 points delivered!"
-  - "Ready for Sprint 2: Epic 2 (Device Discovery & Connection)"
+  - "Sprint 2 kicked off on 2025-01-14"
+  - "Focus: Core discovery and communication layer"
+  - "All stories are P0 - critical path for device control"
+  - "Remaining E2 stories (S4-S6, 5 pts) deferred to Sprint 3"
+
+previous_sprint:
+  number: 1
+  epic: E1
+  velocity: 8
+  status: completed
