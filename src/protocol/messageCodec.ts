@@ -41,33 +41,34 @@ export interface CommandData {
 
 /**
  * Raw Dyson protocol state data
+ * Values can be either strings or arrays [oldValue, newValue] for STATE-CHANGE messages
  */
 export interface RawStateData {
-  fpwr?: string;
-  fmod?: string;
-  fnsp?: string;
-  oson?: string;
-  oscs?: string;
-  osce?: string;
-  nmod?: string;
-  rhtm?: string;
-  ffoc?: string;
-  hmod?: string;
-  hmax?: string;
-  hume?: string;
-  humt?: string;
-  tact?: string;
-  hact?: string;
-  pm25?: string;
-  pm10?: string;
-  pact?: string;
-  va10?: string;
-  vact?: string;
-  noxl?: string;
-  filf?: string;
-  fltf?: string;
-  cflr?: string;
-  [key: string]: string | undefined;
+  fpwr?: string | [string, string];
+  fmod?: string | [string, string];
+  fnsp?: string | [string, string];
+  oson?: string | [string, string];
+  oscs?: string | [string, string];
+  osce?: string | [string, string];
+  nmod?: string | [string, string];
+  rhtm?: string | [string, string];
+  ffoc?: string | [string, string];
+  hmod?: string | [string, string];
+  hmax?: string | [string, string];
+  hume?: string | [string, string];
+  humt?: string | [string, string];
+  tact?: string | [string, string];
+  hact?: string | [string, string];
+  pm25?: string | [string, string];
+  pm10?: string | [string, string];
+  pact?: string | [string, string];
+  va10?: string | [string, string];
+  vact?: string | [string, string];
+  noxl?: string | [string, string];
+  filf?: string | [string, string];
+  fltf?: string | [string, string];
+  cflr?: string | [string, string];
+  [key: string]: string | [string, string] | undefined;
 }
 
 /**
@@ -85,6 +86,23 @@ export interface DysonMessage {
  * Message codec for encoding commands and decoding state
  */
 export class MessageCodec {
+  /**
+   * Extract value from raw state field
+   * Handles both direct values ("ON") and change arrays (["OFF", "ON"])
+   *
+   * @param value - Raw value from state data
+   * @returns The actual string value (newest for arrays)
+   */
+  private extractValue(value: string | [string, string] | undefined): string | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    // STATE-CHANGE messages use [oldValue, newValue] format
+    if (Array.isArray(value)) {
+      return value[1]; // Return the new value
+    }
+    return value;
+  }
   /**
    * Encode a command to send to the device
    *
@@ -197,121 +215,146 @@ export class MessageCodec {
 
   /**
    * Parse raw state data into DeviceState
+   * Handles both CURRENT-STATE (direct values) and STATE-CHANGE ([old, new] arrays)
    */
   parseRawState(raw: RawStateData): Partial<DeviceState> {
     const state: Partial<DeviceState> = {};
 
     // Fan power
-    if (raw.fpwr !== undefined) {
-      state.isOn = raw.fpwr === 'ON';
+    const fpwr = this.extractValue(raw.fpwr);
+    if (fpwr !== undefined) {
+      state.isOn = fpwr === 'ON';
     }
 
     // Fan speed
-    if (raw.fnsp !== undefined) {
-      const { speed, autoMode } = this.decodeFanSpeed(raw.fnsp);
+    const fnsp = this.extractValue(raw.fnsp);
+    if (fnsp !== undefined) {
+      const { speed, autoMode } = this.decodeFanSpeed(fnsp);
       state.fanSpeed = speed;
       state.autoMode = autoMode;
     }
 
     // Fan mode (also indicates auto mode)
-    if (raw.fmod !== undefined) {
-      if (raw.fmod === 'AUTO') {
+    const fmod = this.extractValue(raw.fmod);
+    if (fmod !== undefined) {
+      if (fmod === 'AUTO') {
         state.autoMode = true;
-      } else if (raw.fmod === 'OFF') {
+      } else if (fmod === 'OFF') {
         state.isOn = false;
       }
     }
 
     // Oscillation
-    if (raw.oson !== undefined) {
-      state.oscillation = raw.oson === 'ON';
+    const oson = this.extractValue(raw.oson);
+    if (oson !== undefined) {
+      state.oscillation = oson === 'ON';
     }
 
     // Oscillation angles
-    if (raw.oscs !== undefined) {
-      state.oscillationAngleStart = parseInt(raw.oscs, 10);
+    const oscs = this.extractValue(raw.oscs);
+    if (oscs !== undefined) {
+      state.oscillationAngleStart = parseInt(oscs, 10);
     }
-    if (raw.osce !== undefined) {
-      state.oscillationAngleEnd = parseInt(raw.osce, 10);
+    const osce = this.extractValue(raw.osce);
+    if (osce !== undefined) {
+      state.oscillationAngleEnd = parseInt(osce, 10);
     }
 
     // Night mode
-    if (raw.nmod !== undefined) {
-      state.nightMode = raw.nmod === 'ON';
+    const nmod = this.extractValue(raw.nmod);
+    if (nmod !== undefined) {
+      state.nightMode = nmod === 'ON';
     }
 
     // Continuous monitoring
-    if (raw.rhtm !== undefined) {
-      state.continuousMonitoring = raw.rhtm === 'ON';
+    const rhtm = this.extractValue(raw.rhtm);
+    if (rhtm !== undefined) {
+      state.continuousMonitoring = rhtm === 'ON';
     }
 
     // Front airflow
-    if (raw.ffoc !== undefined) {
-      state.frontAirflow = raw.ffoc === 'ON';
+    const ffoc = this.extractValue(raw.ffoc);
+    if (ffoc !== undefined) {
+      state.frontAirflow = ffoc === 'ON';
     }
 
     // Temperature (Kelvin * 10)
-    if (raw.tact !== undefined && raw.tact !== 'OFF') {
-      state.temperature = parseInt(raw.tact, 10);
+    const tact = this.extractValue(raw.tact);
+    if (tact !== undefined && tact !== 'OFF') {
+      state.temperature = parseInt(tact, 10);
     }
 
     // Humidity percentage
-    if (raw.hact !== undefined && raw.hact !== 'OFF') {
-      state.humidity = parseInt(raw.hact, 10);
+    const hact = this.extractValue(raw.hact);
+    if (hact !== undefined && hact !== 'OFF') {
+      state.humidity = parseInt(hact, 10);
     }
 
     // Air quality sensors
-    if (raw.pm25 !== undefined) {
-      state.pm25 = parseInt(raw.pm25, 10);
+    const pm25 = this.extractValue(raw.pm25);
+    if (pm25 !== undefined) {
+      state.pm25 = parseInt(pm25, 10);
     }
-    if (raw.pm10 !== undefined) {
-      state.pm10 = parseInt(raw.pm10, 10);
+    const pm10 = this.extractValue(raw.pm10);
+    if (pm10 !== undefined) {
+      state.pm10 = parseInt(pm10, 10);
     }
-    if (raw.pact !== undefined) {
+    const pact = this.extractValue(raw.pact);
+    if (pact !== undefined) {
       // Some models use pact for PM2.5
-      state.pm25 = parseInt(raw.pact, 10);
+      state.pm25 = parseInt(pact, 10);
     }
-    if (raw.va10 !== undefined) {
-      state.vocIndex = parseInt(raw.va10, 10);
+    const va10 = this.extractValue(raw.va10);
+    if (va10 !== undefined) {
+      state.vocIndex = parseInt(va10, 10);
     }
-    if (raw.vact !== undefined) {
+    const vact = this.extractValue(raw.vact);
+    if (vact !== undefined) {
       // Some models use vact
-      state.vocIndex = parseInt(raw.vact, 10);
+      state.vocIndex = parseInt(vact, 10);
     }
-    if (raw.noxl !== undefined) {
-      state.no2Index = parseInt(raw.noxl, 10);
+    const noxl = this.extractValue(raw.noxl);
+    if (noxl !== undefined) {
+      state.no2Index = parseInt(noxl, 10);
     }
 
     // Filter status
-    if (raw.filf !== undefined) {
+    const filf = this.extractValue(raw.filf);
+    if (filf !== undefined) {
       // HEPA filter life in hours
-      state.hepaFilterLife = parseInt(raw.filf, 10);
+      state.hepaFilterLife = parseInt(filf, 10);
     }
-    if (raw.fltf !== undefined) {
+    const fltf = this.extractValue(raw.fltf);
+    if (fltf !== undefined) {
       // HEPA filter percentage - convert to hours estimate (4300 hours max)
-      const percent = parseInt(raw.fltf, 10);
+      const percent = parseInt(fltf, 10);
       state.hepaFilterLife = Math.round((percent / 100) * 4300);
     }
-    if (raw.cflr !== undefined) {
+    const cflr = this.extractValue(raw.cflr);
+    if (cflr !== undefined) {
       // Carbon filter percentage - convert to hours estimate (4300 hours max)
-      const percent = parseInt(raw.cflr, 10);
+      const percent = parseInt(cflr, 10);
       state.carbonFilterLife = Math.round((percent / 100) * 4300);
     }
 
     // Heating (HP models)
-    if (raw.hmod !== undefined) {
-      state.heatingEnabled = raw.hmod === 'HEAT';
+    const hmod = this.extractValue(raw.hmod);
+    if (hmod !== undefined) {
+      state.heatingEnabled = hmod === 'HEAT';
     }
-    if (raw.hmax !== undefined) {
-      state.targetTemperature = parseInt(raw.hmax, 10);
+    const hmax = this.extractValue(raw.hmax);
+    if (hmax !== undefined) {
+      state.targetTemperature = parseInt(hmax, 10);
     }
 
     // Humidifier (PH models)
-    if (raw.hume !== undefined) {
-      state.humidifierEnabled = raw.hume === 'ON' || raw.hume === 'AUTO';
+    const hume = this.extractValue(raw.hume);
+    if (hume !== undefined) {
+      state.humidifierEnabled = hume === 'ON' || hume === 'AUTO';
     }
-    if (raw.humt !== undefined) {
-      state.targetHumidity = parseInt(raw.humt, 10);
+    const humt = this.extractValue(raw.humt);
+    if (humt !== undefined) {
+      state.targetHumidity = parseInt(humt, 10);
     }
 
     return state;

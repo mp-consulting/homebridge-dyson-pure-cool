@@ -352,6 +352,77 @@ describe('MessageCodec', () => {
       const state = codec.decodeState(message);
       expect(state).toEqual({});
     });
+
+    it('should decode STATE-CHANGE with array format [old, new]', () => {
+      // When iOS Dyson app changes settings, device broadcasts arrays
+      const message = {
+        msg: 'STATE-CHANGE',
+        'product-state': {
+          fpwr: ['OFF', 'ON'],
+          fnsp: ['0003', '0007'],
+          oson: ['OFF', 'ON'],
+        },
+      };
+
+      const state = codec.decodeState(message as DysonMessage);
+
+      expect(state.isOn).toBe(true);
+      expect(state.fanSpeed).toBe(7);
+      expect(state.oscillation).toBe(true);
+    });
+
+    it('should decode STATE-CHANGE with all array format fields', () => {
+      const message = {
+        msg: 'STATE-CHANGE',
+        'product-state': {
+          fmod: ['FAN', 'AUTO'],
+          nmod: ['OFF', 'ON'],
+          rhtm: ['OFF', 'ON'],
+          ffoc: ['OFF', 'ON'],
+        },
+      };
+
+      const state = codec.decodeState(message as DysonMessage);
+
+      expect(state.autoMode).toBe(true);
+      expect(state.nightMode).toBe(true);
+      expect(state.continuousMonitoring).toBe(true);
+      expect(state.frontAirflow).toBe(true);
+    });
+
+    it('should decode STATE-CHANGE arrays for sensor data', () => {
+      const message = {
+        msg: 'STATE-CHANGE',
+        'product-state': {
+          tact: ['2900', '2950'],
+          hact: ['40', '55'],
+        },
+      };
+
+      const state = codec.decodeState(message as DysonMessage);
+
+      expect(state.temperature).toBe(2950);
+      expect(state.humidity).toBe(55);
+    });
+
+    it('should decode STATE-CHANGE arrays for heating/humidifier', () => {
+      const message = {
+        msg: 'STATE-CHANGE',
+        'product-state': {
+          hmod: ['OFF', 'HEAT'],
+          hmax: ['2900', '2950'],
+          hume: ['OFF', 'ON'],
+          humt: ['0040', '0060'],
+        },
+      };
+
+      const state = codec.decodeState(message as DysonMessage);
+
+      expect(state.heatingEnabled).toBe(true);
+      expect(state.targetTemperature).toBe(2950);
+      expect(state.humidifierEnabled).toBe(true);
+      expect(state.targetHumidity).toBe(60);
+    });
   });
 
   describe('encodeFanSpeed', () => {
