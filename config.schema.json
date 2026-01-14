@@ -2,122 +2,141 @@
   "pluginAlias": "DysonPureCool",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Homebridge plugin for Dyson Pure Cool air purifiers and fans. Supports automatic device discovery via Dyson Cloud or manual configuration.",
-  "footerDisplay": "For help, see the [README](https://github.com/homebridge/homebridge-dyson-pure-cool#readme)",
+  "customUi": true,
   "schema": {
     "type": "object",
     "properties": {
       "name": {
-        "title": "Platform Name",
+        "title": "Name",
         "type": "string",
         "default": "Dyson Pure Cool",
-        "description": "The name that will appear in Homebridge logs"
-      },
-      "email": {
-        "title": "Dyson Account Email",
-        "type": "string",
-        "format": "email",
-        "description": "Your Dyson account email (optional if using manual device configuration)"
-      },
-      "password": {
-        "title": "Dyson Account Password",
-        "type": "string",
-        "description": "Your Dyson account password"
+        "description": "Plugin name as it appears in Homebridge logs"
       },
       "countryCode": {
         "title": "Country Code",
         "type": "string",
         "default": "US",
-        "description": "Your Dyson account country code (e.g., US, GB, DE, FR)"
-      },
-      "discoveryTimeout": {
-        "title": "Discovery Timeout",
-        "type": "integer",
-        "default": 30,
-        "minimum": 5,
-        "maximum": 120,
-        "description": "Timeout in seconds for mDNS device discovery on local network"
-      },
-      "pollInterval": {
-        "title": "Poll Interval",
-        "type": "integer",
-        "default": 60,
-        "minimum": 10,
-        "maximum": 300,
-        "description": "Interval in seconds to poll device state"
+        "description": "Your Dyson account country code",
+        "oneOf": [
+          { "title": "United States", "enum": ["US"] },
+          { "title": "United Kingdom", "enum": ["GB"] },
+          { "title": "Germany", "enum": ["DE"] },
+          { "title": "France", "enum": ["FR"] },
+          { "title": "Italy", "enum": ["IT"] },
+          { "title": "Spain", "enum": ["ES"] },
+          { "title": "Netherlands", "enum": ["NL"] },
+          { "title": "Belgium", "enum": ["BE"] },
+          { "title": "Austria", "enum": ["AT"] },
+          { "title": "Switzerland", "enum": ["CH"] },
+          { "title": "Australia", "enum": ["AU"] },
+          { "title": "New Zealand", "enum": ["NZ"] },
+          { "title": "Canada", "enum": ["CA"] },
+          { "title": "Ireland", "enum": ["IE"] },
+          { "title": "Sweden", "enum": ["SE"] },
+          { "title": "Norway", "enum": ["NO"] },
+          { "title": "Denmark", "enum": ["DK"] },
+          { "title": "Finland", "enum": ["FI"] },
+          { "title": "Japan", "enum": ["JP"] },
+          { "title": "Singapore", "enum": ["SG"] },
+          { "title": "Hong Kong", "enum": ["HK"] },
+          { "title": "China", "enum": ["CN"] }
+        ]
       },
       "devices": {
-        "title": "Manual Device Configuration",
+        "title": "Devices",
         "type": "array",
-        "description": "Manually configure devices instead of using Dyson Cloud (optional)",
+        "description": "List of Dyson devices to control",
         "items": {
           "type": "object",
           "properties": {
+            "serial": {
+              "title": "Serial Number",
+              "type": "string",
+              "description": "Device serial number (e.g., ABC-US-12345678)",
+              "pattern": "^[A-Z0-9]{3}-[A-Z]{2}-[A-Z0-9]+$"
+            },
             "name": {
               "title": "Device Name",
               "type": "string",
               "description": "Display name for this device"
             },
-            "serial": {
-              "title": "Serial Number",
-              "type": "string",
-              "description": "Device serial number (format: ABC-AB-12345678)"
-            },
             "productType": {
               "title": "Product Type",
               "type": "string",
-              "description": "Dyson product type code (e.g., 438 for TP04, 455 for HP02)"
+              "description": "Dyson product type code",
+              "oneOf": [
+                { "title": "Pure Cool Tower (TP04)", "enum": ["438"] },
+                { "title": "Pure Cool Tower (TP07)", "enum": ["438E"] },
+                { "title": "Pure Cool Tower Formaldehyde (TP09)", "enum": ["438K"] },
+                { "title": "Pure Cool Desk (DP04)", "enum": ["520"] },
+                { "title": "Pure Hot+Cool (HP04)", "enum": ["527"] },
+                { "title": "Pure Hot+Cool (HP07)", "enum": ["527E"] },
+                { "title": "Pure Hot+Cool Formaldehyde (HP09)", "enum": ["527K"] },
+                { "title": "Pure Hot+Cool Link (HP02)", "enum": ["455"] },
+                { "title": "Pure Cool Link Desk (DP01)", "enum": ["469"] },
+                { "title": "Pure Cool Link Tower (TP02)", "enum": ["475"] },
+                { "title": "Purifier Big+Quiet (BP03)", "enum": ["664"] },
+                { "title": "Purifier Big+Quiet (BP04)", "enum": ["664E"] }
+              ]
             },
-            "credentials": {
+            "localCredentials": {
               "title": "Local Credentials",
               "type": "string",
-              "description": "Device local MQTT password (from Dyson Cloud API)"
+              "description": "MQTT password for local device connection (obtained from Dyson cloud)"
             },
             "ipAddress": {
-              "title": "IP Address",
+              "title": "IP Address (Optional)",
               "type": "string",
-              "format": "ipv4",
-              "description": "Device IP address on local network"
+              "description": "Static IP address (leave empty for auto-discovery)",
+              "format": "ipv4"
             }
           },
-          "required": ["serial", "productType", "credentials", "ipAddress"]
+          "required": ["serial", "productType", "localCredentials"]
         }
       },
       "enableTemperature": {
         "title": "Enable Temperature Sensor",
         "type": "boolean",
         "default": true,
-        "description": "Show temperature sensor in HomeKit"
+        "description": "Show temperature readings in HomeKit"
       },
       "enableHumidity": {
         "title": "Enable Humidity Sensor",
         "type": "boolean",
         "default": true,
-        "description": "Show humidity sensor in HomeKit"
+        "description": "Show humidity readings in HomeKit"
       },
       "enableAirQuality": {
         "title": "Enable Air Quality Sensor",
         "type": "boolean",
         "default": true,
-        "description": "Show air quality sensor (PM2.5, PM10, VOC) in HomeKit"
+        "description": "Show air quality index in HomeKit"
       },
       "enableNightMode": {
         "title": "Enable Night Mode Switch",
         "type": "boolean",
         "default": true,
-        "description": "Show night mode toggle switch in HomeKit"
+        "description": "Add a switch to control night mode"
       },
-      "enableContinuousMonitoring": {
-        "title": "Enable Continuous Monitoring Switch",
-        "type": "boolean",
-        "default": false,
-        "description": "Show continuous monitoring toggle switch in HomeKit"
-      },
-      "enableFilter": {
-        "title": "Enable Filter Status",
+      "enableAutoMode": {
+        "title": "Enable Auto Mode Switch",
         "type": "boolean",
         "default": true,
-        "description": "Show filter life remaining in HomeKit"
+        "description": "Add a switch to control auto mode"
+      },
+      "enableFilterStatus": {
+        "title": "Enable Filter Status",
+        "type": "boolean",
+        "default": false,
+        "description": "Show filter life remaining indicator"
+      },
+      "pollingInterval": {
+        "title": "Polling Interval",
+        "type": "integer",
+        "default": 60,
+        "minimum": 10,
+        "maximum": 300,
+        "description": "How often to check device status (in seconds)"
       }
     },
     "required": ["name"]
@@ -125,55 +144,54 @@
   "layout": [
     {
       "type": "fieldset",
-      "title": "Dyson Account",
-      "description": "Enter your Dyson account credentials for automatic device discovery",
-      "items": [
-        "email",
-        "password",
-        "countryCode"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Discovery Settings",
+      "title": "Devices",
+      "description": "Use the custom UI wizard above to configure devices automatically, or add them manually below.",
       "expandable": true,
-      "items": [
-        "discoveryTimeout",
-        "pollInterval"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "HomeKit Features",
-      "description": "Choose which features to expose in HomeKit",
-      "expandable": true,
-      "items": [
-        "enableTemperature",
-        "enableHumidity",
-        "enableAirQuality",
-        "enableNightMode",
-        "enableContinuousMonitoring",
-        "enableFilter"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Manual Device Configuration",
-      "description": "Optional: Configure devices manually without Dyson Cloud",
-      "expandable": true,
+      "expanded": false,
       "items": [
         {
           "key": "devices",
           "type": "array",
-          "buttonText": "Add Device",
           "items": [
-            "devices[].name",
             "devices[].serial",
+            "devices[].name",
             "devices[].productType",
-            "devices[].credentials",
+            "devices[].localCredentials",
             "devices[].ipAddress"
           ]
         }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Sensor Options",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "enableTemperature",
+        "enableHumidity",
+        "enableAirQuality"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Additional Controls",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "enableNightMode",
+        "enableAutoMode",
+        "enableFilterStatus"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced Settings",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "countryCode",
+        "pollingInterval"
       ]
     }
   ]

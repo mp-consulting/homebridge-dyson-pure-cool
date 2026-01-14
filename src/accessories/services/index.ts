@@ -17,8 +17,5 @@ export type { NightModeServiceConfig } from './nightModeService.js';
 export { ContinuousMonitoringService } from './continuousMonitoringService.js';
 export type { ContinuousMonitoringServiceConfig } from './continuousMonitoringService.js';
 
-export { AirQualityService } from './airQualityService.js';
-export type { AirQualityServiceConfig } from './airQualityService.js';
-
-export { FilterService } from './filterService.js';
-export type { FilterServiceConfig } from './filterService.js';
+export { HeaterCoolerService } from './heaterCoolerService.js';
+export type { HeaterCoolerServiceConfig } from './heaterCoolerService.js';

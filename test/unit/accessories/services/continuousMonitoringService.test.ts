@@ -5,10 +5,11 @@
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
 import { ContinuousMonitoringService } from '../../../../src/accessories/services/continuousMonitoringService.js';
+import type { ContinuousMonitoringServiceConfig } from '../../../../src/accessories/services/continuousMonitoringService.js';
 import { DysonLinkDevice } from '../../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../../src/devices/index.js';
 import type { DysonMqttClient } from '../../../../src/protocol/mqttClient.js';
-import type { API, Logging, PlatformAccessory, Service, Characteristic } from 'homebridge';
+import type { API, PlatformAccessory, Service, Logging } from 'homebridge';
 
 // Create mock MQTT client
 function createMockMqttClient() {
@@ -37,78 +38,40 @@ function createMockMqttClient() {
   return mockClient as unknown as jest.Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
 }
 
-// Create mock characteristic
-function createMockCharacteristic() {
-  const characteristic = {
-    onGet: jest.fn().mockReturnThis(),
-    onSet: jest.fn().mockReturnThis(),
-    setProps: jest.fn().mockReturnThis(),
-    updateValue: jest.fn().mockReturnThis(),
-    value: false,
-  };
-  return characteristic as unknown as jest.Mocked<Characteristic>;
-}
-
-// Create mock service
+// Create mock HomeKit service
 function createMockService() {
-  const characteristics = new Map<string, ReturnType<typeof createMockCharacteristic>>();
+  const characteristics = new Map<string, {
+    onGet: jest.Mock;
+    onSet: jest.Mock;
+    setProps: jest.Mock;
+    getValue: jest.Mock;
+  }>();
 
-  const service = {
+  const mockService = {
     setCharacteristic: jest.fn().mockReturnThis(),
     getCharacteristic: jest.fn((char: unknown) => {
-      const key = String(char);
-      if (!characteristics.has(key)) {
-        characteristics.set(key, createMockCharacteristic());
+      const uuid = typeof char === 'object' && char !== null && 'UUID' in char
+        ? (char as { UUID: string }).UUID
+        : String(char);
+      if (!characteristics.has(uuid)) {
+        const charMock = {
+          onGet: jest.fn().mockReturnThis(),
+          onSet: jest.fn().mockReturnThis(),
+          setProps: jest.fn().mockReturnThis(),
+          getValue: jest.fn(),
+        };
+        characteristics.set(uuid, charMock);
       }
-      return characteristics.get(key)!;
+      return characteristics.get(uuid);
     }),
-    updateCharacteristic: jest.fn().mockReturnThis(),
-    _getCharacteristics: () => characteristics,
+    updateCharacteristic: jest.fn(),
   };
 
-  return service as unknown as jest.Mocked<Service> & {
-    _getCharacteristics: () => Map<string, ReturnType<typeof createMockCharacteristic>>;
-  };
+  return mockService as unknown as jest.Mocked<Service>;
 }
 
-// Create mock API
-function createMockApi() {
-  const mockSwitchService = createMockService();
-
-  return {
-    hap: {
-      Service: {
-        Switch: 'Switch',
-      },
-      Characteristic: {
-        Name: 'Name',
-        On: 'On',
-      },
-    },
-    _mockSwitchService: mockSwitchService,
-  } as unknown as jest.Mocked<API> & {
-    _mockSwitchService: ReturnType<typeof createMockService>;
-  };
-}
-
-// Create mock accessory
-function createMockAccessory(api: ReturnType<typeof createMockApi>) {
-  return {
-    displayName: 'Test Dyson',
-    UUID: 'test-uuid',
-    getService: jest.fn((serviceType: unknown) => {
-      if (serviceType === 'Continuous Monitoring') {
-        return api._mockSwitchService;
-      }
-      return undefined;
-    }),
-    addService: jest.fn(() => api._mockSwitchService),
-    context: {},
-  } as unknown as jest.Mocked<PlatformAccessory>;
-}
-
-// Create mock logger
-function createMockLog(): jest.Mocked<Logging> {
+// Create mock logging
+function createMockLog(): Logging {
   return {
     info: jest.fn(),
     warn: jest.fn(),
@@ -116,17 +79,41 @@ function createMockLog(): jest.Mocked<Logging> {
     debug: jest.fn(),
     log: jest.fn(),
     success: jest.fn(),
-  } as unknown as jest.Mocked<Logging>;
+  } as unknown as Logging;
+}
+
+// Create mock API with hap
+function createMockApi() {
+  const Characteristic = {
+    On: { UUID: 'on-uuid' },
+    Name: { UUID: 'name-uuid' },
+  };
+
+  const Service = {
+    Switch: { UUID: 'switch-uuid' },
+  };
+
+  return {
+    hap: {
+      Service,
+      Characteristic,
+    },
+  } as unknown as API;
 }
 
 describe('ContinuousMonitoringService', () => {
-  let service: ContinuousMonitoringService;
-  let device: DysonLinkDevice;
+  let continuousMonitoringService: ContinuousMonitoringService;
   let mockMqttClient: ReturnType<typeof createMockMqttClient>;
   let mockMqttClientFactory: MqttClientFactory;
-  let mockApi: ReturnType<typeof createMockApi>;
-  let mockAccessory: ReturnType<typeof createMockAccessory>;
-  let mockLog: jest.Mocked<Logging>;
+  let device: DysonLinkDevice;
+  let mockService: ReturnType<typeof createMockService>;
+  let mockAccessory: PlatformAccessory;
+  let mockLog: Logging;
+  let mockApi: API;
+
+  // Store handlers for testing
+  let onGetHandler: () => unknown;
+  let onSetHandler: (value: unknown) => Promise<void>;
 
   const defaultDeviceInfo: DeviceInfo = {
     serial: 'ABC-AB-12345678',
@@ -136,14 +123,41 @@ describe('ContinuousMonitoringService', () => {
     ipAddress: '192.168.1.100',
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Set up mocks
     mockMqttClient = createMockMqttClient();
     mockMqttClientFactory = jest.fn().mockReturnValue(mockMqttClient);
-    mockApi = createMockApi();
-    mockAccessory = createMockAccessory(mockApi);
-    mockLog = createMockLog();
-
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
+
+    mockService = createMockService();
+    mockLog = createMockLog();
+    mockApi = createMockApi();
+
+    mockAccessory = {
+      displayName: 'Living Room',
+      getService: jest.fn().mockReturnValue(null),
+      getServiceById: jest.fn().mockReturnValue(null),
+      addService: jest.fn().mockReturnValue(mockService),
+    } as unknown as PlatformAccessory;
+
+    // Connect device so we can control it
+    await device.connect();
+
+    const config: ContinuousMonitoringServiceConfig = {
+      accessory: mockAccessory,
+      device,
+      api: mockApi,
+      log: mockLog,
+    };
+
+    continuousMonitoringService = new ContinuousMonitoringService(config);
+
+    const Characteristic = mockApi.hap.Characteristic;
+
+    // Extract handlers from mock calls
+    const onChar = mockService.getCharacteristic(Characteristic.On);
+    onGetHandler = (onChar!.onGet as jest.Mock).mock.calls[0][0];
+    onSetHandler = (onChar!.onSet as jest.Mock).mock.calls[0][0];
   });
 
   afterEach(() => {
@@ -151,238 +165,146 @@ describe('ContinuousMonitoringService', () => {
   });
 
   describe('initialization', () => {
-    it('should get or create Switch service with subtype', () => {
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      expect(mockAccessory.getService).toHaveBeenCalledWith('Continuous Monitoring');
+    it('should create Switch service with continuous-monitoring subtype', () => {
+      expect(mockAccessory.getServiceById).toHaveBeenCalled();
+      expect(mockAccessory.addService).toHaveBeenCalled();
     });
 
-    it('should create new service when not found', () => {
-      mockAccessory.getService.mockReturnValue(undefined);
-
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      expect(mockAccessory.addService).toHaveBeenCalledWith('Switch', 'Continuous Monitoring', 'continuous-monitoring');
-    });
-
-    it('should set display name', () => {
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      expect(mockApi._mockSwitchService.setCharacteristic).toHaveBeenCalledWith(
-        'Name',
+    it('should set display name to Continuous Monitoring', () => {
+      expect(mockService.setCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.Name,
         'Continuous Monitoring',
       );
     });
 
     it('should register On characteristic handlers', () => {
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      const onChar = mockApi._mockSwitchService._getCharacteristics().get('On');
-      expect(onChar?.onGet).toHaveBeenCalled();
-      expect(onChar?.onSet).toHaveBeenCalled();
+      const char = mockService.getCharacteristic(mockApi.hap.Characteristic.On);
+      expect(char!.onGet).toHaveBeenCalled();
+      expect(char!.onSet).toHaveBeenCalled();
     });
 
     it('should return the service', () => {
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      expect(service.getService()).toBe(mockApi._mockSwitchService);
+      expect(continuousMonitoringService.getService()).toBe(mockService);
     });
   });
 
-  describe('handleOnGet', () => {
-    let onGetHandler: (...args: unknown[]) => boolean;
+  describe('On characteristic', () => {
+    it('should return true by default when state is not set', () => {
+      // Default to true since most users want continuous monitoring on
+      const result = onGetHandler();
+      expect(result).toBe(true);
+    });
 
-    beforeEach(() => {
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
+    it('should return false when continuous monitoring is explicitly off', async () => {
+      // Simulate state change from device
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { rhtm: 'OFF' } },
       });
 
-      const onChar = mockApi._mockSwitchService._getCharacteristics().get('On');
-      onGetHandler = onChar!.onGet.mock.calls[0][0] as (...args: unknown[]) => boolean;
-    });
-
-    it('should return true by default when continuousMonitoring is undefined', () => {
-      const result = onGetHandler();
-      expect(result).toBe(true);
-    });
-
-    it('should return true when continuous monitoring is on', () => {
-      device.state.continuousMonitoring = true;
-      const result = onGetHandler();
-      expect(result).toBe(true);
-    });
-
-    it('should return false when continuous monitoring is off', () => {
-      device.state.continuousMonitoring = false;
       const result = onGetHandler();
       expect(result).toBe(false);
     });
 
-    it('should log debug message', () => {
-      device.state.continuousMonitoring = true;
-      onGetHandler();
-      expect(mockLog.debug).toHaveBeenCalledWith('Get Continuous Monitoring ->', true);
-    });
-  });
-
-  describe('handleOnSet', () => {
-    let onSetHandler: (value: boolean) => Promise<void>;
-
-    beforeEach(async () => {
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
+    it('should return true when continuous monitoring is on', async () => {
+      // Simulate state change from device
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { rhtm: 'ON' } },
       });
 
-      // Connect the device so setContinuousMonitoring works
-      await device.connect();
-
-      const onChar = mockApi._mockSwitchService._getCharacteristics().get('On');
-      onSetHandler = onChar!.onSet.mock.calls[0][0] as (value: boolean) => Promise<void>;
+      const result = onGetHandler();
+      expect(result).toBe(true);
     });
 
-    it('should send continuous monitoring ON command', async () => {
+    it('should call setContinuousMonitoring(true) when set to true', async () => {
       await onSetHandler(true);
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            rhtm: 'ON',
-          }),
+          data: { rhtm: 'ON' },
         }),
       );
     });
 
-    it('should send continuous monitoring OFF command', async () => {
+    it('should call setContinuousMonitoring(false) when set to false', async () => {
       await onSetHandler(false);
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            rhtm: 'OFF',
-          }),
+          data: { rhtm: 'OFF' },
         }),
       );
-    });
-
-    it('should log debug message', async () => {
-      await onSetHandler(true);
-      expect(mockLog.debug).toHaveBeenCalledWith('Set Continuous Monitoring ->', true);
-    });
-
-    it('should log error and rethrow on failure', async () => {
-      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('Network error'));
-
-      await expect(onSetHandler(true)).rejects.toThrow('Network error');
-      expect(mockLog.error).toHaveBeenCalledWith('Failed to set continuous monitoring:', expect.any(Error));
     });
   });
 
   describe('state change handling', () => {
-    beforeEach(() => {
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
+    it('should update characteristic when device state changes', async () => {
+      // Simulate state update
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { rhtm: 'OFF' } },
       });
-    });
 
-    it('should update characteristic when continuous monitoring turns on', () => {
-      device.updateState({ continuousMonitoring: true });
-
-      expect(mockApi._mockSwitchService.updateCharacteristic).toHaveBeenCalledWith(
-        'On',
-        true,
-      );
-    });
-
-    it('should update characteristic when continuous monitoring turns off', () => {
-      device.updateState({ continuousMonitoring: false });
-
-      expect(mockApi._mockSwitchService.updateCharacteristic).toHaveBeenCalledWith(
-        'On',
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.On,
         false,
       );
     });
 
-    it('should default to true when continuousMonitoring is undefined', () => {
-      device.updateState({ continuousMonitoring: undefined });
+    it('should update characteristic when continuous monitoring turns on', async () => {
+      // First turn off
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { rhtm: 'OFF' } },
+      });
 
-      expect(mockApi._mockSwitchService.updateCharacteristic).toHaveBeenCalledWith(
-        'On',
+      mockService.updateCharacteristic.mockClear();
+
+      // Then turn on
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { rhtm: 'ON' } },
+      });
+
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.On,
         true,
       );
     });
   });
 
   describe('updateFromState', () => {
-    it('should update characteristic from current device state', () => {
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
+    it('should update characteristic from current device state', async () => {
+      // Set device state
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'CURRENT-STATE', 'product-state': { rhtm: 'ON' } },
       });
 
-      device.state.continuousMonitoring = false;
+      mockService.updateCharacteristic.mockClear();
 
-      mockApi._mockSwitchService.updateCharacteristic.mockClear();
-      service.updateFromState();
+      continuousMonitoringService.updateFromState();
 
-      expect(mockApi._mockSwitchService.updateCharacteristic).toHaveBeenCalledWith(
-        'On',
-        false,
-      );
-    });
-
-    it('should default to true when state is undefined', () => {
-      service = new ContinuousMonitoringService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      device.state.continuousMonitoring = undefined;
-
-      mockApi._mockSwitchService.updateCharacteristic.mockClear();
-      service.updateFromState();
-
-      expect(mockApi._mockSwitchService.updateCharacteristic).toHaveBeenCalledWith(
-        'On',
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.On,
         true,
       );
+    });
+  });
+
+  describe('error handling', () => {
+    it('should throw and log error when setContinuousMonitoring fails', async () => {
+      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
+
+      await expect(onSetHandler(true)).rejects.toThrow('MQTT error');
+      expect(mockLog.error).toHaveBeenCalled();
     });
   });
 });

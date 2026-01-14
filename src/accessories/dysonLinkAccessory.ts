@@ -18,8 +18,7 @@ import { TemperatureService } from './services/temperatureService.js';
 import { HumidityService } from './services/humidityService.js';
 import { NightModeService } from './services/nightModeService.js';
 import { ContinuousMonitoringService } from './services/continuousMonitoringService.js';
-import { AirQualityService } from './services/airQualityService.js';
-import { FilterService } from './services/filterService.js';
+import { HeaterCoolerService } from './services/heaterCoolerService.js';
 import type { DysonLinkDevice } from '../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../devices/types.js';
 
@@ -40,9 +39,9 @@ export interface DysonLinkAccessoryConfig {
  * - Fan control (power, speed, oscillation)
  * - Temperature sensor
  * - Humidity sensor
- * - Air quality sensors (PM2.5, PM10, VOC)
- * - Filter maintenance status
- * - Night mode and continuous monitoring switches
+ * - Night mode
+ * - Continuous monitoring
+ * - Heating (HP-series only)
  */
 export class DysonLinkAccessory extends DysonAccessory {
   private fanService!: FanService;
@@ -50,8 +49,7 @@ export class DysonLinkAccessory extends DysonAccessory {
   private humidityService?: HumidityService;
   private nightModeService?: NightModeService;
   private continuousMonitoringService?: ContinuousMonitoringService;
-  private airQualityService?: AirQualityService;
-  private filterService?: FilterService;
+  private heaterCoolerService?: HeaterCoolerService;
 
   /**
    * Create a new DysonLinkAccessory
@@ -66,7 +64,7 @@ export class DysonLinkAccessory extends DysonAccessory {
   /**
    * Set up device-specific services
    *
-   * Creates FanService, TemperatureService, and HumidityService.
+   * Creates all HomeKit services based on device features.
    */
   protected setupServices(): void {
     const linkDevice = this.device as DysonLinkDevice;
@@ -120,19 +118,9 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
-    // Create AirQualityService if device supports it
-    if (features.airQualitySensor) {
-      this.airQualityService = new AirQualityService({
-        accessory: this.accessory,
-        device: linkDevice,
-        api: this.api,
-        log: this.log,
-      });
-    }
-
-    // Create FilterService if device has filters
-    if (features.hepaFilter || features.carbonFilter) {
-      this.filterService = new FilterService({
+    // Create HeaterCoolerService for HP-series devices
+    if (features.heating) {
+      this.heaterCoolerService = new HeaterCoolerService({
         accessory: this.accessory,
         device: linkDevice,
         api: this.api,
@@ -180,8 +168,7 @@ export class DysonLinkAccessory extends DysonAccessory {
     this.humidityService?.updateFromState();
     this.nightModeService?.updateFromState();
     this.continuousMonitoringService?.updateFromState();
-    this.airQualityService?.updateFromState();
-    this.filterService?.updateFromState();
+    this.heaterCoolerService?.updateFromState();
     this.log.info('DysonLinkAccessory: Device reconnected, state synced');
   }
 
@@ -221,16 +208,9 @@ export class DysonLinkAccessory extends DysonAccessory {
   }
 
   /**
-   * Get the AirQualityService instance (if enabled)
+   * Get the HeaterCoolerService instance (if enabled)
    */
-  getAirQualityService(): AirQualityService | undefined {
-    return this.airQualityService;
-  }
-
-  /**
-   * Get the FilterService instance (if enabled)
-   */
-  getFilterService(): FilterService | undefined {
-    return this.filterService;
+  getHeaterCoolerService(): HeaterCoolerService | undefined {
+    return this.heaterCoolerService;
   }
 }

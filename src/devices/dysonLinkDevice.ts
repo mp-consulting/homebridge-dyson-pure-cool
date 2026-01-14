@@ -163,6 +163,34 @@ export class DysonLinkDevice extends DysonDevice {
   }
 
   /**
+   * Set heating mode on or off (HP-series only)
+   *
+   * @param on - True to enable heating, false to disable
+   */
+  async setHeatingMode(on: boolean): Promise<void> {
+    if (!this.supportedFeatures.heating) {
+      throw new Error('Heating not supported on this device');
+    }
+    await this.sendCommand({ hmod: on ? 'HEAT' : 'OFF' });
+  }
+
+  /**
+   * Set target temperature for heating (HP-series only)
+   *
+   * @param celsius - Target temperature in Celsius (1-37)
+   */
+  async setTargetTemperature(celsius: number): Promise<void> {
+    if (!this.supportedFeatures.heating) {
+      throw new Error('Heating not supported on this device');
+    }
+    // Clamp to valid range (1°C - 37°C)
+    const clampedCelsius = Math.max(1, Math.min(37, celsius));
+    // Convert Celsius to Kelvin * 10
+    const kelvinTimes10 = Math.round((clampedCelsius + 273.15) * 10);
+    await this.sendCommand({ hmax: String(kelvinTimes10) });
+  }
+
+  /**
    * Get the device features
    *
    * @returns DeviceFeatures object describing what this device supports

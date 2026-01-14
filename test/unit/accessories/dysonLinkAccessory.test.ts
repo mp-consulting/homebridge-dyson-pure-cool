@@ -85,6 +85,8 @@ function createMockApi() {
         AccessoryInformation: 'AccessoryInformation',
         TemperatureSensor: 'TemperatureSensor',
         HumiditySensor: 'HumiditySensor',
+        Switch: 'Switch',
+        HeaterCooler: 'HeaterCooler',
       },
       Characteristic: {
         Name: 'Name',
@@ -97,6 +99,11 @@ function createMockApi() {
         FirmwareRevision: 'FirmwareRevision',
         CurrentTemperature: 'CurrentTemperature',
         CurrentRelativeHumidity: 'CurrentRelativeHumidity',
+        On: 'On',
+        TargetFanState: 'TargetFanState',
+        CurrentHeaterCoolerState: 'CurrentHeaterCoolerState',
+        TargetHeaterCoolerState: 'TargetHeaterCoolerState',
+        HeatingThresholdTemperature: 'HeatingThresholdTemperature',
       },
     },
     _mockFanService: mockFanService,
@@ -131,6 +138,7 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
       }
       return undefined;
     }),
+    getServiceById: jest.fn(() => null),
     addService: jest.fn((serviceType: unknown) => {
       if (serviceType === 'Fanv2') {
         return api._mockFanService;
