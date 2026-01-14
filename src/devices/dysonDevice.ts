@@ -18,6 +18,22 @@ import type {
 } from './types.js';
 import { createDefaultState, DEFAULT_FEATURES } from './types.js';
 
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Polling interval limits and defaults */
+const POLLING = {
+  /** Default polling interval in seconds */
+  DEFAULT_SECONDS: 60,
+  /** Minimum allowed polling interval in seconds */
+  MIN_SECONDS: 10,
+  /** Maximum allowed polling interval in seconds */
+  MAX_SECONDS: 300,
+  /** Milliseconds per second conversion factor */
+  MS_PER_SECOND: 1000,
+} as const;
+
 /**
  * MQTT client factory type for dependency injection
  */
@@ -91,8 +107,8 @@ export abstract class DysonDevice extends EventEmitter {
   /** Polling interval handle for periodic state requests */
   private pollingIntervalHandle?: ReturnType<typeof setInterval>;
 
-  /** Polling interval in milliseconds (default: 60000ms = 60 seconds) */
-  private pollingIntervalMs: number = 60000;
+  /** Polling interval in milliseconds */
+  private pollingIntervalMs: number = POLLING.DEFAULT_SECONDS * POLLING.MS_PER_SECOND;
 
   /**
    * Create a new DysonDevice
@@ -116,12 +132,14 @@ export abstract class DysonDevice extends EventEmitter {
   /**
    * Set the polling interval for state updates
    *
-   * @param seconds - Interval in seconds (10-300, default 60)
+   * @param seconds - Interval in seconds (MIN_SECONDS-MAX_SECONDS, default DEFAULT_SECONDS)
    */
   setPollingInterval(seconds: number): void {
-    // Clamp to valid range (10-300 seconds)
-    const clampedSeconds = Math.max(10, Math.min(300, seconds));
-    this.pollingIntervalMs = clampedSeconds * 1000;
+    const clampedSeconds = Math.max(
+      POLLING.MIN_SECONDS,
+      Math.min(POLLING.MAX_SECONDS, seconds),
+    );
+    this.pollingIntervalMs = clampedSeconds * POLLING.MS_PER_SECOND;
 
     // If already polling, restart with new interval
     if (this.pollingIntervalHandle) {

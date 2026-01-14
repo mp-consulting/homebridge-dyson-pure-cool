@@ -7,6 +7,55 @@
 
 import type { DeviceState } from '../devices/types.js';
 
+// ============================================================================
+// Constants - No Magic Numbers
+// ============================================================================
+
+/** Fan speed limits */
+const FAN_SPEED = {
+  MIN: 1,
+  MAX: 10,
+  AUTO: -1,
+} as const;
+
+/** Oscillation angle limits */
+const OSCILLATION_ANGLE = {
+  MIN: 45,
+  MAX: 355,
+} as const;
+
+/** Temperature conversion constants */
+const TEMPERATURE = {
+  /** Kelvin to Celsius offset */
+  KELVIN_OFFSET: 273.15,
+  /** Dyson uses Kelvin * 10 for precision */
+  KELVIN_MULTIPLIER: 10,
+} as const;
+
+/** Filter life constants */
+const FILTER = {
+  /** Maximum filter life in hours */
+  MAX_HOURS: 4300,
+  /** Percentage divisor for conversion */
+  PERCENT_DIVISOR: 100,
+} as const;
+
+/** Protocol string formatting */
+const FORMAT = {
+  /** Padding length for numeric values */
+  PAD_LENGTH: 4,
+  /** Padding character */
+  PAD_CHAR: '0',
+} as const;
+
+/** HomeKit percentage range */
+const PERCENT = {
+  MIN: 0,
+  MAX: 100,
+  /** Conversion factor for speed (10% per speed level) */
+  PER_SPEED_LEVEL: 10,
+} as const;
+
 /**
  * Command data that can be sent to a Dyson device
  */
@@ -172,7 +221,7 @@ export class MessageCodec {
 
     // Target humidity (PH models)
     if (data.targetHumidity !== undefined) {
-      encodedData.humt = String(data.targetHumidity).padStart(4, '0');
+      encodedData.humt = String(data.targetHumidity).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
     }
 
     const message: DysonMessage = {
@@ -326,15 +375,15 @@ export class MessageCodec {
     }
     const fltf = this.extractValue(raw.fltf);
     if (fltf !== undefined) {
-      // HEPA filter percentage - convert to hours estimate (4300 hours max)
+      // HEPA filter percentage - convert to hours estimate
       const percent = parseInt(fltf, 10);
-      state.hepaFilterLife = Math.round((percent / 100) * 4300);
+      state.hepaFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
     }
     const cflr = this.extractValue(raw.cflr);
     if (cflr !== undefined) {
-      // Carbon filter percentage - convert to hours estimate (4300 hours max)
+      // Carbon filter percentage - convert to hours estimate
       const percent = parseInt(cflr, 10);
-      state.carbonFilterLife = Math.round((percent / 100) * 4300);
+      state.carbonFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
     }
 
     // Heating (HP models)
@@ -370,9 +419,8 @@ export class MessageCodec {
     if (speed < 0) {
       return 'AUTO';
     }
-    // Clamp to 1-10 range
-    const clampedSpeed = Math.max(1, Math.min(10, speed));
-    return String(clampedSpeed).padStart(4, '0');
+    const clampedSpeed = Math.max(FAN_SPEED.MIN, Math.min(FAN_SPEED.MAX, speed));
+    return String(clampedSpeed).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
   }
 
   /**
@@ -383,7 +431,7 @@ export class MessageCodec {
    */
   decodeFanSpeed(encoded: string): { speed: number; autoMode: boolean } {
     if (encoded === 'AUTO') {
-      return { speed: -1, autoMode: true };
+      return { speed: FAN_SPEED.AUTO, autoMode: true };
     }
     const speed = parseInt(encoded, 10);
     return { speed: isNaN(speed) ? 0 : speed, autoMode: false };
@@ -396,11 +444,13 @@ export class MessageCodec {
    * @returns Dyson speed (1-10)
    */
   percentToSpeed(percent: number): number {
-    if (percent <= 0) {
-      return 1;
+    if (percent <= PERCENT.MIN) {
+      return FAN_SPEED.MIN;
     }
-    // Map 1-100% to 1-10
-    return Math.max(1, Math.min(10, Math.ceil(percent / 10)));
+    return Math.max(
+      FAN_SPEED.MIN,
+      Math.min(FAN_SPEED.MAX, Math.ceil(percent / PERCENT.PER_SPEED_LEVEL)),
+    );
   }
 
   /**
@@ -411,10 +461,10 @@ export class MessageCodec {
    */
   speedToPercent(speed: number): number {
     if (speed < 0) {
-      return 100; // AUTO shows as 100%
+      return PERCENT.MAX; // AUTO shows as 100%
     }
     // Map 1-10 to 10-100% (in steps of 10)
-    return Math.max(0, Math.min(100, speed * 10));
+    return Math.max(PERCENT.MIN, Math.min(PERCENT.MAX, speed * PERCENT.PER_SPEED_LEVEL));
   }
 
   /**
@@ -424,8 +474,8 @@ export class MessageCodec {
    * @returns Encoded angle string (e.g., "0045")
    */
   encodeAngle(angle: number): string {
-    const clampedAngle = Math.max(45, Math.min(355, angle));
-    return String(clampedAngle).padStart(4, '0');
+    const clampedAngle = Math.max(OSCILLATION_ANGLE.MIN, Math.min(OSCILLATION_ANGLE.MAX, angle));
+    return String(clampedAngle).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
   }
 
   /**
@@ -435,8 +485,9 @@ export class MessageCodec {
    * @returns Encoded temperature string (e.g., "2950" for 22°C)
    */
   encodeTemperature(celsius: number): string {
-    // Celsius to Kelvin, then * 10
-    const kelvinTimes10 = Math.round((celsius + 273.15) * 10);
+    const kelvinTimes10 = Math.round(
+      (celsius + TEMPERATURE.KELVIN_OFFSET) * TEMPERATURE.KELVIN_MULTIPLIER,
+    );
     return String(kelvinTimes10);
   }
 
@@ -448,8 +499,7 @@ export class MessageCodec {
    */
   decodeTemperature(encoded: string | number): number {
     const kelvinTimes10 = typeof encoded === 'string' ? parseInt(encoded, 10) : encoded;
-    // Kelvin * 10 to Celsius
-    return (kelvinTimes10 / 10) - 273.15;
+    return (kelvinTimes10 / TEMPERATURE.KELVIN_MULTIPLIER) - TEMPERATURE.KELVIN_OFFSET;
   }
 
   /**
