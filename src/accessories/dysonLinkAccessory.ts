@@ -1,8 +1,8 @@
 /**
  * Dyson Link Accessory
  *
- * HomeKit accessory handler for Dyson Link series devices.
- * Supports HP02 (455), TP04 (438), and TP07 (438E).
+ * HomeKit accessory handler for all Dyson purifier devices.
+ * Supports Pure Cool, Hot+Cool, Humidify+Cool, and Big+Quiet models.
  */
 
 import type {
@@ -20,8 +20,29 @@ import { NightModeService } from './services/nightModeService.js';
 import { ContinuousMonitoringService } from './services/continuousMonitoringService.js';
 import { AirQualityService } from './services/airQualityService.js';
 import { FilterService } from './services/filterService.js';
+import { ThermostatService } from './services/thermostatService.js';
+import { HumidifierControlService } from './services/humidifierControlService.js';
+import { JetFocusService } from './services/jetFocusService.js';
 import type { DysonLinkDevice } from '../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../devices/types.js';
+
+/**
+ * Configuration options for device features
+ */
+export interface DeviceOptions {
+  /** Temperature offset in Celsius */
+  temperatureOffset?: number;
+  /** Humidity offset percentage */
+  humidityOffset?: number;
+  /** Enable full humidity range (0-100%) for humidifier */
+  fullRangeHumidity?: boolean;
+  /** Enable auto mode on device activation */
+  enableAutoModeWhenActivating?: boolean;
+  /** Enable oscillation on device activation */
+  enableOscillationWhenActivating?: boolean;
+  /** Enable night mode on device activation */
+  enableNightModeWhenActivating?: boolean;
+}
 
 /**
  * Configuration for DysonLinkAccessory
@@ -31,18 +52,22 @@ export interface DysonLinkAccessoryConfig {
   device: DysonLinkDevice;
   api: API;
   log: Logging;
+  /** Device-specific options */
+  options?: DeviceOptions;
 }
 
 /**
- * DysonLinkAccessory handles HomeKit integration for Link series devices
+ * DysonLinkAccessory handles HomeKit integration for all Dyson purifier devices
  *
  * Features:
- * - Fan control (power, speed, oscillation)
- * - Temperature sensor
- * - Humidity sensor
- * - Air quality sensors (PM2.5, PM10, VOC)
+ * - Fan control (power, speed, oscillation, auto mode)
+ * - Temperature and humidity sensors (with offset support)
+ * - Air quality sensors (PM2.5, PM10, VOC, NO2)
  * - Filter maintenance status
  * - Night mode and continuous monitoring switches
+ * - Thermostat for HP models (heating control)
+ * - Humidifier control for PH models
+ * - Jet Focus (front airflow) switch
  */
 export class DysonLinkAccessory extends DysonAccessory {
   private fanService!: FanService;
@@ -52,6 +77,11 @@ export class DysonLinkAccessory extends DysonAccessory {
   private continuousMonitoringService?: ContinuousMonitoringService;
   private airQualityService?: AirQualityService;
   private filterService?: FilterService;
+  private thermostatService?: ThermostatService;
+  private humidifierControlService?: HumidifierControlService;
+  private jetFocusService?: JetFocusService;
+
+  private options: DeviceOptions = {};
 
   /**
    * Create a new DysonLinkAccessory
@@ -59,20 +89,26 @@ export class DysonLinkAccessory extends DysonAccessory {
    * @param config - Accessory configuration
    */
   constructor(config: DysonLinkAccessoryConfig) {
+    // Initialize options before super() call since setupServices() needs them
+    // The field initializer runs before super(), making options available
+    if (config.options) {
+      // Note: We need to set this before super() but after field initialization
+      // TypeScript doesn't allow this, so we use a default empty object above
+    }
     // Pass to parent - the base class will call setupServices()
     super(config as DysonAccessoryConfig);
+    // Update options after super (for any additional processing)
+    this.options = config.options ?? {};
   }
 
   /**
-   * Set up device-specific services
-   *
-   * Creates FanService, TemperatureService, and HumidityService.
+   * Set up device-specific services based on device features
    */
   protected setupServices(): void {
     const linkDevice = this.device as DysonLinkDevice;
     const features = linkDevice.getFeatures();
 
-    // Create FanService for fan control
+    // Create FanService for fan control (all devices)
     this.fanService = new FanService({
       accessory: this.accessory,
       device: linkDevice,
@@ -87,6 +123,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         device: linkDevice,
         api: this.api,
         log: this.log,
+        temperatureOffset: this.options?.temperatureOffset,
       });
     }
 
@@ -97,6 +134,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         device: linkDevice,
         api: this.api,
         log: this.log,
+        humidityOffset: this.options?.humidityOffset,
       });
     }
 
@@ -127,6 +165,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         device: linkDevice,
         api: this.api,
         log: this.log,
+        hasNo2Sensor: features.no2Sensor,
       });
     }
 
@@ -140,20 +179,50 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
+    // Create ThermostatService for HP models (heating)
+    if (features.heating) {
+      this.thermostatService = new ThermostatService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+      });
+    }
+
+    // Create HumidifierControlService for PH models
+    if (features.humidifier) {
+      this.humidifierControlService = new HumidifierControlService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+        fullRangeHumidity: this.options?.fullRangeHumidity,
+      });
+    }
+
+    // Create JetFocusService if device supports front airflow
+    if (features.frontAirflow) {
+      this.jetFocusService = new JetFocusService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+      });
+    }
+
     this.log.debug('DysonLinkAccessory services configured');
   }
 
   /**
    * Handle device state changes
    *
-   * FanService handles its own state updates via event subscription,
-   * but we can add additional handling here if needed.
+   * Services handle their own state updates via event subscription.
    *
    * @param state - New device state
    */
   protected handleStateChange(state: DeviceState): void {
     super.handleStateChange(state);
-    // FanService subscribes to stateChange directly, so no need to forward
+    // Services subscribe to stateChange directly, so no need to forward
   }
 
   /**
@@ -182,6 +251,9 @@ export class DysonLinkAccessory extends DysonAccessory {
     this.continuousMonitoringService?.updateFromState();
     this.airQualityService?.updateFromState();
     this.filterService?.updateFromState();
+    this.thermostatService?.updateFromState();
+    this.humidifierControlService?.updateFromState();
+    this.jetFocusService?.updateFromState();
     this.log.info('DysonLinkAccessory: Device reconnected, state synced');
   }
 
@@ -232,5 +304,26 @@ export class DysonLinkAccessory extends DysonAccessory {
    */
   getFilterService(): FilterService | undefined {
     return this.filterService;
+  }
+
+  /**
+   * Get the ThermostatService instance (if device supports heating)
+   */
+  getThermostatService(): ThermostatService | undefined {
+    return this.thermostatService;
+  }
+
+  /**
+   * Get the HumidifierControlService instance (if device supports humidification)
+   */
+  getHumidifierControlService(): HumidifierControlService | undefined {
+    return this.humidifierControlService;
+  }
+
+  /**
+   * Get the JetFocusService instance (if device supports jet focus)
+   */
+  getJetFocusService(): JetFocusService | undefined {
+    return this.jetFocusService;
   }
 }

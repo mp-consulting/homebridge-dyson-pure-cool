@@ -2,7 +2,7 @@
   "pluginAlias": "DysonPureCool",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Homebridge plugin for Dyson Pure Cool air purifiers and fans. Supports automatic device discovery via Dyson Cloud or manual configuration.",
+  "headerDisplay": "Homebridge plugin for Dyson Pure Cool, Hot+Cool, Humidify+Cool, and Big+Quiet devices. The most feature-rich Dyson plugin for HomeKit.",
   "footerDisplay": "For help, see the [README](https://github.com/homebridge/homebridge-dyson-pure-cool#readme)",
   "schema": {
     "type": "object",
@@ -66,7 +66,29 @@
             "productType": {
               "title": "Product Type",
               "type": "string",
-              "description": "Dyson product type code (e.g., 438 for TP04, 455 for HP02)"
+              "oneOf": [
+                { "title": "TP02 - Pure Cool Link Tower", "enum": ["475"] },
+                { "title": "TP04 - Pure Cool Tower", "enum": ["438"] },
+                { "title": "TP06 - Pure Cool Tower", "enum": ["358"] },
+                { "title": "TP07 - Purifier Cool", "enum": ["438E"] },
+                { "title": "TP09 - Pure Cool Formaldehyde", "enum": ["438K"] },
+                { "title": "DP01 - Pure Cool Link Desk", "enum": ["469"] },
+                { "title": "DP04 - Pure Cool Desk", "enum": ["520"] },
+                { "title": "HP02 - Pure Hot+Cool Link", "enum": ["455"] },
+                { "title": "HP04 - Pure Hot+Cool", "enum": ["527"] },
+                { "title": "HP06 - Pure Hot+Cool", "enum": ["358K"] },
+                { "title": "HP07 - Pure Hot+Cool", "enum": ["527E"] },
+                { "title": "HP09 - Pure Hot+Cool Formaldehyde", "enum": ["527K"] },
+                { "title": "PH01 - Purifier Humidify+Cool", "enum": ["358J"] },
+                { "title": "PH02 - Purifier Humidify+Cool", "enum": ["520E"] },
+                { "title": "PH03 - Purifier Humidify+Cool", "enum": ["358H"] },
+                { "title": "PH04 - Purifier Humidify+Cool Formaldehyde", "enum": ["520F"] },
+                { "title": "BP02 - Purifier Big+Quiet", "enum": ["664"] },
+                { "title": "BP03 - Purifier Big+Quiet Formaldehyde", "enum": ["664B"] },
+                { "title": "BP04 - Purifier Big+Quiet Formaldehyde", "enum": ["664E"] },
+                { "title": "BP06 - Purifier Big+Quiet", "enum": ["664F"] }
+              ],
+              "description": "Select your Dyson device model"
             },
             "credentials": {
               "title": "Local Credentials",
@@ -78,6 +100,46 @@
               "type": "string",
               "format": "ipv4",
               "description": "Device IP address on local network"
+            },
+            "temperatureOffset": {
+              "title": "Temperature Offset",
+              "type": "number",
+              "default": 0,
+              "minimum": -10,
+              "maximum": 10,
+              "description": "Adjust temperature reading by this amount in Celsius"
+            },
+            "humidityOffset": {
+              "title": "Humidity Offset",
+              "type": "integer",
+              "default": 0,
+              "minimum": -20,
+              "maximum": 20,
+              "description": "Adjust humidity reading by this percentage"
+            },
+            "fullRangeHumidity": {
+              "title": "Full Range Humidity",
+              "type": "boolean",
+              "default": false,
+              "description": "Enable 0-100% humidity range for humidifier (default: 30-70%)"
+            },
+            "enableAutoModeWhenActivating": {
+              "title": "Enable Auto Mode on Activation",
+              "type": "boolean",
+              "default": false,
+              "description": "Automatically enable auto mode when turning device on"
+            },
+            "enableOscillationWhenActivating": {
+              "title": "Enable Oscillation on Activation",
+              "type": "boolean",
+              "default": false,
+              "description": "Automatically enable oscillation when turning device on"
+            },
+            "enableNightModeWhenActivating": {
+              "title": "Enable Night Mode on Activation",
+              "type": "boolean",
+              "default": false,
+              "description": "Automatically enable night mode when turning device on"
             }
           },
           "required": ["serial", "productType", "credentials", "ipAddress"]
@@ -99,7 +161,7 @@
         "title": "Enable Air Quality Sensor",
         "type": "boolean",
         "default": true,
-        "description": "Show air quality sensor (PM2.5, PM10, VOC) in HomeKit"
+        "description": "Show air quality sensor (PM2.5, PM10, VOC, NO2) in HomeKit"
       },
       "enableNightMode": {
         "title": "Enable Night Mode Switch",
@@ -112,6 +174,24 @@
         "type": "boolean",
         "default": false,
         "description": "Show continuous monitoring toggle switch in HomeKit"
+      },
+      "enableJetFocus": {
+        "title": "Enable Jet Focus Switch",
+        "type": "boolean",
+        "default": true,
+        "description": "Show jet focus (front airflow) toggle switch in HomeKit"
+      },
+      "enableHeater": {
+        "title": "Enable Heater (HP Models)",
+        "type": "boolean",
+        "default": true,
+        "description": "Show thermostat control for Hot+Cool models"
+      },
+      "enableHumidifier": {
+        "title": "Enable Humidifier (PH Models)",
+        "type": "boolean",
+        "default": true,
+        "description": "Show humidifier control for Humidify+Cool models"
       },
       "enableFilter": {
         "title": "Enable Filter Status",
@@ -153,13 +233,16 @@
         "enableAirQuality",
         "enableNightMode",
         "enableContinuousMonitoring",
+        "enableJetFocus",
+        "enableHeater",
+        "enableHumidifier",
         "enableFilter"
       ]
     },
     {
       "type": "fieldset",
       "title": "Manual Device Configuration",
-      "description": "Optional: Configure devices manually without Dyson Cloud",
+      "description": "Configure devices manually without Dyson Cloud. Use this if automatic discovery fails or if you have network restrictions.",
       "expandable": true,
       "items": [
         {
@@ -171,7 +254,27 @@
             "devices[].serial",
             "devices[].productType",
             "devices[].credentials",
-            "devices[].ipAddress"
+            "devices[].ipAddress",
+            {
+              "type": "fieldset",
+              "title": "Sensor Calibration",
+              "expandable": true,
+              "items": [
+                "devices[].temperatureOffset",
+                "devices[].humidityOffset"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "Activation Behaviors",
+              "expandable": true,
+              "items": [
+                "devices[].enableAutoModeWhenActivating",
+                "devices[].enableOscillationWhenActivating",
+                "devices[].enableNightModeWhenActivating",
+                "devices[].fullRangeHumidity"
+              ]
+            }
           ]
         }
       ]

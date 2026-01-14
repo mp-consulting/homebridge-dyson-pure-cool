@@ -11,12 +11,45 @@ import { DysonLinkDevice } from './dysonLinkDevice.js';
 
 /**
  * Supported product types and their device class
+ * All Dyson purifiers use the same MQTT protocol
  */
 const SUPPORTED_PRODUCT_TYPES: Record<string, 'link'> = {
-  // Link series (older models)
-  '455': 'link',   // HP02 - Pure Hot+Cool Link
-  '438': 'link',   // TP04 - Pure Cool Tower
-  '438E': 'link',  // TP07 - Purifier Cool
+  // Pure Cool Link Tower (TP02)
+  '475': 'link',
+
+  // Pure Cool Link Desk (DP01)
+  '469': 'link',
+
+  // Pure Cool Tower (TP04, TP06, TP07, TP09)
+  '438': 'link',
+  '438E': 'link',
+  '438K': 'link',
+  '358': 'link',
+  '358E': 'link',
+
+  // Pure Cool Desk (DP04)
+  '520': 'link',
+
+  // Pure Hot+Cool Link (HP02)
+  '455': 'link',
+
+  // Pure Hot+Cool (HP04, HP06, HP07, HP09)
+  '527': 'link',
+  '527E': 'link',
+  '527K': 'link',
+  '358K': 'link',
+
+  // Purifier Humidify+Cool (PH01, PH02, PH03, PH04)
+  '358J': 'link',
+  '520E': 'link',
+  '358H': 'link',
+  '520F': 'link',
+
+  // Big+Quiet Series (BP02, BP03, BP04, BP06)
+  '664': 'link',
+  '664B': 'link',
+  '664E': 'link',
+  '664F': 'link',
 };
 
 /**

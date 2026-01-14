@@ -85,6 +85,11 @@ function createMockApi() {
         AccessoryInformation: 'AccessoryInformation',
         TemperatureSensor: 'TemperatureSensor',
         HumiditySensor: 'HumiditySensor',
+        Switch: 'Switch',
+        AirQualitySensor: 'AirQualitySensor',
+        FilterMaintenance: 'FilterMaintenance',
+        Thermostat: 'Thermostat',
+        HumidifierDehumidifier: 'HumidifierDehumidifier',
       },
       Characteristic: {
         Name: 'Name',
@@ -97,6 +102,24 @@ function createMockApi() {
         FirmwareRevision: 'FirmwareRevision',
         CurrentTemperature: 'CurrentTemperature',
         CurrentRelativeHumidity: 'CurrentRelativeHumidity',
+        On: 'On',
+        AirQuality: 'AirQuality',
+        PM2_5Density: 'PM2_5Density',
+        PM10Density: 'PM10Density',
+        VOCDensity: 'VOCDensity',
+        NitrogenDioxideDensity: 'NitrogenDioxideDensity',
+        FilterLifeLevel: 'FilterLifeLevel',
+        FilterChangeIndication: 'FilterChangeIndication',
+        CurrentHeatingCoolingState: 'CurrentHeatingCoolingState',
+        TargetHeatingCoolingState: 'TargetHeatingCoolingState',
+        TargetTemperature: 'TargetTemperature',
+        TemperatureDisplayUnits: 'TemperatureDisplayUnits',
+        CurrentHumidifierDehumidifierState: 'CurrentHumidifierDehumidifierState',
+        TargetHumidifierDehumidifierState: 'TargetHumidifierDehumidifierState',
+        RelativeHumidityHumidifierThreshold: 'RelativeHumidityHumidifierThreshold',
+        WaterLevel: 'WaterLevel',
+        TargetFanState: 'TargetFanState',
+        CurrentFanState: 'CurrentFanState',
       },
     },
     _mockFanService: mockFanService,
@@ -131,6 +154,7 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
       }
       return undefined;
     }),
+    getServiceById: jest.fn(() => undefined),
     addService: jest.fn((serviceType: unknown) => {
       if (serviceType === 'Fanv2') {
         return api._mockFanService;

@@ -1,11 +1,8 @@
 /**
  * Dyson Link Device Class
  *
- * Concrete implementation for Dyson "Link" series devices (older models).
- * Supports fan control (power, speed, oscillation) for models like:
- * - 455: HP02 (Pure Hot+Cool Link)
- * - 438: TP04 (Pure Cool Tower)
- * - 438E: TP07 (Purifier Cool)
+ * Concrete implementation for Dyson devices.
+ * Supports fan control, heating, humidification across all models.
  */
 
 import { DysonDevice } from './dysonDevice.js';
@@ -16,9 +13,9 @@ import type { MqttClientFactory } from './dysonDevice.js';
 import type { MqttConnectFn } from '../protocol/mqttClient.js';
 
 /**
- * Features supported by Link series devices
+ * Base features for Pure Cool devices (fans without heating/humidification)
  */
-const LINK_DEVICE_FEATURES: DeviceFeatures = {
+const PURE_COOL_FEATURES: DeviceFeatures = {
   ...DEFAULT_FEATURES,
   fan: true,
   oscillation: true,
@@ -29,6 +26,7 @@ const LINK_DEVICE_FEATURES: DeviceFeatures = {
   temperatureSensor: true,
   humiditySensor: true,
   airQualitySensor: true,
+  no2Sensor: false,
   heating: false,
   humidifier: false,
   hepaFilter: true,
@@ -36,20 +34,117 @@ const LINK_DEVICE_FEATURES: DeviceFeatures = {
 };
 
 /**
- * Features for HP02 (455) which has heating
+ * Features for Pure Cool with Jet Focus (newer models like TP04, DP04)
  */
-const HP02_FEATURES: DeviceFeatures = {
-  ...LINK_DEVICE_FEATURES,
+const PURE_COOL_JET_FOCUS_FEATURES: DeviceFeatures = {
+  ...PURE_COOL_FEATURES,
+  frontAirflow: true,
+};
+
+/**
+ * Features for Pure Cool Link (older models like TP02, DP01)
+ */
+const PURE_COOL_LINK_FEATURES: DeviceFeatures = {
+  ...PURE_COOL_FEATURES,
+  frontAirflow: false,
+};
+
+/**
+ * Features for Pure Hot+Cool Link (HP02)
+ */
+const PURE_HOT_COOL_LINK_FEATURES: DeviceFeatures = {
+  ...PURE_COOL_FEATURES,
   heating: true,
+  frontAirflow: false,
+};
+
+/**
+ * Features for Pure Hot+Cool (HP04, HP06, HP07, HP09)
+ */
+const PURE_HOT_COOL_FEATURES: DeviceFeatures = {
+  ...PURE_COOL_FEATURES,
+  heating: true,
+  frontAirflow: true,
+};
+
+/**
+ * Features for Purifier Humidify+Cool (PH01, PH02, PH03, PH04)
+ */
+const PURIFIER_HUMIDIFY_FEATURES: DeviceFeatures = {
+  ...PURE_COOL_FEATURES,
+  humidifier: true,
+  frontAirflow: true,
+};
+
+/**
+ * Features for Big+Quiet series (BP02, BP03, BP04, BP06)
+ * These are large purifiers without oscillation but with advanced sensors
+ */
+const BIG_QUIET_FEATURES: DeviceFeatures = {
+  ...PURE_COOL_FEATURES,
+  oscillation: false,
+  frontAirflow: false,
+  no2Sensor: true,
+};
+
+/**
+ * Features for Formaldehyde models (have NO2/HCHO sensors)
+ */
+const FORMALDEHYDE_FEATURES: DeviceFeatures = {
+  ...PURE_COOL_JET_FOCUS_FEATURES,
+  no2Sensor: true,
 };
 
 /**
  * Map product types to their feature sets
  */
 const PRODUCT_FEATURES: Record<string, DeviceFeatures> = {
-  '455': HP02_FEATURES,          // HP02 - Pure Hot+Cool Link
-  '438': LINK_DEVICE_FEATURES,   // TP04 - Pure Cool Tower
-  '438E': LINK_DEVICE_FEATURES,  // TP07 - Purifier Cool
+  // Pure Cool Link Tower (TP02)
+  '475': PURE_COOL_LINK_FEATURES,
+
+  // Pure Cool Desk Link (DP01)
+  '469': PURE_COOL_LINK_FEATURES,
+
+  // Pure Cool Tower (TP04, TP06)
+  '438': PURE_COOL_JET_FOCUS_FEATURES,
+  '358': PURE_COOL_JET_FOCUS_FEATURES,
+
+  // Pure Cool Tower (TP07, newer naming)
+  '438E': PURE_COOL_JET_FOCUS_FEATURES,
+  '358E': PURE_COOL_JET_FOCUS_FEATURES,
+
+  // Pure Cool Tower Formaldehyde (TP09)
+  '438K': FORMALDEHYDE_FEATURES,
+
+  // Pure Cool Desk (DP04)
+  '520': PURE_COOL_JET_FOCUS_FEATURES,
+
+  // Pure Hot+Cool Link (HP02)
+  '455': PURE_HOT_COOL_LINK_FEATURES,
+
+  // Pure Hot+Cool (HP04, HP06)
+  '527': PURE_HOT_COOL_FEATURES,
+  '358K': PURE_HOT_COOL_FEATURES,
+
+  // Pure Hot+Cool (HP07)
+  '527E': PURE_HOT_COOL_FEATURES,
+
+  // Pure Hot+Cool Formaldehyde (HP09)
+  '527K': { ...PURE_HOT_COOL_FEATURES, no2Sensor: true },
+
+  // Purifier Humidify+Cool (PH01, PH02, PH03)
+  '358J': PURIFIER_HUMIDIFY_FEATURES,
+  '520E': PURIFIER_HUMIDIFY_FEATURES,
+  '358H': PURIFIER_HUMIDIFY_FEATURES,
+
+  // Purifier Humidify+Cool Formaldehyde (PH04)
+  '520F': { ...PURIFIER_HUMIDIFY_FEATURES, no2Sensor: true },
+
+  // Big+Quiet Series (BP02, BP03, BP04, BP06)
+  '664': BIG_QUIET_FEATURES,
+  '664B': BIG_QUIET_FEATURES,
+  '664E': BIG_QUIET_FEATURES,
+  '664F': BIG_QUIET_FEATURES,
 };
 
 /**
@@ -81,7 +176,7 @@ export class DysonLinkDevice extends DysonDevice {
   ) {
     super(deviceInfo, mqttClientFactory, mqttConnectFn);
     this.productType = deviceInfo.productType;
-    this.supportedFeatures = PRODUCT_FEATURES[deviceInfo.productType] || LINK_DEVICE_FEATURES;
+    this.supportedFeatures = PRODUCT_FEATURES[deviceInfo.productType] || PURE_COOL_FEATURES;
     this.codec = new MessageCodec();
   }
 
@@ -160,6 +255,69 @@ export class DysonLinkDevice extends DysonDevice {
         fnsp: encodedSpeed,
       });
     }
+  }
+
+  /**
+   * Set jet focus (front airflow direction) on or off
+   *
+   * When enabled, air is directed in a focused stream.
+   * When disabled, air is diffused for whole-room circulation.
+   *
+   * @param on - True to enable jet focus, false to disable
+   */
+  async setJetFocus(on: boolean): Promise<void> {
+    await this.sendCommand({ ffoc: on ? 'ON' : 'OFF' });
+  }
+
+  /**
+   * Set heating mode on or off (HP models only)
+   *
+   * @param on - True to enable heating, false to disable
+   */
+  async setHeating(on: boolean): Promise<void> {
+    await this.sendCommand({ hmod: on ? 'HEAT' : 'OFF' });
+  }
+
+  /**
+   * Set target temperature for heating (HP models only)
+   *
+   * @param celsius - Target temperature in Celsius (1-37)
+   */
+  async setTargetTemperature(celsius: number): Promise<void> {
+    // Clamp to valid range (1-37°C)
+    const clampedTemp = Math.max(1, Math.min(37, celsius));
+    // Convert to Kelvin * 10
+    const kelvinTimes10 = Math.round((clampedTemp + 273.15) * 10);
+    await this.sendCommand({ hmax: String(kelvinTimes10) });
+  }
+
+  /**
+   * Set humidifier mode on or off (PH models only)
+   *
+   * @param on - True to enable humidifier, false to disable
+   */
+  async setHumidifier(on: boolean): Promise<void> {
+    await this.sendCommand({ hume: on ? 'ON' : 'OFF' });
+  }
+
+  /**
+   * Set humidifier to auto mode (PH models only)
+   *
+   * In auto mode, the humidifier maintains optimal humidity automatically.
+   */
+  async setHumidifierAuto(): Promise<void> {
+    await this.sendCommand({ hume: 'AUTO' });
+  }
+
+  /**
+   * Set target humidity percentage (PH models only)
+   *
+   * @param percent - Target humidity (30-70, or 0-100 if full range enabled)
+   */
+  async setTargetHumidity(percent: number): Promise<void> {
+    // Default range is 30-70%, but can be extended to 0-100%
+    const clampedPercent = Math.max(0, Math.min(100, Math.round(percent)));
+    await this.sendCommand({ humt: String(clampedPercent).padStart(4, '0') });
   }
 
   /**

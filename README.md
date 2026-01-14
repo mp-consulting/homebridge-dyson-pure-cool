@@ -3,27 +3,34 @@
 [![npm version](https://img.shields.io/npm/v/homebridge-dyson-pure-cool.svg)](https://www.npmjs.com/package/homebridge-dyson-pure-cool)
 [![License](https://img.shields.io/npm/l/homebridge-dyson-pure-cool.svg)](https://github.com/homebridge/homebridge-dyson-pure-cool/blob/main/LICENSE)
 
-Homebridge plugin for Dyson Pure Cool air purifiers and fans. Control your Dyson devices through Apple HomeKit.
+**The most feature-rich Dyson plugin for HomeKit.** Control your Dyson Pure Cool, Hot+Cool, Humidify+Cool, and Big+Quiet devices through Apple HomeKit.
 
 ## Features
 
-- **Fan Control** - Power on/off, speed (0-100%), oscillation, auto mode
-- **Temperature Sensor** - Room temperature in Celsius
-- **Humidity Sensor** - Relative humidity percentage
-- **Air Quality Sensor** - PM2.5, PM10, VOC levels with overall air quality rating
+- **Fan Control** - Power on/off, speed (1-10), oscillation, auto mode
+- **Temperature Sensor** - Room temperature with calibration offset
+- **Humidity Sensor** - Relative humidity with calibration offset
+- **Air Quality Sensor** - PM2.5, PM10, VOC, NO2 with overall AQI rating
 - **Filter Status** - Filter life remaining with replacement indicator
 - **Night Mode** - Toggle quiet operation with dimmed display
 - **Continuous Monitoring** - Keep sensors active when fan is off
+- **Jet Focus** - Toggle focused/diffused airflow direction
+- **Thermostat** - Heating control for Hot+Cool models (HP series)
+- **Humidifier** - Humidity control for Humidify+Cool models (PH series)
 
 ## Supported Devices
 
-| Model | Product Type | Features |
-|-------|--------------|----------|
-| Pure Cool Tower (TP04) | 438 | Fan, Air Quality, Temp, Humidity |
-| Purifier Cool (TP07) | 438E | Fan, Air Quality, Temp, Humidity |
-| Pure Hot+Cool Link (HP02) | 455 | Fan, Heating, Air Quality, Temp, Humidity |
-
-More Dyson Link-series devices may work but are untested.
+| Series | Models | Features |
+|--------|--------|----------|
+| **Pure Cool Link** | TP02, DP01 | Fan, Air Quality, Temp, Humidity |
+| **Pure Cool** | TP04, TP06, TP07, DP04 | Fan, Air Quality, Temp, Humidity, Jet Focus |
+| **Pure Cool Formaldehyde** | TP09 | Fan, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
+| **Pure Hot+Cool Link** | HP02 | Fan, Heating, Air Quality, Temp, Humidity |
+| **Pure Hot+Cool** | HP04, HP06, HP07 | Fan, Heating, Air Quality, Temp, Humidity, Jet Focus |
+| **Pure Hot+Cool Formaldehyde** | HP09 | Fan, Heating, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
+| **Purifier Humidify+Cool** | PH01, PH02, PH03 | Fan, Humidifier, Air Quality, Temp, Humidity, Jet Focus |
+| **Purifier Humidify+Cool Formaldehyde** | PH04 | Fan, Humidifier, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
+| **Purifier Big+Quiet** | BP02, BP03, BP04, BP06 | Fan, Air Quality (incl. NO2), Temp, Humidity |
 
 ## Installation
 
@@ -79,7 +86,9 @@ If you prefer not to use your Dyson account, you can configure devices manually:
           "serial": "ABC-AB-12345678",
           "productType": "438",
           "credentials": "your-local-credentials",
-          "ipAddress": "192.168.1.100"
+          "ipAddress": "192.168.1.100",
+          "temperatureOffset": -2,
+          "humidityOffset": 5
         }
       ]
     }
@@ -87,9 +96,9 @@ If you prefer not to use your Dyson account, you can configure devices manually:
 }
 ```
 
-To find your device credentials, you'll need to extract them from the Dyson API. See the [Troubleshooting](#finding-device-credentials) section.
-
 ### Configuration Options
+
+#### Platform Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -98,16 +107,35 @@ To find your device credentials, you'll need to extract them from the Dyson API.
 | `countryCode` | string | `US` | Account country code (US, GB, DE, etc.) |
 | `discoveryTimeout` | number | `30` | mDNS discovery timeout in seconds |
 | `pollInterval` | number | `60` | State polling interval in seconds |
+
+#### Feature Toggles
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
 | `enableTemperature` | boolean | `true` | Show temperature sensor |
 | `enableHumidity` | boolean | `true` | Show humidity sensor |
 | `enableAirQuality` | boolean | `true` | Show air quality sensor |
 | `enableNightMode` | boolean | `true` | Show night mode switch |
 | `enableContinuousMonitoring` | boolean | `false` | Show continuous monitoring switch |
+| `enableJetFocus` | boolean | `true` | Show jet focus switch |
+| `enableHeater` | boolean | `true` | Show thermostat for HP models |
+| `enableHumidifier` | boolean | `true` | Show humidifier for PH models |
 | `enableFilter` | boolean | `true` | Show filter status |
+
+#### Per-Device Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `temperatureOffset` | number | `0` | Temperature calibration offset (°C) |
+| `humidityOffset` | number | `0` | Humidity calibration offset (%) |
+| `fullRangeHumidity` | boolean | `false` | Enable 0-100% humidity range (default: 30-70%) |
+| `enableAutoModeWhenActivating` | boolean | `false` | Auto-enable auto mode on power on |
+| `enableOscillationWhenActivating` | boolean | `false` | Auto-enable oscillation on power on |
+| `enableNightModeWhenActivating` | boolean | `false` | Auto-enable night mode on power on |
 
 ## HomeKit Controls
 
-### Fan
+### Fan (All Models)
 
 - **Power**: Turn the fan on/off
 - **Speed**: Adjust fan speed from 10% to 100% (maps to Dyson speeds 1-10)
@@ -116,19 +144,37 @@ To find your device credentials, you'll need to extract them from the Dyson API.
 
 ### Sensors
 
-- **Temperature**: Displays room temperature (read-only)
-- **Humidity**: Displays relative humidity percentage (read-only)
+- **Temperature**: Displays room temperature (supports calibration offset)
+- **Humidity**: Displays relative humidity percentage (supports calibration offset)
 - **Air Quality**: Overall rating (Excellent, Good, Fair, Inferior, Poor) calculated from PM2.5
+  - PM2.5 Density (µg/m³)
+  - PM10 Density (µg/m³)
+  - VOC Index
+  - NO2 Index (Formaldehyde models only)
 
 ### Switches
 
 - **Night Mode**: Enables quiet operation with dimmed display
 - **Continuous Monitoring**: Keeps sensors active even when fan is off
+- **Jet Focus**: Toggle between focused stream and diffused airflow
 
 ### Filter
 
 - **Filter Life Level**: Percentage of filter life remaining (0-100%)
-- **Filter Change Indication**: Alert when filter needs replacement (<=10%)
+- **Filter Change Indication**: Alert when filter needs replacement (≤10%)
+
+### Thermostat (HP Models)
+
+- **Heating Mode**: Turn heating on/off
+- **Target Temperature**: Set target temperature (1-37°C)
+- **Current Temperature**: Displays current room temperature
+
+### Humidifier (PH Models)
+
+- **Active**: Turn humidifier on/off
+- **Target Humidity**: Set target humidity percentage
+- **Current Humidity**: Displays current room humidity
+- **Water Level**: Shows water tank status (empty/full)
 
 ## Troubleshooting
 
@@ -149,7 +195,7 @@ To find your device credentials, you'll need to extract them from the Dyson API.
 ### Device Shows "Not Responding"
 
 1. Check that the device is powered on and connected to WiFi
-2. Verify the device IP address hasn't changed (use static IP or manual config)
+2. Verify the device IP address hasn't changed (use static IP)
 3. Restart Homebridge to re-establish MQTT connection
 4. Check Homebridge logs for connection errors
 
@@ -159,9 +205,13 @@ To find your device credentials, you'll need to extract them from the Dyson API.
 2. Check `pollInterval` isn't set too high
 3. Some sensors take time to initialize after power-on
 
+### Temperature/Humidity Readings Inaccurate
+
+Use the `temperatureOffset` and `humidityOffset` options to calibrate sensor readings. For example, if the temperature reads 2°C too high, set `temperatureOffset: -2`.
+
 ### Finding Device Credentials
 
-To manually configure devices, you need the local MQTT credentials. You can extract these by:
+To manually configure devices, you need the local MQTT credentials:
 
 1. Using a network proxy to intercept Dyson app traffic
 2. Using the Dyson Cloud API directly with your account
@@ -175,12 +225,6 @@ Enable debug logging in Homebridge to see detailed plugin output:
 
 ```bash
 homebridge -D
-```
-
-Or set the `DEBUG` environment variable:
-
-```bash
-DEBUG=* homebridge
 ```
 
 ## Contributing

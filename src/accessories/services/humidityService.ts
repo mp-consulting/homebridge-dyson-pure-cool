@@ -24,6 +24,8 @@ export interface HumidityServiceConfig {
   device: DysonDevice;
   api: API;
   log: Logging;
+  /** Humidity offset (can be positive or negative) */
+  humidityOffset?: number;
 }
 
 /**
@@ -37,11 +39,13 @@ export class HumidityService {
   private readonly device: DysonDevice;
   private readonly log: Logging;
   private readonly api: API;
+  private readonly humidityOffset: number;
 
   constructor(config: HumidityServiceConfig) {
     this.device = config.device;
     this.log = config.log;
     this.api = config.api;
+    this.humidityOffset = config.humidityOffset ?? 0;
 
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
@@ -90,17 +94,18 @@ export class HumidityService {
   }
 
   /**
-   * Get humidity value with default fallback
+   * Get humidity value with offset and default fallback
    *
    * @param humidity - Humidity percentage from device
-   * @returns Humidity percentage (0-100), or 50 if unavailable
+   * @returns Humidity percentage (0-100) with offset applied, or 50 if unavailable
    */
   private getHumidity(humidity: number | undefined): number {
     if (humidity === undefined || humidity < 0 || humidity > 100) {
       // Return a sensible default when sensor data unavailable
-      return 50;
+      return Math.max(0, Math.min(100, 50 + this.humidityOffset));
     }
-    return humidity;
+    // Apply offset and clamp to 0-100 range
+    return Math.max(0, Math.min(100, humidity + this.humidityOffset));
   }
 
   /**

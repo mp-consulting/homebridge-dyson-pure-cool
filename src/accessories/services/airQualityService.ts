@@ -24,6 +24,8 @@ export interface AirQualityServiceConfig {
   device: DysonLinkDevice;
   api: API;
   log: Logging;
+  /** Whether device supports NO2 sensor */
+  hasNo2Sensor?: boolean;
 }
 
 /**
@@ -51,17 +53,20 @@ const PM25_THRESHOLDS = {
  * - PM2_5Density (µg/m³)
  * - PM10Density (µg/m³)
  * - VOCDensity (index value, not actual µg/m³)
+ * - NitrogenDioxideDensity (index value, for Formaldehyde models)
  */
 export class AirQualityService {
   private readonly service: Service;
   private readonly device: DysonLinkDevice;
   private readonly log: Logging;
   private readonly api: API;
+  private readonly hasNo2Sensor: boolean;
 
   constructor(config: AirQualityServiceConfig) {
     this.device = config.device;
     this.log = config.log;
     this.api = config.api;
+    this.hasNo2Sensor = config.hasNo2Sensor ?? false;
 
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
@@ -92,6 +97,12 @@ export class AirQualityService {
     // Note: HomeKit expects µg/m³ but Dyson provides an index value
     this.service.getCharacteristic(Characteristic.VOCDensity)
       .onGet(this.handleVOCGet.bind(this));
+
+    // Set up NO2 Density characteristic (for Formaldehyde models)
+    if (this.hasNo2Sensor) {
+      this.service.getCharacteristic(Characteristic.NitrogenDioxideDensity)
+        .onGet(this.handleNO2Get.bind(this));
+    }
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));
@@ -177,6 +188,17 @@ export class AirQualityService {
   }
 
   /**
+   * Handle NO2 Density GET request
+   * Note: Dyson provides an index value, not actual µg/m³
+   */
+  private handleNO2Get(): CharacteristicValue {
+    const state = this.device.getState();
+    const no2 = state.no2Index ?? 0;
+    this.log.debug('Get NO2 Index ->', no2);
+    return no2;
+  }
+
+  /**
    * Handle device state changes
    * Updates HomeKit characteristics to reflect current device state
    */
@@ -204,6 +226,14 @@ export class AirQualityService {
       Characteristic.VOCDensity,
       state.vocIndex ?? 0,
     );
+
+    // Update NO2 (if sensor present)
+    if (this.hasNo2Sensor) {
+      this.service.updateCharacteristic(
+        Characteristic.NitrogenDioxideDensity,
+        state.no2Index ?? 0,
+      );
+    }
   }
 
   /**

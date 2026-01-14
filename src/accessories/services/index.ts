@@ -22,3 +22,12 @@ export type { AirQualityServiceConfig } from './airQualityService.js';
 
 export { FilterService } from './filterService.js';
 export type { FilterServiceConfig } from './filterService.js';
+
+export { ThermostatService } from './thermostatService.js';
+export type { ThermostatServiceConfig } from './thermostatService.js';
+
+export { HumidifierControlService } from './humidifierControlService.js';
+export type { HumidifierControlServiceConfig } from './humidifierControlService.js';
+
+export { JetFocusService } from './jetFocusService.js';
+export type { JetFocusServiceConfig } from './jetFocusService.js';

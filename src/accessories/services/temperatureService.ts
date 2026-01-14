@@ -24,6 +24,8 @@ export interface TemperatureServiceConfig {
   device: DysonDevice;
   api: API;
   log: Logging;
+  /** Temperature offset in Celsius (can be positive or negative) */
+  temperatureOffset?: number;
 }
 
 /**
@@ -37,11 +39,13 @@ export class TemperatureService {
   private readonly device: DysonDevice;
   private readonly log: Logging;
   private readonly api: API;
+  private readonly temperatureOffset: number;
 
   constructor(config: TemperatureServiceConfig) {
     this.device = config.device;
     this.log = config.log;
     this.api = config.api;
+    this.temperatureOffset = config.temperatureOffset ?? 0;
 
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
@@ -90,23 +94,23 @@ export class TemperatureService {
   }
 
   /**
-   * Convert Dyson temperature (Kelvin × 10) to Celsius
+   * Convert Dyson temperature (Kelvin × 10) to Celsius with offset
    *
    * @param kelvinTimes10 - Temperature in Kelvin × 10 (e.g., 2950 = 295K = 21.85°C)
-   * @returns Temperature in Celsius, or 0 if invalid
+   * @returns Temperature in Celsius with offset applied, or default if invalid
    */
   private convertTemperature(kelvinTimes10: number | undefined): number {
     if (kelvinTimes10 === undefined || kelvinTimes10 <= 0) {
       // Return a sensible default when sensor data unavailable
-      return 20;
+      return 20 + this.temperatureOffset;
     }
 
     // Dyson reports temperature as Kelvin × 10
     // Formula: (kelvin / 10) - 273.15 = Celsius
     const celsius = (kelvinTimes10 / 10) - 273.15;
 
-    // Round to 1 decimal place
-    return Math.round(celsius * 10) / 10;
+    // Apply offset and round to 1 decimal place
+    return Math.round((celsius + this.temperatureOffset) * 10) / 10;
   }
 
   /**

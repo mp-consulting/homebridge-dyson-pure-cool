@@ -119,7 +119,7 @@ export interface DeviceFeatures {
   nightMode: boolean;
   /** Supports continuous monitoring */
   continuousMonitoring: boolean;
-  /** Supports front airflow direction */
+  /** Supports front airflow direction (jet focus) */
   frontAirflow: boolean;
   /** Has temperature sensor */
   temperatureSensor: boolean;
@@ -127,6 +127,8 @@ export interface DeviceFeatures {
   humiditySensor: boolean;
   /** Has air quality sensors */
   airQualitySensor: boolean;
+  /** Has NO2 sensor (newer models) */
+  no2Sensor: boolean;
   /** Supports heating */
   heating: boolean;
   /** Supports humidification */
@@ -150,6 +152,7 @@ export const DEFAULT_FEATURES: DeviceFeatures = {
   temperatureSensor: false,
   humiditySensor: false,
   airQualitySensor: false,
+  no2Sensor: false,
   heating: false,
   humidifier: false,
   hepaFilter: false,
