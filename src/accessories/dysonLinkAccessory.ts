@@ -19,6 +19,7 @@ import { HumidityService } from './services/humidityService.js';
 import { NightModeService } from './services/nightModeService.js';
 import { ContinuousMonitoringService } from './services/continuousMonitoringService.js';
 import { AirQualityService } from './services/airQualityService.js';
+import { FilterService } from './services/filterService.js';
 import type { DysonLinkDevice } from '../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../devices/types.js';
 
@@ -40,6 +41,7 @@ export interface DysonLinkAccessoryConfig {
  * - Temperature sensor
  * - Humidity sensor
  * - Air quality sensors (PM2.5, PM10, VOC)
+ * - Filter maintenance status
  * - Night mode and continuous monitoring switches
  */
 export class DysonLinkAccessory extends DysonAccessory {
@@ -49,6 +51,7 @@ export class DysonLinkAccessory extends DysonAccessory {
   private nightModeService?: NightModeService;
   private continuousMonitoringService?: ContinuousMonitoringService;
   private airQualityService?: AirQualityService;
+  private filterService?: FilterService;
 
   /**
    * Create a new DysonLinkAccessory
@@ -127,6 +130,16 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
+    // Create FilterService if device has filters
+    if (features.hepaFilter || features.carbonFilter) {
+      this.filterService = new FilterService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+      });
+    }
+
     this.log.debug('DysonLinkAccessory services configured');
   }
 
@@ -168,6 +181,7 @@ export class DysonLinkAccessory extends DysonAccessory {
     this.nightModeService?.updateFromState();
     this.continuousMonitoringService?.updateFromState();
     this.airQualityService?.updateFromState();
+    this.filterService?.updateFromState();
     this.log.info('DysonLinkAccessory: Device reconnected, state synced');
   }
 
@@ -211,5 +225,12 @@ export class DysonLinkAccessory extends DysonAccessory {
    */
   getAirQualityService(): AirQualityService | undefined {
     return this.airQualityService;
+  }
+
+  /**
+   * Get the FilterService instance (if enabled)
+   */
+  getFilterService(): FilterService | undefined {
+    return this.filterService;
   }
 }

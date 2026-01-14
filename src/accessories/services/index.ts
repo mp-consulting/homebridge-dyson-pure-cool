@@ -19,3 +19,6 @@ export type { ContinuousMonitoringServiceConfig } from './continuousMonitoringSe
 
 export { AirQualityService } from './airQualityService.js';
 export type { AirQualityServiceConfig } from './airQualityService.js';
+
+export { FilterService } from './filterService.js';
+export type { FilterServiceConfig } from './filterService.js';
