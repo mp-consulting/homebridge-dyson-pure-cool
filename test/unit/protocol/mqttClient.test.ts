@@ -201,18 +201,6 @@ describe('DysonMqttClient', () => {
       expect(client.isConnected()).toBe(false);
     });
 
-    it('should emit reconnect event', async () => {
-      const reconnectHandler = jest.fn();
-      client.on('reconnect', reconnectHandler);
-
-      const connectPromise = client.connect();
-      mockMqttClient._emit('connect');
-      await connectPromise;
-
-      mockMqttClient._emit('reconnect');
-
-      expect(reconnectHandler).toHaveBeenCalled();
-    });
   });
 
   describe('disconnect', () => {
@@ -502,6 +490,221 @@ describe('DysonMqttClient', () => {
       await client.disconnect();
 
       expect(client.isConnected()).toBe(false);
+    });
+  });
+
+  describe('automatic reconnection', () => {
+    it('should emit offline event on disconnect', async () => {
+      const offlineHandler = jest.fn();
+      client.on('offline', offlineHandler);
+
+      const connectPromise = client.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      // Simulate unexpected disconnect
+      mockMqttClient._emit('close');
+
+      expect(offlineHandler).toHaveBeenCalled();
+    });
+
+    it('should emit reconnect event with attempt number', async () => {
+      const reconnectHandler = jest.fn();
+      client.on('reconnect', reconnectHandler);
+
+      const connectPromise = client.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      // Simulate unexpected disconnect
+      mockMqttClient._emit('close');
+
+      expect(reconnectHandler).toHaveBeenCalledWith(1);
+    });
+
+    it('should attempt reconnection with exponential backoff', async () => {
+      const connectPromise = client.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      // Simulate disconnect
+      mockMqttClient._emit('close');
+
+      // First attempt after 1 second
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve(); // Let promises settle
+
+      expect(mockConnect).toHaveBeenCalledTimes(2);
+    });
+
+    it('should emit reconnectFailed after max attempts', async () => {
+      const reconnectFailedHandler = jest.fn();
+      const reconnectHandler = jest.fn();
+      const customClient = new DysonMqttClient(
+        { ...defaultOptions, maxReconnectAttempts: 2, timeout: 100 },
+        mockConnect,
+      );
+      customClient.on('reconnectFailed', reconnectFailedHandler);
+      customClient.on('reconnect', reconnectHandler);
+
+      const connectPromise = customClient.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      // First disconnect triggers reconnect
+      mockMqttClient._emit('close');
+      expect(reconnectHandler).toHaveBeenCalledWith(1);
+
+      // First reconnect attempt after 1s backoff
+      jest.advanceTimersByTime(1000);
+      await jest.runAllTimersAsync().catch(() => {});
+
+      // Simulate failed reconnect (timeout after 100ms)
+      jest.advanceTimersByTime(101);
+      await jest.runAllTimersAsync().catch(() => {});
+
+      // Second reconnect attempt should now be scheduled
+      expect(reconnectHandler).toHaveBeenCalledWith(2);
+
+      // Second reconnect after 2s backoff
+      jest.advanceTimersByTime(2000);
+      await jest.runAllTimersAsync().catch(() => {});
+
+      // Second reconnect fails (timeout)
+      jest.advanceTimersByTime(101);
+      await jest.runAllTimersAsync().catch(() => {});
+
+      // Max attempts (2) reached, should emit reconnectFailed
+      expect(reconnectFailedHandler).toHaveBeenCalled();
+    });
+
+    it('should not reconnect when autoReconnect is disabled', async () => {
+      const reconnectHandler = jest.fn();
+      const customClient = new DysonMqttClient(
+        { ...defaultOptions, autoReconnect: false },
+        mockConnect,
+      );
+      customClient.on('reconnect', reconnectHandler);
+
+      const connectPromise = customClient.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      // Simulate disconnect
+      mockMqttClient._emit('close');
+
+      // Advance time
+      jest.advanceTimersByTime(10000);
+      await Promise.resolve();
+
+      expect(reconnectHandler).not.toHaveBeenCalled();
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not reconnect after intentional disconnect', async () => {
+      const reconnectHandler = jest.fn();
+      client.on('reconnect', reconnectHandler);
+
+      const connectPromise = client.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      // Intentional disconnect
+      await client.disconnect();
+
+      // Advance time
+      jest.advanceTimersByTime(10000);
+      await Promise.resolve();
+
+      expect(reconnectHandler).not.toHaveBeenCalled();
+    });
+
+    it('should reset attempt count on successful reconnect', async () => {
+      const connectPromise = client.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      expect(client.getReconnectAttempts()).toBe(0);
+
+      // Simulate disconnect
+      mockMqttClient._emit('close');
+
+      // First reconnect attempt
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+
+      // Simulate successful reconnection
+      mockMqttClient._emit('connect');
+      await Promise.resolve();
+
+      expect(client.getReconnectAttempts()).toBe(0);
+      expect(client.isReconnectingState()).toBe(false);
+    });
+
+    it('should re-subscribe to topics after reconnection', async () => {
+      const connectPromise = client.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      // Subscribe to topics
+      await client.subscribe('topic1');
+      await client.subscribe('topic2');
+
+      // Clear mock calls
+      mockMqttClient.subscribe.mockClear();
+
+      // Simulate disconnect
+      mockMqttClient._emit('close');
+
+      // Reconnect
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+
+      // Simulate successful reconnection
+      mockMqttClient._emit('connect');
+      await Promise.resolve();
+
+      // Should re-subscribe
+      expect(mockMqttClient.subscribe).toHaveBeenCalledTimes(2);
+    });
+
+    it('should preserve subscribed topics during reconnection', async () => {
+      const connectPromise = client.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      await client.subscribe('topic1');
+
+      // Simulate disconnect (but not intentional)
+      mockMqttClient._emit('close');
+
+      // Topics should still be tracked
+      expect(client.getSubscribedTopics()).toContain('topic1');
+    });
+
+    it('should clear subscribed topics on intentional disconnect', async () => {
+      const connectPromise = client.connect();
+      mockMqttClient._emit('connect');
+      await connectPromise;
+
+      await client.subscribe('topic1');
+
+      // Intentional disconnect
+      await client.disconnect();
+
+      expect(client.getSubscribedTopics()).toEqual([]);
+    });
+  });
+
+  describe('reconnection state getters', () => {
+    it('should return reconnect attempts', async () => {
+      expect(client.getReconnectAttempts()).toBe(0);
+    });
+
+    it('should return reconnecting state', () => {
+      expect(client.isReconnectingState()).toBe(false);
     });
   });
 });

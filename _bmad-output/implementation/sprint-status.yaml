@@ -2,54 +2,38 @@
 # Track current sprint progress
 
 sprint:
-  number: 2
-  goal: "Establish core device discovery and MQTT communication"
+  number: 3
+  goal: "Complete device discovery layer and establish device foundation"
   start_date: 2025-01-14
-  status: completed
+  status: active
 
 epic:
   id: E2
   title: Device Discovery & Connection
   total_points: 13
-  sprint_points: 8
+  sprint_points: 2
 
 stories:
-  - id: E2-S1
-    title: Implement Dyson Cloud API Client
-    status: completed
-    points: 3
-    priority: P0
-    assignee: dev
-    notes: "DysonCloudApi class with auth, device list, credential extraction"
-
-  - id: E2-S2
-    title: Implement mDNS Discovery
+  - id: E2-S4
+    title: Implement Automatic Reconnection
     status: completed
     points: 2
     priority: P0
     assignee: dev
-    notes: "MdnsDiscovery class using bonjour-service for _dyson_mqtt._tcp"
-
-  - id: E2-S3
-    title: Implement MQTT Client Wrapper
-    status: completed
-    points: 3
-    priority: P0
-    assignee: dev
-    notes: "DysonMqttClient class with connect, subscribe, publish, and convenience methods"
+    notes: "Exponential backoff (1s-16s), max 5 attempts, events for offline/reconnect/reconnectFailed"
 
 metrics:
   total_points: 8
-  completed_points: 8
+  completed_points: 2
   in_progress_points: 0
   velocity_target: 8
-  sprint_1_velocity: 8
+  sprint_2_velocity: 8
 
 board:
-  todo: []
+  todo: [E3-S1, E3-S2, E2-S6]
   in_progress: []
   in_review: []
-  done: [E2-S1, E2-S2, E2-S3]
+  done: [E2-S4]
 
 definition_of_done:
   - Code compiles with zero TypeScript errors
@@ -61,17 +45,15 @@ definition_of_done:
 blockers: []
 
 dependencies:
-  - "npm packages needed: mqtt, bonjour-service, node-fetch (or built-in fetch)"
+  - "E2-S6 depends on E3-S1 (Base Device Class)"
 
 notes:
-  - "Sprint 2 completed on 2025-01-14"
-  - "Focus: Core discovery and communication layer"
-  - "All stories are P0 - critical path for device control"
-  - "Remaining E2 stories (S4-S6, 5 pts) deferred to Sprint 3"
-  - "Sprint 2 velocity: 8 points (matches target)"
+  - "Sprint 3 started on 2025-01-14"
+  - "E2-S5 (Manual Credentials, 1pt P1) deferred - not critical path"
+  - "Focus: Finish E2 and start E3 device layer"
 
 previous_sprint:
-  number: 1
-  epic: E1
+  number: 2
+  epic: E2
   velocity: 8
   status: completed
