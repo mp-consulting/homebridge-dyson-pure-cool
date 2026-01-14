@@ -75,12 +75,16 @@ function createMockService() {
 function createMockApi() {
   const mockFanService = createMockService();
   const mockInfoService = createMockService();
+  const mockTempService = createMockService();
+  const mockHumidityService = createMockService();
 
   return {
     hap: {
       Service: {
         Fanv2: 'Fanv2',
         AccessoryInformation: 'AccessoryInformation',
+        TemperatureSensor: 'TemperatureSensor',
+        HumiditySensor: 'HumiditySensor',
       },
       Characteristic: {
         Name: 'Name',
@@ -91,13 +95,19 @@ function createMockApi() {
         Model: 'Model',
         SerialNumber: 'SerialNumber',
         FirmwareRevision: 'FirmwareRevision',
+        CurrentTemperature: 'CurrentTemperature',
+        CurrentRelativeHumidity: 'CurrentRelativeHumidity',
       },
     },
     _mockFanService: mockFanService,
     _mockInfoService: mockInfoService,
+    _mockTempService: mockTempService,
+    _mockHumidityService: mockHumidityService,
   } as unknown as jest.Mocked<API> & {
     _mockFanService: ReturnType<typeof createMockService>;
     _mockInfoService: ReturnType<typeof createMockService>;
+    _mockTempService: ReturnType<typeof createMockService>;
+    _mockHumidityService: ReturnType<typeof createMockService>;
   };
 }
 
@@ -113,11 +123,23 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
       if (serviceType === 'AccessoryInformation') {
         return api._mockInfoService;
       }
+      if (serviceType === 'TemperatureSensor') {
+        return api._mockTempService;
+      }
+      if (serviceType === 'HumiditySensor') {
+        return api._mockHumidityService;
+      }
       return undefined;
     }),
     addService: jest.fn((serviceType: unknown) => {
       if (serviceType === 'Fanv2') {
         return api._mockFanService;
+      }
+      if (serviceType === 'TemperatureSensor') {
+        return api._mockTempService;
+      }
+      if (serviceType === 'HumiditySensor') {
+        return api._mockHumidityService;
       }
       return createMockService();
     }),
@@ -309,6 +331,72 @@ describe('DysonLinkAccessory', () => {
 
       expect(accessory).toBeDefined();
       expect(accessory.getDevice().productType).toBe('438E');
+    });
+  });
+
+  describe('sensor service getters', () => {
+    beforeEach(() => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+    });
+
+    it('should return TemperatureService when device supports it', () => {
+      // TP04 (438) supports temperature sensor
+      const tempService = accessory.getTemperatureService();
+      expect(tempService).toBeDefined();
+    });
+
+    it('should return HumidityService when device supports it', () => {
+      // TP04 (438) supports humidity sensor
+      const humidityService = accessory.getHumidityService();
+      expect(humidityService).toBeDefined();
+    });
+  });
+
+  describe('handleDisconnect', () => {
+    it('should log warning when device disconnects', async () => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      await device.connect();
+      mockLog.warn.mockClear();
+
+      // Simulate disconnect
+      await device.disconnect();
+
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Device disconnected'),
+        expect.any(String),
+      );
+    });
+  });
+
+  describe('handleConnect', () => {
+    it('should sync state and log reconnection', async () => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      await device.connect();
+      mockLog.info.mockClear();
+
+      // Simulate reconnect event
+      mockMqttClient._emit('connect');
+
+      expect(mockLog.info).toHaveBeenCalledWith(
+        expect.stringContaining('reconnected'),
+      );
     });
   });
 });

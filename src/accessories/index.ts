@@ -10,3 +10,9 @@ export type { DysonLinkAccessoryConfig } from './dysonLinkAccessory.js';
 
 export { FanService } from './services/fanService.js';
 export type { FanServiceConfig } from './services/fanService.js';
+
+export { TemperatureService } from './services/temperatureService.js';
+export type { TemperatureServiceConfig } from './services/temperatureService.js';
+
+export { HumidityService } from './services/humidityService.js';
+export type { HumidityServiceConfig } from './services/humidityService.js';

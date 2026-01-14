@@ -88,6 +88,7 @@ function createMockApi() {
     Active: { UUID: 'active-uuid' },
     RotationSpeed: { UUID: 'rotation-speed-uuid' },
     SwingMode: { UUID: 'swing-mode-uuid' },
+    TargetFanState: { UUID: 'target-fan-state-uuid' },
     Name: { UUID: 'name-uuid' },
   };
 
@@ -120,6 +121,8 @@ describe('FanService', () => {
   let speedSetHandler: (value: unknown) => Promise<void>;
   let swingModeGetHandler: () => unknown;
   let swingModeSetHandler: (value: unknown) => Promise<void>;
+  let targetFanStateGetHandler: () => unknown;
+  let targetFanStateSetHandler: (value: unknown) => Promise<void>;
 
   const defaultDeviceInfo: DeviceInfo = {
     serial: 'ABC-AB-12345678',
@@ -171,6 +174,10 @@ describe('FanService', () => {
     const swingChar = mockService.getCharacteristic(Characteristic.SwingMode);
     swingModeGetHandler = (swingChar!.onGet as jest.Mock).mock.calls[0][0];
     swingModeSetHandler = (swingChar!.onSet as jest.Mock).mock.calls[0][0];
+
+    const targetFanStateChar = mockService.getCharacteristic(Characteristic.TargetFanState);
+    targetFanStateGetHandler = (targetFanStateChar!.onGet as jest.Mock).mock.calls[0][0];
+    targetFanStateSetHandler = (targetFanStateChar!.onSet as jest.Mock).mock.calls[0][0];
   });
 
   afterEach(() => {
@@ -208,6 +215,12 @@ describe('FanService', () => {
 
     it('should register SwingMode characteristic handlers', () => {
       const char = mockService.getCharacteristic(mockApi.hap.Characteristic.SwingMode);
+      expect(char!.onGet).toHaveBeenCalled();
+      expect(char!.onSet).toHaveBeenCalled();
+    });
+
+    it('should register TargetFanState characteristic handlers', () => {
+      const char = mockService.getCharacteristic(mockApi.hap.Characteristic.TargetFanState);
       expect(char!.onGet).toHaveBeenCalled();
       expect(char!.onSet).toHaveBeenCalled();
     });
@@ -358,6 +371,45 @@ describe('FanService', () => {
     });
   });
 
+  describe('TargetFanState characteristic', () => {
+    it('should return 0 (MANUAL) when auto mode is off', () => {
+      const result = targetFanStateGetHandler();
+      expect(result).toBe(0);
+    });
+
+    it('should return 1 (AUTO) when auto mode is on', async () => {
+      // Simulate auto mode on
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { fmod: 'AUTO' } },
+      });
+
+      const result = targetFanStateGetHandler();
+      expect(result).toBe(1);
+    });
+
+    it('should call setAutoMode(true) when set to 1 (AUTO)', async () => {
+      await targetFanStateSetHandler(1);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { fmod: 'AUTO' },
+        }),
+      );
+    });
+
+    it('should call setAutoMode(false) when set to 0 (MANUAL)', async () => {
+      await targetFanStateSetHandler(0);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ fmod: 'FAN' }),
+        }),
+      );
+    });
+  });
+
   describe('state change handling', () => {
     it('should update characteristics when device state changes', async () => {
       // Simulate full state update
@@ -370,6 +422,7 @@ describe('FanService', () => {
             fpwr: 'ON',
             fnsp: '0007',
             oson: 'ON',
+            fmod: 'AUTO',
           },
         },
       });
@@ -385,6 +438,10 @@ describe('FanService', () => {
       );
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.SwingMode,
+        1,
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.TargetFanState,
         1,
       );
     });
@@ -425,6 +482,7 @@ describe('FanService', () => {
             fpwr: 'ON',
             fnsp: '0003',
             oson: 'OFF',
+            fmod: 'FAN',
           },
         },
       });
@@ -443,6 +501,10 @@ describe('FanService', () => {
       );
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.SwingMode,
+        0,
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.TargetFanState,
         0,
       );
     });
@@ -467,6 +529,13 @@ describe('FanService', () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
       await expect(swingModeSetHandler(1)).rejects.toThrow('MQTT error');
+      expect(mockLog.error).toHaveBeenCalled();
+    });
+
+    it('should throw and log error when setAutoMode fails', async () => {
+      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
+
+      await expect(targetFanStateSetHandler(1)).rejects.toThrow('MQTT error');
       expect(mockLog.error).toHaveBeenCalled();
     });
   });

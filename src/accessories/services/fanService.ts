@@ -2,7 +2,7 @@
  * Fan Service Handler
  *
  * Implements the HomeKit Fanv2 service for Dyson devices.
- * Handles Active, RotationSpeed, and SwingMode characteristics.
+ * Handles Active, RotationSpeed, SwingMode, and TargetFanState characteristics.
  */
 
 import type {
@@ -34,6 +34,7 @@ export interface FanServiceConfig {
  * - Active (0/1) ↔ isOn (boolean)
  * - RotationSpeed (0-100%) ↔ fanSpeed (1-10)
  * - SwingMode (0/1) ↔ oscillation (boolean)
+ * - TargetFanState (0=MANUAL, 1=AUTO) ↔ autoMode (boolean)
  */
 export class FanService {
   private readonly service: Service;
@@ -80,6 +81,12 @@ export class FanService {
     this.service.getCharacteristic(Characteristic.SwingMode)
       .onGet(this.handleSwingModeGet.bind(this))
       .onSet(this.handleSwingModeSet.bind(this));
+
+    // Set up TargetFanState characteristic for AUTO/MANUAL mode
+    // 0 = MANUAL, 1 = AUTO
+    this.service.getCharacteristic(Characteristic.TargetFanState)
+      .onGet(this.handleTargetFanStateGet.bind(this))
+      .onSet(this.handleTargetFanStateSet.bind(this));
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));
@@ -189,6 +196,33 @@ export class FanService {
   }
 
   /**
+   * Handle TargetFanState GET request
+   * Returns 1 (AUTO) or 0 (MANUAL)
+   */
+  private handleTargetFanStateGet(): CharacteristicValue {
+    const state = this.device.getState();
+    const targetState = state.autoMode ? 1 : 0;
+    this.log.debug('Get TargetFanState ->', targetState);
+    return targetState;
+  }
+
+  /**
+   * Handle TargetFanState SET request
+   * @param value - 1 (AUTO) or 0 (MANUAL)
+   */
+  private async handleTargetFanStateSet(value: CharacteristicValue): Promise<void> {
+    const autoMode = value === 1;
+    this.log.debug('Set TargetFanState ->', autoMode ? 'AUTO' : 'MANUAL');
+
+    try {
+      await this.device.setAutoMode(autoMode);
+    } catch (error) {
+      this.log.error('Failed to set auto mode:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Handle device state changes
    * Updates HomeKit characteristics to reflect current device state
    */
@@ -214,6 +248,12 @@ export class FanService {
     this.service.updateCharacteristic(
       Characteristic.SwingMode,
       state.oscillation ? 1 : 0,
+    );
+
+    // Update TargetFanState (AUTO/MANUAL mode)
+    this.service.updateCharacteristic(
+      Characteristic.TargetFanState,
+      state.autoMode ? 1 : 0,
     );
   }
 

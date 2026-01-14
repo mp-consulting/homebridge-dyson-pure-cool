@@ -151,6 +151,15 @@ export class DysonLinkDevice extends DysonDevice {
   }
 
   /**
+   * Get the device features
+   *
+   * @returns DeviceFeatures object describing what this device supports
+   */
+  getFeatures(): DeviceFeatures {
+    return this.supportedFeatures;
+  }
+
+  /**
    * Handle state message from device
    *
    * Parses the device-specific state from CURRENT-STATE and STATE-CHANGE messages.

@@ -14,6 +14,8 @@ import type {
 import { DysonAccessory } from './dysonAccessory.js';
 import type { DysonAccessoryConfig } from './dysonAccessory.js';
 import { FanService } from './services/fanService.js';
+import { TemperatureService } from './services/temperatureService.js';
+import { HumidityService } from './services/humidityService.js';
 import type { DysonLinkDevice } from '../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../devices/types.js';
 
@@ -32,11 +34,14 @@ export interface DysonLinkAccessoryConfig {
  *
  * Features:
  * - Fan control (power, speed, oscillation)
- * - Future: Temperature/humidity sensors (E4)
+ * - Temperature sensor
+ * - Humidity sensor
  * - Future: Air quality sensors (E6)
  */
 export class DysonLinkAccessory extends DysonAccessory {
   private fanService!: FanService;
+  private temperatureService?: TemperatureService;
+  private humidityService?: HumidityService;
 
   /**
    * Create a new DysonLinkAccessory
@@ -51,16 +56,39 @@ export class DysonLinkAccessory extends DysonAccessory {
   /**
    * Set up device-specific services
    *
-   * Creates the FanService for fan control functionality.
+   * Creates FanService, TemperatureService, and HumidityService.
    */
   protected setupServices(): void {
+    const linkDevice = this.device as DysonLinkDevice;
+    const features = linkDevice.getFeatures();
+
     // Create FanService for fan control
     this.fanService = new FanService({
       accessory: this.accessory,
-      device: this.device as DysonLinkDevice,
+      device: linkDevice,
       api: this.api,
       log: this.log,
     });
+
+    // Create TemperatureService if device supports it
+    if (features.temperatureSensor) {
+      this.temperatureService = new TemperatureService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+      });
+    }
+
+    // Create HumidityService if device supports it
+    if (features.humiditySensor) {
+      this.humidityService = new HumidityService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+      });
+    }
 
     this.log.debug('DysonLinkAccessory services configured');
   }
@@ -98,6 +126,8 @@ export class DysonLinkAccessory extends DysonAccessory {
     super.handleConnect();
     // Sync HomeKit state with device state after reconnection
     this.fanService.updateFromState();
+    this.temperatureService?.updateFromState();
+    this.humidityService?.updateFromState();
     this.log.info('DysonLinkAccessory: Device reconnected, state synced');
   }
 
@@ -106,5 +136,19 @@ export class DysonLinkAccessory extends DysonAccessory {
    */
   getFanService(): FanService {
     return this.fanService;
+  }
+
+  /**
+   * Get the TemperatureService instance (if enabled)
+   */
+  getTemperatureService(): TemperatureService | undefined {
+    return this.temperatureService;
+  }
+
+  /**
+   * Get the HumidityService instance (if enabled)
+   */
+  getHumidityService(): HumidityService | undefined {
+    return this.humidityService;
   }
 }

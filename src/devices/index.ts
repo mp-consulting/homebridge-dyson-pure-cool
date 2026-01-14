@@ -13,6 +13,13 @@ export {
   getSupportedProductTypes,
 } from './deviceFactory.js';
 
+export { DeviceManager } from './deviceManager.js';
+export type {
+  DeviceManagerConfig,
+  ManualDeviceConfig,
+  DiscoveryResult,
+} from './deviceManager.js';
+
 export type {
   DeviceInfo,
   DeviceState,
