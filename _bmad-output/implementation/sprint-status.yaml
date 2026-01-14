@@ -33,11 +33,12 @@ stories:
 
   - id: E1-S3
     title: Configure Jest Testing Framework
-    status: pending
+    status: completed
     points: 2
     priority: P0
     assignee: dev
-    notes: "Add Jest, ts-jest, sample test, coverage config"
+    completed_date: 2025-01-13
+    notes: "Jest + ts-jest configured for ESM, 7 tests passing, 80% coverage threshold"
 
   - id: E1-S4
     title: Configure GitHub Actions CI
@@ -57,15 +58,15 @@ stories:
 
 metrics:
   total_points: 8
-  completed_points: 3
+  completed_points: 5
   in_progress_points: 0
   velocity_target: 8
 
 board:
-  todo: [E1-S3, E1-S4, E1-S5]
+  todo: [E1-S4, E1-S5]
   in_progress: []
   in_review: []
-  done: [E1-S1, E1-S2]
+  done: [E1-S1, E1-S2, E1-S3]
 
 definition_of_done:
   - Code compiles with zero TypeScript errors
