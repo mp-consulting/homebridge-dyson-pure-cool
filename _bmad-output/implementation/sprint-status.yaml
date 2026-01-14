@@ -24,11 +24,12 @@ stories:
 
   - id: E1-S2
     title: Configure ESLint
-    status: pending
+    status: completed
     points: 1
     priority: P0
     assignee: dev
-    notes: "Verify ESLint 9.x flat config, stricter rules"
+    completed_date: 2025-01-13
+    notes: "Updated ESLint 9.x flat config with stricter rules, proper ordering"
 
   - id: E1-S3
     title: Configure Jest Testing Framework
@@ -56,15 +57,15 @@ stories:
 
 metrics:
   total_points: 8
-  completed_points: 2
+  completed_points: 3
   in_progress_points: 0
   velocity_target: 8
 
 board:
-  todo: [E1-S2, E1-S3, E1-S4, E1-S5]
+  todo: [E1-S3, E1-S4, E1-S5]
   in_progress: []
   in_review: []
-  done: [E1-S1]
+  done: [E1-S1, E1-S2]
 
 definition_of_done:
   - Code compiles with zero TypeScript errors
