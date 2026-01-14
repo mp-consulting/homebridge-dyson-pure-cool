@@ -31,3 +31,6 @@ export type { HumidifierControlServiceConfig } from './humidifierControlService.
 
 export { JetFocusService } from './jetFocusService.js';
 export type { JetFocusServiceConfig } from './jetFocusService.js';
+
+export { HeaterCoolerService } from './heaterCoolerService.js';
+export type { HeaterCoolerServiceConfig } from './heaterCoolerService.js';

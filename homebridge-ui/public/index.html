@@ -1,0 +1,987 @@
+<!-- Dyson Pure Cool - Custom Configuration UI -->
+<!-- Bootstrap 5 is automatically injected by Homebridge -->
+
+<style>
+  .dyson-wizard {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .wizard-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .wizard-header img {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 1rem;
+  }
+
+  .wizard-header h4 {
+    margin-bottom: 0.5rem;
+  }
+
+  .wizard-header .text-muted {
+    font-size: 0.9rem;
+  }
+
+  /* Step Progress Indicator */
+  .step-progress {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2rem;
+    padding: 0;
+    list-style: none;
+  }
+
+  .step-progress li {
+    display: flex;
+    align-items: center;
+    color: var(--bs-secondary);
+  }
+
+  .step-progress li .step-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--bs-secondary-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-right: 0.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .step-progress li .step-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .step-progress li.active .step-number {
+    background: var(--bs-primary);
+    color: white;
+  }
+
+  .step-progress li.active .step-label {
+    color: var(--bs-primary);
+  }
+
+  .step-progress li.completed .step-number {
+    background: var(--bs-success);
+    color: white;
+  }
+
+  .step-progress li.completed .step-label {
+    color: var(--bs-success);
+  }
+
+  .step-progress .step-connector {
+    width: 40px;
+    height: 2px;
+    background: var(--bs-secondary-bg);
+    margin: 0 0.75rem;
+  }
+
+  .step-progress li.completed + .step-connector,
+  .step-progress .step-connector.completed {
+    background: var(--bs-success);
+  }
+
+  /* Wizard Steps */
+  .wizard-step {
+    display: none;
+  }
+
+  .wizard-step.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Device Cards */
+  .device-card {
+    border: 2px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .device-card:hover {
+    border-color: var(--bs-primary);
+    background: var(--bs-light);
+  }
+
+  .device-card.selected {
+    border-color: var(--bs-primary);
+    background: rgba(var(--bs-primary-rgb), 0.1);
+  }
+
+  .device-card .device-icon {
+    font-size: 2rem;
+    margin-right: 1rem;
+  }
+
+  .device-card .device-name {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .device-card .device-type {
+    font-size: 0.85rem;
+    color: var(--bs-secondary);
+  }
+
+  .device-card .device-serial {
+    font-size: 0.75rem;
+    color: var(--bs-secondary);
+    font-family: monospace;
+  }
+
+  .device-card .form-check {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  /* Country Select */
+  .country-select {
+    max-width: 200px;
+  }
+
+  /* Success Animation */
+  .success-icon {
+    font-size: 4rem;
+    color: var(--bs-success);
+    animation: scaleIn 0.5s ease;
+  }
+
+  @keyframes scaleIn {
+    from { transform: scale(0); }
+    to { transform: scale(1); }
+  }
+
+  /* Alert styling */
+  .alert-icon {
+    font-size: 1.25rem;
+    margin-right: 0.5rem;
+  }
+
+  /* Loading state */
+  .loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  /* Options form */
+  .options-section {
+    background: var(--bs-light);
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+
+  .options-section h6 {
+    margin-bottom: 1rem;
+    color: var(--bs-secondary);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+  }
+</style>
+
+<div class="dyson-wizard">
+  <!-- Header -->
+  <div class="wizard-header">
+    <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="50" cy="50" r="45" stroke="currentColor" stroke-width="2" fill="none" opacity="0.2"/>
+      <circle cx="50" cy="50" r="35" stroke="currentColor" stroke-width="2" fill="none" opacity="0.4"/>
+      <circle cx="50" cy="50" r="25" stroke="currentColor" stroke-width="3" fill="none"/>
+      <circle cx="50" cy="50" r="8" fill="currentColor"/>
+    </svg>
+    <h4>Dyson Pure Cool</h4>
+    <p class="text-muted">Connect your Dyson devices to HomeKit</p>
+  </div>
+
+  <!-- Step Progress -->
+  <ul class="step-progress" id="step-progress">
+    <li class="active" data-step="1">
+      <span class="step-number">1</span>
+      <span class="step-label">Account</span>
+    </li>
+    <div class="step-connector"></div>
+    <li data-step="2">
+      <span class="step-number">2</span>
+      <span class="step-label">Devices</span>
+    </li>
+    <div class="step-connector"></div>
+    <li data-step="3">
+      <span class="step-number">3</span>
+      <span class="step-label">Options</span>
+    </li>
+  </ul>
+
+  <!-- Step 0: Existing Config (shown when devices already configured) -->
+  <div class="wizard-step" id="step-0">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Your Dyson Devices</h5>
+        <p class="text-muted mb-4">Your devices are already configured. You can edit options or re-sync from the cloud.</p>
+
+        <div id="existing-device-list" class="mb-4">
+          <!-- Existing devices will be shown here -->
+        </div>
+
+        <div class="d-grid gap-2">
+          <button class="btn btn-primary" id="btn-edit-options">Edit Options</button>
+          <button class="btn btn-outline-secondary" id="btn-resync">
+            <span class="btn-text">Re-sync from Dyson Cloud</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1: Account Login -->
+  <div class="wizard-step" id="step-1">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Connect Your Dyson Account</h5>
+        <p class="text-muted mb-4">Enter your Dyson account credentials to discover your devices.</p>
+
+        <div class="mb-3">
+          <label class="form-label" for="email">Email Address</label>
+          <input type="email" class="form-control" id="email" placeholder="your@email.com" autocomplete="email">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="password">Password</label>
+          <input type="password" class="form-control" id="password" placeholder="Your Dyson password" autocomplete="current-password">
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label" for="country">Country</label>
+          <select class="form-select country-select" id="country">
+            <option value="US">United States</option>
+            <option value="GB">United Kingdom</option>
+            <option value="DE">Germany</option>
+            <option value="FR">France</option>
+            <option value="IT">Italy</option>
+            <option value="ES">Spain</option>
+            <option value="PT">Portugal</option>
+            <option value="NL">Netherlands</option>
+            <option value="BE">Belgium</option>
+            <option value="AT">Austria</option>
+            <option value="CH">Switzerland</option>
+            <option value="AU">Australia</option>
+            <option value="NZ">New Zealand</option>
+            <option value="CA">Canada</option>
+            <option value="IE">Ireland</option>
+            <option value="SE">Sweden</option>
+            <option value="NO">Norway</option>
+            <option value="DK">Denmark</option>
+            <option value="FI">Finland</option>
+            <option value="PL">Poland</option>
+            <option value="CZ">Czech Republic</option>
+            <option value="JP">Japan</option>
+            <option value="SG">Singapore</option>
+            <option value="HK">Hong Kong</option>
+            <option value="CN">China</option>
+            <option value="KR">South Korea</option>
+            <option value="TW">Taiwan</option>
+            <option value="MY">Malaysia</option>
+            <option value="TH">Thailand</option>
+            <option value="IN">India</option>
+            <option value="AE">United Arab Emirates</option>
+            <option value="SA">Saudi Arabia</option>
+          </select>
+        </div>
+
+        <div class="d-grid">
+          <button class="btn btn-primary" id="btn-connect">
+            <span class="btn-text">Connect Account</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1b: 2FA Verification -->
+  <div class="wizard-step" id="step-1b">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Verify Your Identity</h5>
+        <p class="text-muted mb-4">We've sent a verification code to your email. Enter it below.</p>
+
+        <div class="alert alert-info d-flex align-items-center mb-4">
+          <span class="alert-icon">&#9993;</span>
+          <span>Check your inbox for an email from Dyson with your verification code.</span>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label" for="otp-code">Verification Code</label>
+          <input type="text" class="form-control form-control-lg text-center" id="otp-code"
+                 placeholder="000000" maxlength="6" autocomplete="one-time-code"
+                 style="letter-spacing: 0.5em; font-family: monospace;">
+        </div>
+
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary" id="btn-back-to-login">Back</button>
+          <button class="btn btn-primary flex-grow-1" id="btn-verify-otp">
+            <span class="btn-text">Verify</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Device Selection -->
+  <div class="wizard-step" id="step-2">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Select Your Devices</h5>
+        <p class="text-muted mb-4">Choose which devices to add to HomeKit.</p>
+
+        <div id="device-list">
+          <!-- Devices will be inserted here -->
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-outline-secondary" id="btn-back-to-account">Back</button>
+          <button class="btn btn-primary flex-grow-1" id="btn-to-options">
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Configuration Options -->
+  <div class="wizard-step" id="step-3">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Configure Options</h5>
+        <p class="text-muted mb-4">Customize how your devices appear in HomeKit.</p>
+
+        <div class="options-section">
+          <h6>Sensor Options</h6>
+
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="opt-temperature" checked>
+            <label class="form-check-label" for="opt-temperature">Temperature Sensor</label>
+          </div>
+
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="opt-humidity" checked>
+            <label class="form-check-label" for="opt-humidity">Humidity Sensor</label>
+          </div>
+
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="opt-air-quality" checked>
+            <label class="form-check-label" for="opt-air-quality">Air Quality Sensor</label>
+          </div>
+        </div>
+
+        <div class="options-section">
+          <h6>Additional Controls</h6>
+
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="opt-night-mode" checked>
+            <label class="form-check-label" for="opt-night-mode">Night Mode Switch</label>
+          </div>
+
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="opt-auto-mode" checked>
+            <label class="form-check-label" for="opt-auto-mode">Auto Mode Switch</label>
+          </div>
+
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="opt-filter-status">
+            <label class="form-check-label" for="opt-filter-status">Filter Status Indicator</label>
+          </div>
+        </div>
+
+        <div class="options-section">
+          <h6>Advanced</h6>
+
+          <div class="mb-3">
+            <label class="form-label" for="opt-polling">Polling Interval (seconds)</label>
+            <input type="number" class="form-control" id="opt-polling" value="60" min="10" max="300" style="max-width: 120px;">
+            <div class="form-text">How often to check device status (10-300 seconds)</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-outline-secondary" id="btn-back-to-devices">Back</button>
+          <button class="btn btn-success flex-grow-1" id="btn-save">
+            <span class="btn-text">Save Configuration</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success State -->
+  <div class="wizard-step" id="step-success">
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <div class="success-icon mb-3">&#10003;</div>
+        <h4 class="mb-3">Configuration Complete!</h4>
+        <p class="text-muted mb-4">Your Dyson devices have been configured successfully.<br>
+        Click "Save" to apply changes and restart Homebridge.</p>
+        <button class="btn btn-primary" id="btn-close">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(async () => {
+  // Safe wrapper for homebridge API calls (handles older versions)
+  const hb = {
+    disableSaveButton: () => {
+      if (typeof homebridge !== 'undefined' && typeof homebridge.disableSaveButton === 'function') {
+        homebridge.disableSaveButton();
+      }
+    },
+    enableSaveButton: () => {
+      if (typeof homebridge !== 'undefined' && typeof homebridge.enableSaveButton === 'function') {
+        homebridge.enableSaveButton();
+      }
+    },
+    showSpinner: () => {
+      if (typeof homebridge !== 'undefined' && typeof homebridge.showSpinner === 'function') {
+        homebridge.showSpinner();
+      }
+    },
+    hideSpinner: () => {
+      if (typeof homebridge !== 'undefined' && typeof homebridge.hideSpinner === 'function') {
+        homebridge.hideSpinner();
+      }
+    },
+    closeSettings: () => {
+      if (typeof homebridge !== 'undefined' && typeof homebridge.closeSettings === 'function') {
+        homebridge.closeSettings();
+      }
+    },
+    toast: {
+      success: (msg, title) => {
+        if (typeof homebridge !== 'undefined' && homebridge.toast && typeof homebridge.toast.success === 'function') {
+          homebridge.toast.success(msg, title);
+        } else {
+          console.log('Success:', msg);
+        }
+      },
+      error: (msg, title) => {
+        if (typeof homebridge !== 'undefined' && homebridge.toast && typeof homebridge.toast.error === 'function') {
+          homebridge.toast.error(msg, title);
+        } else {
+          console.error('Error:', msg);
+          alert(msg);
+        }
+      },
+      warning: (msg, title) => {
+        if (typeof homebridge !== 'undefined' && homebridge.toast && typeof homebridge.toast.warning === 'function') {
+          homebridge.toast.warning(msg, title);
+        } else {
+          console.warn('Warning:', msg);
+        }
+      },
+      info: (msg, title) => {
+        if (typeof homebridge !== 'undefined' && homebridge.toast && typeof homebridge.toast.info === 'function') {
+          homebridge.toast.info(msg, title);
+        } else {
+          console.info('Info:', msg);
+        }
+      },
+    },
+    request: async (path, payload) => {
+      if (typeof homebridge !== 'undefined' && typeof homebridge.request === 'function') {
+        return homebridge.request(path, payload);
+      }
+      throw new Error('Homebridge request API not available');
+    },
+    getPluginConfig: async () => {
+      if (typeof homebridge !== 'undefined' && typeof homebridge.getPluginConfig === 'function') {
+        return homebridge.getPluginConfig();
+      }
+      return [];
+    },
+    updatePluginConfig: async (config) => {
+      if (typeof homebridge !== 'undefined' && typeof homebridge.updatePluginConfig === 'function') {
+        return homebridge.updatePluginConfig(config);
+      }
+    },
+    savePluginConfig: async () => {
+      if (typeof homebridge !== 'undefined' && typeof homebridge.savePluginConfig === 'function') {
+        return homebridge.savePluginConfig();
+      }
+    },
+  };
+
+  // State management
+  const state = {
+    currentStep: 1,
+    authToken: null,
+    devices: [],
+    selectedDevices: new Set(),
+    isSubmitting: false,
+    existingConfig: null,
+  };
+
+  // DOM Elements
+  const elements = {
+    // Steps
+    step0: document.getElementById('step-0'),
+    step1: document.getElementById('step-1'),
+    step1b: document.getElementById('step-1b'),
+    step2: document.getElementById('step-2'),
+    step3: document.getElementById('step-3'),
+    stepSuccess: document.getElementById('step-success'),
+    stepProgress: document.getElementById('step-progress'),
+
+    // Step 0 (existing config)
+    existingDeviceList: document.getElementById('existing-device-list'),
+    btnEditOptions: document.getElementById('btn-edit-options'),
+    btnResync: document.getElementById('btn-resync'),
+
+    // Step 1
+    email: document.getElementById('email'),
+    password: document.getElementById('password'),
+    country: document.getElementById('country'),
+    btnConnect: document.getElementById('btn-connect'),
+
+    // Step 1b (2FA)
+    otpCode: document.getElementById('otp-code'),
+    btnBackToLogin: document.getElementById('btn-back-to-login'),
+    btnVerifyOtp: document.getElementById('btn-verify-otp'),
+
+    // Step 2
+    deviceList: document.getElementById('device-list'),
+    btnBackToAccount: document.getElementById('btn-back-to-account'),
+    btnToOptions: document.getElementById('btn-to-options'),
+
+    // Step 3
+    optTemperature: document.getElementById('opt-temperature'),
+    optHumidity: document.getElementById('opt-humidity'),
+    optAirQuality: document.getElementById('opt-air-quality'),
+    optNightMode: document.getElementById('opt-night-mode'),
+    optAutoMode: document.getElementById('opt-auto-mode'),
+    optFilterStatus: document.getElementById('opt-filter-status'),
+    optPolling: document.getElementById('opt-polling'),
+    btnBackToDevices: document.getElementById('btn-back-to-devices'),
+    btnSave: document.getElementById('btn-save'),
+
+    // Success
+    btnClose: document.getElementById('btn-close'),
+  };
+
+  // Product type codes mapped to friendly names
+  const PRODUCT_TYPES = {
+    '438': 'Dyson Pure Cool Tower (TP04)',
+    '438E': 'Dyson Pure Cool Tower (TP07)',
+    '438K': 'Dyson Pure Cool Tower Formaldehyde (TP09)',
+    '520': 'Dyson Pure Cool Desk (DP04)',
+    '527': 'Dyson Pure Hot+Cool (HP04)',
+    '527E': 'Dyson Pure Hot+Cool (HP07)',
+    '527K': 'Dyson Pure Hot+Cool Formaldehyde (HP09)',
+    '455': 'Dyson Pure Hot+Cool Link (HP02)',
+    '469': 'Dyson Pure Cool Link Desk (DP01)',
+    '475': 'Dyson Pure Cool Link Tower (TP02)',
+    '664': 'Dyson Purifier Big+Quiet Formaldehyde (BP03)',
+    '664E': 'Dyson Purifier Big+Quiet Formaldehyde (BP04)',
+  };
+
+  // Initialize
+  async function init() {
+    // Disable save button until wizard completes
+    hb.disableSaveButton();
+
+    // Load existing config
+    const configArray = await hb.getPluginConfig();
+    if (configArray.length > 0 && configArray[0].devices && configArray[0].devices.length > 0) {
+      // If we have existing devices, show step 0 (existing config view)
+      state.existingConfig = configArray[0];
+      loadExistingConfig(configArray[0]);
+      renderExistingDevices(configArray[0].devices);
+      goToStep(0);
+    } else {
+      // No config, show step 1 (login)
+      goToStep(1);
+    }
+
+    // Bind events
+    bindEvents();
+  }
+
+  function loadExistingConfig(config) {
+    // Pre-fill options from existing config
+    if (config.enableTemperature !== undefined) {
+      elements.optTemperature.checked = config.enableTemperature;
+    }
+    if (config.enableHumidity !== undefined) {
+      elements.optHumidity.checked = config.enableHumidity;
+    }
+    if (config.enableAirQuality !== undefined) {
+      elements.optAirQuality.checked = config.enableAirQuality;
+    }
+    if (config.enableNightMode !== undefined) {
+      elements.optNightMode.checked = config.enableNightMode;
+    }
+    if (config.enableAutoMode !== undefined) {
+      elements.optAutoMode.checked = config.enableAutoMode;
+    }
+    if (config.enableFilterStatus !== undefined) {
+      elements.optFilterStatus.checked = config.enableFilterStatus;
+    }
+    if (config.pollingInterval) {
+      elements.optPolling.value = config.pollingInterval;
+    }
+    if (config.countryCode) {
+      elements.country.value = config.countryCode;
+    }
+
+    // Load devices into state for later use
+    if (config.devices) {
+      state.devices = config.devices.map(d => ({
+        ...d,
+        productName: PRODUCT_TYPES[d.productType] || `Unknown (${d.productType})`,
+      }));
+      state.selectedDevices = new Set(config.devices.map(d => d.serial));
+    }
+  }
+
+  function renderExistingDevices(devices) {
+    elements.existingDeviceList.innerHTML = devices.map(device => `
+      <div class="device-card selected">
+        <div class="d-flex align-items-center">
+          <div class="device-icon">&#127744;</div>
+          <div class="flex-grow-1">
+            <div class="device-name">${escapeHtml(device.name || 'Dyson Device')}</div>
+            <div class="device-type">${escapeHtml(PRODUCT_TYPES[device.productType] || device.productType)}</div>
+            <div class="device-serial">${escapeHtml(device.serial)}</div>
+          </div>
+          <span class="badge bg-success">Configured</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function bindEvents() {
+    // Step 0: Existing config
+    elements.btnEditOptions.addEventListener('click', () => goToStep(3));
+    elements.btnResync.addEventListener('click', () => goToStep(1));
+
+    // Step 1: Connect
+    elements.btnConnect.addEventListener('click', handleConnect);
+    elements.email.addEventListener('keypress', (e) => e.key === 'Enter' && elements.password.focus());
+    elements.password.addEventListener('keypress', (e) => e.key === 'Enter' && handleConnect());
+
+    // Step 1b: 2FA
+    elements.btnBackToLogin.addEventListener('click', () => goToStep(1));
+    elements.btnVerifyOtp.addEventListener('click', handleVerifyOtp);
+    elements.otpCode.addEventListener('keypress', (e) => e.key === 'Enter' && handleVerifyOtp());
+    elements.otpCode.addEventListener('input', (e) => {
+      // Auto-submit when 6 digits entered
+      if (e.target.value.length === 6) {
+        handleVerifyOtp();
+      }
+    });
+
+    // Step 2: Devices
+    elements.btnBackToAccount.addEventListener('click', () => {
+      // Go back to step 0 if we have existing config, otherwise step 1
+      goToStep(state.existingConfig ? 0 : 1);
+    });
+    elements.btnToOptions.addEventListener('click', () => {
+      if (state.selectedDevices.size === 0) {
+        hb.toast.warning('Please select at least one device');
+        return;
+      }
+      goToStep(3);
+    });
+
+    // Step 3: Options
+    elements.btnBackToDevices.addEventListener('click', () => {
+      // Go back to step 0 if we have existing config and didn't re-sync, otherwise step 2
+      if (state.existingConfig && !state.authToken) {
+        goToStep(0);
+      } else {
+        goToStep(2);
+      }
+    });
+    elements.btnSave.addEventListener('click', handleSave);
+
+    // Success
+    elements.btnClose.addEventListener('click', () => hb.closeSettings());
+  }
+
+  function goToStep(step) {
+    // Hide all steps
+    [elements.step0, elements.step1, elements.step1b, elements.step2, elements.step3, elements.stepSuccess].forEach(s => {
+      s.classList.remove('active');
+    });
+
+    // Show target step
+    const stepMap = {
+      0: elements.step0,
+      1: elements.step1,
+      '1b': elements.step1b,
+      2: elements.step2,
+      3: elements.step3,
+      'success': elements.stepSuccess,
+    };
+    stepMap[step].classList.add('active');
+
+    // Update progress indicators
+    const progressSteps = elements.stepProgress.querySelectorAll('li');
+    const connectors = elements.stepProgress.querySelectorAll('.step-connector');
+
+    // Map steps to progress bar position (step 0 shows as step 1 completed)
+    let numericStep;
+    if (step === 0) {
+      numericStep = 1; // Show Account as active for existing config view
+    } else if (step === '1b') {
+      numericStep = 1;
+    } else if (step === 'success') {
+      numericStep = 4;
+    } else {
+      numericStep = step;
+    }
+
+    progressSteps.forEach((li, index) => {
+      const stepNum = index + 1;
+      li.classList.remove('active', 'completed');
+
+      if (stepNum < numericStep) {
+        li.classList.add('completed');
+      } else if (stepNum === numericStep) {
+        li.classList.add('active');
+      }
+    });
+
+    connectors.forEach((conn, index) => {
+      conn.classList.toggle('completed', index < numericStep - 1);
+    });
+
+    state.currentStep = step;
+  }
+
+  function setButtonLoading(button, loading) {
+    const text = button.querySelector('.btn-text');
+    const spinner = button.querySelector('.spinner-border');
+
+    if (loading) {
+      button.disabled = true;
+      if (text) text.classList.add('d-none');
+      if (spinner) spinner.classList.remove('d-none');
+    } else {
+      button.disabled = false;
+      if (text) text.classList.remove('d-none');
+      if (spinner) spinner.classList.add('d-none');
+    }
+  }
+
+  async function handleConnect() {
+    const email = elements.email.value.trim();
+    const password = elements.password.value;
+    const countryCode = elements.country.value;
+
+    if (!email || !password) {
+      hb.toast.error('Please enter your email and password');
+      return;
+    }
+
+    setButtonLoading(elements.btnConnect, true);
+
+    try {
+      const response = await hb.request('/authenticate', {
+        email,
+        password,
+        countryCode,
+      });
+
+      if (response.requires2FA) {
+        hb.toast.info('Check your email for a verification code');
+        goToStep('1b');
+        elements.otpCode.focus();
+      } else {
+        state.authToken = response.token;
+        await fetchDevices();
+      }
+    } catch (error) {
+      hb.toast.error(error.message || 'Authentication failed');
+    } finally {
+      setButtonLoading(elements.btnConnect, false);
+    }
+  }
+
+  async function handleVerifyOtp() {
+    // Prevent duplicate submissions
+    if (state.isSubmitting) {
+      return;
+    }
+
+    const otpCode = elements.otpCode.value.trim();
+
+    if (!otpCode || otpCode.length < 6) {
+      hb.toast.error('Please enter the 6-digit verification code');
+      return;
+    }
+
+    state.isSubmitting = true;
+    setButtonLoading(elements.btnVerifyOtp, true);
+
+    try {
+      const response = await hb.request('/verify-otp', { otpCode });
+      state.authToken = response.token;
+      hb.toast.success('Verification successful!');
+      await fetchDevices();
+    } catch (error) {
+      hb.toast.error(error.message || 'Verification failed');
+      elements.otpCode.value = '';
+      elements.otpCode.focus();
+    } finally {
+      state.isSubmitting = false;
+      setButtonLoading(elements.btnVerifyOtp, false);
+    }
+  }
+
+  async function fetchDevices() {
+    hb.showSpinner();
+
+    try {
+      const response = await hb.request('/get-devices', {
+        token: state.authToken,
+      });
+
+      state.devices = response.devices;
+
+      if (state.devices.length === 0) {
+        hb.toast.warning('No compatible devices found on your account');
+        return;
+      }
+
+      // Pre-select all devices
+      state.selectedDevices = new Set(state.devices.map(d => d.serial));
+
+      renderDeviceList();
+      goToStep(2);
+      hb.toast.success(`Found ${state.devices.length} device(s)!`);
+    } catch (error) {
+      hb.toast.error(error.message || 'Failed to fetch devices');
+      goToStep(1);
+    } finally {
+      hb.hideSpinner();
+    }
+  }
+
+  function renderDeviceList() {
+    elements.deviceList.innerHTML = state.devices.map(device => `
+      <div class="device-card ${state.selectedDevices.has(device.serial) ? 'selected' : ''}"
+           data-serial="${device.serial}">
+        <div class="d-flex align-items-center position-relative">
+          <div class="device-icon">&#127744;</div>
+          <div class="flex-grow-1">
+            <div class="device-name">${escapeHtml(device.name)}</div>
+            <div class="device-type">${escapeHtml(device.productName)}</div>
+            <div class="device-serial">${escapeHtml(device.serial)}</div>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox"
+                   ${state.selectedDevices.has(device.serial) ? 'checked' : ''}>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    // Bind click events to device cards
+    elements.deviceList.querySelectorAll('.device-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const serial = card.dataset.serial;
+        const checkbox = card.querySelector('input[type="checkbox"]');
+
+        if (state.selectedDevices.has(serial)) {
+          state.selectedDevices.delete(serial);
+          card.classList.remove('selected');
+          checkbox.checked = false;
+        } else {
+          state.selectedDevices.add(serial);
+          card.classList.add('selected');
+          checkbox.checked = true;
+        }
+      });
+    });
+  }
+
+  async function handleSave() {
+    setButtonLoading(elements.btnSave, true);
+
+    try {
+      // Build configuration
+      const selectedDevices = state.devices.filter(d => state.selectedDevices.has(d.serial));
+
+      const config = {
+        platform: 'DysonPureCool',
+        name: 'Dyson Pure Cool',
+        countryCode: elements.country.value,
+        devices: selectedDevices.map(device => ({
+          serial: device.serial,
+          name: device.name,
+          productType: device.productType,
+          localCredentials: device.localCredentials,
+        })),
+        enableTemperature: elements.optTemperature.checked,
+        enableHumidity: elements.optHumidity.checked,
+        enableAirQuality: elements.optAirQuality.checked,
+        enableNightMode: elements.optNightMode.checked,
+        enableAutoMode: elements.optAutoMode.checked,
+        enableFilterStatus: elements.optFilterStatus.checked,
+        pollingInterval: parseInt(elements.optPolling.value, 10) || 60,
+      };
+
+      // Update and save config
+      await hb.updatePluginConfig([config]);
+      await hb.savePluginConfig();
+
+      hb.toast.success('Configuration saved!');
+      hb.enableSaveButton();
+      goToStep('success');
+    } catch (error) {
+      hb.toast.error(error.message || 'Failed to save configuration');
+    } finally {
+      setButtonLoading(elements.btnSave, false);
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Initialize the wizard
+  init();
+})();
+</script>

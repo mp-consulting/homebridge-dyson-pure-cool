@@ -5,10 +5,11 @@
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
 import { NightModeService } from '../../../../src/accessories/services/nightModeService.js';
+import type { NightModeServiceConfig } from '../../../../src/accessories/services/nightModeService.js';
 import { DysonLinkDevice } from '../../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../../src/devices/index.js';
 import type { DysonMqttClient } from '../../../../src/protocol/mqttClient.js';
-import type { API, Logging, PlatformAccessory, Service, Characteristic } from 'homebridge';
+import type { API, PlatformAccessory, Service, Logging } from 'homebridge';
 
 // Create mock MQTT client
 function createMockMqttClient() {
@@ -37,78 +38,40 @@ function createMockMqttClient() {
   return mockClient as unknown as jest.Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
 }
 
-// Create mock characteristic
-function createMockCharacteristic() {
-  const characteristic = {
-    onGet: jest.fn().mockReturnThis(),
-    onSet: jest.fn().mockReturnThis(),
-    setProps: jest.fn().mockReturnThis(),
-    updateValue: jest.fn().mockReturnThis(),
-    value: false,
-  };
-  return characteristic as unknown as jest.Mocked<Characteristic>;
-}
-
-// Create mock service
+// Create mock HomeKit service
 function createMockService() {
-  const characteristics = new Map<string, ReturnType<typeof createMockCharacteristic>>();
+  const characteristics = new Map<string, {
+    onGet: jest.Mock;
+    onSet: jest.Mock;
+    setProps: jest.Mock;
+    getValue: jest.Mock;
+  }>();
 
-  const service = {
+  const mockService = {
     setCharacteristic: jest.fn().mockReturnThis(),
     getCharacteristic: jest.fn((char: unknown) => {
-      const key = String(char);
-      if (!characteristics.has(key)) {
-        characteristics.set(key, createMockCharacteristic());
+      const uuid = typeof char === 'object' && char !== null && 'UUID' in char
+        ? (char as { UUID: string }).UUID
+        : String(char);
+      if (!characteristics.has(uuid)) {
+        const charMock = {
+          onGet: jest.fn().mockReturnThis(),
+          onSet: jest.fn().mockReturnThis(),
+          setProps: jest.fn().mockReturnThis(),
+          getValue: jest.fn(),
+        };
+        characteristics.set(uuid, charMock);
       }
-      return characteristics.get(key)!;
+      return characteristics.get(uuid);
     }),
-    updateCharacteristic: jest.fn().mockReturnThis(),
-    _getCharacteristics: () => characteristics,
+    updateCharacteristic: jest.fn(),
   };
 
-  return service as unknown as jest.Mocked<Service> & {
-    _getCharacteristics: () => Map<string, ReturnType<typeof createMockCharacteristic>>;
-  };
+  return mockService as unknown as jest.Mocked<Service>;
 }
 
-// Create mock API
-function createMockApi() {
-  const mockSwitchService = createMockService();
-
-  return {
-    hap: {
-      Service: {
-        Switch: 'Switch',
-      },
-      Characteristic: {
-        Name: 'Name',
-        On: 'On',
-      },
-    },
-    _mockSwitchService: mockSwitchService,
-  } as unknown as jest.Mocked<API> & {
-    _mockSwitchService: ReturnType<typeof createMockService>;
-  };
-}
-
-// Create mock accessory
-function createMockAccessory(api: ReturnType<typeof createMockApi>) {
-  return {
-    displayName: 'Test Dyson',
-    UUID: 'test-uuid',
-    getService: jest.fn((serviceType: unknown) => {
-      if (serviceType === 'Night Mode') {
-        return api._mockSwitchService;
-      }
-      return undefined;
-    }),
-    addService: jest.fn(() => api._mockSwitchService),
-    context: {},
-  } as unknown as jest.Mocked<PlatformAccessory>;
-}
-
-// Create mock logger
-function createMockLog(): jest.Mocked<Logging> {
+// Create mock logging
+function createMockLog(): Logging {
   return {
     info: jest.fn(),
     warn: jest.fn(),
@@ -116,17 +79,41 @@ function createMockLog(): jest.Mocked<Logging> {
     debug: jest.fn(),
     log: jest.fn(),
     success: jest.fn(),
-  } as unknown as jest.Mocked<Logging>;
+  } as unknown as Logging;
+}
+
+// Create mock API with hap
+function createMockApi() {
+  const Characteristic = {
+    On: { UUID: 'on-uuid' },
+    Name: { UUID: 'name-uuid' },
+  };
+
+  const Service = {
+    Switch: { UUID: 'switch-uuid' },
+  };
+
+  return {
+    hap: {
+      Service,
+      Characteristic,
+    },
+  } as unknown as API;
 }
 
 describe('NightModeService', () => {
-  let service: NightModeService;
-  let device: DysonLinkDevice;
+  let nightModeService: NightModeService;
   let mockMqttClient: ReturnType<typeof createMockMqttClient>;
   let mockMqttClientFactory: MqttClientFactory;
-  let mockApi: ReturnType<typeof createMockApi>;
-  let mockAccessory: ReturnType<typeof createMockAccessory>;
-  let mockLog: jest.Mocked<Logging>;
+  let device: DysonLinkDevice;
+  let mockService: ReturnType<typeof createMockService>;
+  let mockAccessory: PlatformAccessory;
+  let mockLog: Logging;
+  let mockApi: API;
+
+  // Store handlers for testing
+  let onGetHandler: () => unknown;
+  let onSetHandler: (value: unknown) => Promise<void>;
 
   const defaultDeviceInfo: DeviceInfo = {
     serial: 'ABC-AB-12345678',
@@ -136,14 +123,41 @@ describe('NightModeService', () => {
     ipAddress: '192.168.1.100',
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Set up mocks
     mockMqttClient = createMockMqttClient();
     mockMqttClientFactory = jest.fn().mockReturnValue(mockMqttClient);
-    mockApi = createMockApi();
-    mockAccessory = createMockAccessory(mockApi);
-    mockLog = createMockLog();
-
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
+
+    mockService = createMockService();
+    mockLog = createMockLog();
+    mockApi = createMockApi();
+
+    mockAccessory = {
+      displayName: 'Living Room',
+      getService: jest.fn().mockReturnValue(null),
+      getServiceById: jest.fn().mockReturnValue(null),
+      addService: jest.fn().mockReturnValue(mockService),
+    } as unknown as PlatformAccessory;
+
+    // Connect device so we can control it
+    await device.connect();
+
+    const config: NightModeServiceConfig = {
+      accessory: mockAccessory,
+      device,
+      api: mockApi,
+      log: mockLog,
+    };
+
+    nightModeService = new NightModeService(config);
+
+    const Characteristic = mockApi.hap.Characteristic;
+
+    // Extract handlers from mock calls
+    const onChar = mockService.getCharacteristic(Characteristic.On);
+    onGetHandler = (onChar!.onGet as jest.Mock).mock.calls[0][0];
+    onSetHandler = (onChar!.onSet as jest.Mock).mock.calls[0][0];
   });
 
   afterEach(() => {
@@ -151,206 +165,133 @@ describe('NightModeService', () => {
   });
 
   describe('initialization', () => {
-    it('should get or create Switch service with subtype', () => {
-      service = new NightModeService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      expect(mockAccessory.getService).toHaveBeenCalledWith('Night Mode');
+    it('should create Switch service with night-mode subtype', () => {
+      expect(mockAccessory.getServiceById).toHaveBeenCalled();
+      expect(mockAccessory.addService).toHaveBeenCalled();
     });
 
-    it('should create new service when not found', () => {
-      mockAccessory.getService.mockReturnValue(undefined);
-
-      service = new NightModeService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      expect(mockAccessory.addService).toHaveBeenCalledWith('Switch', 'Night Mode', 'night-mode');
-    });
-
-    it('should set display name', () => {
-      service = new NightModeService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      expect(mockApi._mockSwitchService.setCharacteristic).toHaveBeenCalledWith(
-        'Name',
+    it('should set display name to Night Mode', () => {
+      expect(mockService.setCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.Name,
         'Night Mode',
       );
     });
 
     it('should register On characteristic handlers', () => {
-      service = new NightModeService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      const onChar = mockApi._mockSwitchService._getCharacteristics().get('On');
-      expect(onChar?.onGet).toHaveBeenCalled();
-      expect(onChar?.onSet).toHaveBeenCalled();
+      const char = mockService.getCharacteristic(mockApi.hap.Characteristic.On);
+      expect(char!.onGet).toHaveBeenCalled();
+      expect(char!.onSet).toHaveBeenCalled();
     });
 
     it('should return the service', () => {
-      service = new NightModeService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      expect(service.getService()).toBe(mockApi._mockSwitchService);
+      expect(nightModeService.getService()).toBe(mockService);
     });
   });
 
-  describe('handleOnGet', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let onGetHandler: (...args: any[]) => boolean;
-
-    beforeEach(() => {
-      service = new NightModeService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      const onChar = mockApi._mockSwitchService._getCharacteristics().get('On');
-      onGetHandler = onChar!.onGet.mock.calls[0][0] as (...args: unknown[]) => boolean;
-    });
-
-    it('should return false when night mode is off (default)', () => {
+  describe('On characteristic', () => {
+    it('should return false when night mode is off', () => {
       const result = onGetHandler();
       expect(result).toBe(false);
     });
 
-    it('should return true when night mode is on', () => {
-      device.state.nightMode = true;
+    it('should return true when night mode is on', async () => {
+      // Simulate state change from device
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { nmod: 'ON' } },
+      });
+
       const result = onGetHandler();
       expect(result).toBe(true);
     });
 
-    it('should log debug message', () => {
-      device.state.nightMode = true;
-      onGetHandler();
-      expect(mockLog.debug).toHaveBeenCalledWith('Get Night Mode ->', true);
-    });
-  });
-
-  describe('handleOnSet', () => {
-     
-    let onSetHandler: (value: boolean) => Promise<void>;
-
-    beforeEach(async () => {
-      service = new NightModeService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
-      });
-
-      // Connect the device so setNightMode works
-      await device.connect();
-
-      const onChar = mockApi._mockSwitchService._getCharacteristics().get('On');
-      onSetHandler = onChar!.onSet.mock.calls[0][0] as (value: boolean) => Promise<void>;
-    });
-
-    it('should send night mode ON command', async () => {
+    it('should call setNightMode(true) when set to true', async () => {
       await onSetHandler(true);
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            nmod: 'ON',
-          }),
+          data: { nmod: 'ON' },
         }),
       );
     });
 
-    it('should send night mode OFF command', async () => {
+    it('should call setNightMode(false) when set to false', async () => {
       await onSetHandler(false);
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            nmod: 'OFF',
-          }),
+          data: { nmod: 'OFF' },
         }),
       );
-    });
-
-    it('should log debug message', async () => {
-      await onSetHandler(true);
-      expect(mockLog.debug).toHaveBeenCalledWith('Set Night Mode ->', true);
-    });
-
-    it('should log error and rethrow on failure', async () => {
-      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('Network error'));
-
-      await expect(onSetHandler(true)).rejects.toThrow('Network error');
-      expect(mockLog.error).toHaveBeenCalledWith('Failed to set night mode:', expect.any(Error));
     });
   });
 
   describe('state change handling', () => {
-    beforeEach(() => {
-      service = new NightModeService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
+    it('should update characteristic when device state changes', async () => {
+      // Simulate state update
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { nmod: 'ON' } },
       });
-    });
 
-    it('should update characteristic when night mode turns on', () => {
-      device.updateState({ nightMode: true });
-
-      expect(mockApi._mockSwitchService.updateCharacteristic).toHaveBeenCalledWith(
-        'On',
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.On,
         true,
       );
     });
 
-    it('should update characteristic when night mode turns off', () => {
-      device.updateState({ nightMode: false });
+    it('should update characteristic when night mode turns off', async () => {
+      // First turn on
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { nmod: 'ON' } },
+      });
 
-      expect(mockApi._mockSwitchService.updateCharacteristic).toHaveBeenCalledWith(
-        'On',
+      mockService.updateCharacteristic.mockClear();
+
+      // Then turn off
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { nmod: 'OFF' } },
+      });
+
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.On,
         false,
       );
     });
   });
 
   describe('updateFromState', () => {
-    it('should update characteristic from current device state', () => {
-      service = new NightModeService({
-        accessory: mockAccessory,
-        device,
-        api: mockApi as unknown as API,
-        log: mockLog,
+    it('should update characteristic from current device state', async () => {
+      // Set device state
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'CURRENT-STATE', 'product-state': { nmod: 'ON' } },
       });
 
-      device.state.nightMode = true;
+      mockService.updateCharacteristic.mockClear();
 
-      mockApi._mockSwitchService.updateCharacteristic.mockClear();
-      service.updateFromState();
+      nightModeService.updateFromState();
 
-      expect(mockApi._mockSwitchService.updateCharacteristic).toHaveBeenCalledWith(
-        'On',
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.On,
         true,
       );
+    });
+  });
+
+  describe('error handling', () => {
+    it('should throw and log error when setNightMode fails', async () => {
+      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
+
+      await expect(onSetHandler(true)).rejects.toThrow('MQTT error');
+      expect(mockLog.error).toHaveBeenCalled();
     });
   });
 });

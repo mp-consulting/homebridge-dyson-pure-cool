@@ -96,13 +96,15 @@ Dyson WiFi-enabled devices communicate via **local MQTT protocol**. Each device 
 | 358 | PH01 (Pure Humidify+Cool) | Fan, Humidity, Air Quality |
 | 438 | TP04 (Pure Cool Tower) | Fan, Air Quality |
 | 438E | TP07 (Purifier Cool) | Fan, Air Quality, HEPA |
-| 455 | TP02 (Pure Cool Link Tower) | Fan, Air Quality |
+| 455 | HP02 (Pure Hot+Cool Link) | Fan, Heat, Air Quality |
 | 469 | BP01 (Pure Cool Me) | Fan (personal) |
 | 475 | DP04 (Pure Cool Desk) | Fan, Air Quality |
 | 520 | PH03/PH04 (Purifier Humidify+Cool) | Fan, Humidity, Air Quality |
 | 527 | HP04 (Pure Hot+Cool) | Fan, Heat, Air Quality |
 | 527E | HP07 (Purifier Hot+Cool) | Fan, Heat, Air Quality |
 | 664 | BP03-06 (Big+Quiet) | Fan, Air Quality, Large room |
+
+> **Note:** Product type 455 was previously documented as TP02 but confirmed via Dyson Mobile App API capture (2026-01-13) to be HP02 (Pure Hot+Cool Link).
 
 ### Feature Matrix
 
@@ -218,6 +220,76 @@ Dyson WiFi-enabled devices communicate via **local MQTT protocol**. Each device 
 2. Firmware bugs causing connection pool exhaustion
 3. Two-factor authentication complexity
 4. Different protocol versions across device generations
+
+---
+
+## 7. Cloud API Reference (from Mobile App Capture)
+
+**Date:** 2026-01-13
+**Source:** Dyson iOS App traffic capture via Proxyman
+
+### API Base URL
+`https://appapi.cp.dyson.com`
+
+### Key Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/v3/manifest?market={CC}&locale={locale}` | GET | Device list with credentials |
+| `/v2/authorize/iot-credentials` | POST | AWS IoT credentials for cloud MQTT |
+| `/v1/messageprocessor/devices/{serial}/connectionstatus` | GET | Device connection status |
+| `/v1/messageprocessor/devices/{serial}/environmentdailyhistory` | GET | Historical sensor data |
+| `/v1/environment/devices/{serial}/data?language={locale}` | GET | Current outdoor AQI |
+| `/v1/machine/{serial}/timezone` | GET | Device timezone |
+| `/v1/supportedmarket/{CC}` | GET | Market features |
+
+### Device Manifest Response Structure
+
+```json
+{
+  "serialNumber": "PT4-EU-JFA0564A",
+  "name": "",
+  "type": "455",
+  "model": "HP02",
+  "category": "ec",
+  "connectionCategory": "wifiOnly",
+  "productName": "Dyson Pure Hot + Cool™ Link",
+  "connectedConfiguration": {
+    "mqtt": {
+      "remoteBrokerType": "wss",
+      "localBrokerCredentials": "<base64-encoded-credentials>",
+      "mqttRootTopicLevel": "455"
+    },
+    "firmware": {
+      "version": "21.04.03",
+      "autoUpdateEnabled": true,
+      "capabilities": ["Scheduling", "EnvironmentalData"]
+    }
+  }
+}
+```
+
+### IoT Credentials Response
+
+```json
+{
+  "IoTCredentials": {
+    "ClientId": "443e1874-0a18-4d77-8cae-45db734e006e",
+    "TokenKey": "token",
+    "TokenValue": "443e1874-...",
+    "TokenSignature": "<signature>",
+    "CustomAuthorizerName": "cld-iot-credentials-lambda-authorizer"
+  },
+  "Endpoint": "a1u2wvl3e2lrc4-ats.iot.eu-west-1.amazonaws.com"
+}
+```
+
+### Key Insights
+
+1. **localBrokerCredentials**: Pre-processed credential for local MQTT - use directly
+2. **mqttRootTopicLevel**: Confirms topic format `{type}/{serial}/...`
+3. **Cloud MQTT**: Uses AWS IoT WebSocket with custom authorizer
+4. **Connection Categories**: `wifiOnly` (connected), `nonConnected` (no WiFi)
 
 ---
 

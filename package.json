@@ -47,6 +47,7 @@
     "watch": "npm run build && npm link && nodemon"
   },
   "dependencies": {
+    "@homebridge/plugin-ui-utils": "^1.0.3",
     "bonjour-service": "^1.3.0",
     "homebridge-lib": "^7.1.12",
     "mqtt": "^5.14.1"

@@ -47,7 +47,7 @@ export interface DeviceState {
   nightMode: boolean;
 
   // Continuous monitoring
-  /** Continuous monitoring enabled (sensors active when fan off) */
+  /** Continuous monitoring enabled (sensors active even when fan is off) */
   continuousMonitoring?: boolean;
 
   // Airflow direction (for models that support it)

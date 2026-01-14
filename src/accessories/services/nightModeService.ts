@@ -27,11 +27,10 @@ export interface NightModeServiceConfig {
 }
 
 /**
- * NightModeService handles the Night Mode Switch HomeKit service
+ * NightModeService handles the Switch HomeKit service for night mode
  *
- * Maps HomeKit On characteristic to Dyson night mode (nmod):
- * - On = true ↔ nmod: "ON"
- * - On = false ↔ nmod: "OFF"
+ * Maps HomeKit characteristics to Dyson device state:
+ * - On (boolean) ↔ nightMode (boolean)
  */
 export class NightModeService {
   private readonly service: Service;
@@ -47,9 +46,9 @@ export class NightModeService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Create a Switch service for night mode
-    // Use subtype to distinguish from other switch services
-    this.service = config.accessory.getService('Night Mode') ||
+    // Create a Switch service with a unique subtype to distinguish from other switches
+    const existingService = config.accessory.getServiceById(Service.Switch, 'night-mode');
+    this.service = existingService ||
       config.accessory.addService(Service.Switch, 'Night Mode', 'night-mode');
 
     // Set display name
@@ -91,11 +90,11 @@ export class NightModeService {
    * @param value - true to enable night mode, false to disable
    */
   private async handleOnSet(value: CharacteristicValue): Promise<void> {
-    const nightMode = value as boolean;
-    this.log.debug('Set Night Mode ->', nightMode);
+    const enabled = value as boolean;
+    this.log.debug('Set Night Mode ->', enabled);
 
     try {
-      await this.device.setNightMode(nightMode);
+      await this.device.setNightMode(enabled);
     } catch (error) {
       this.log.error('Failed to set night mode:', error);
       throw error;
@@ -107,16 +106,14 @@ export class NightModeService {
    * Updates HomeKit characteristic to reflect current device state
    */
   private handleStateChange(state: DeviceState): void {
-    const Characteristic = this.api.hap.Characteristic;
+    this.log.debug('Night mode state changed ->', state.nightMode);
 
-    this.service.updateCharacteristic(
-      Characteristic.On,
-      state.nightMode,
-    );
+    const Characteristic = this.api.hap.Characteristic;
+    this.service.updateCharacteristic(Characteristic.On, state.nightMode);
   }
 
   /**
-   * Update characteristics from current device state
+   * Update characteristic from current device state
    * Call this after connecting to sync HomeKit with device
    */
   updateFromState(): void {

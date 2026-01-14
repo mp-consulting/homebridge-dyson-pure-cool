@@ -279,6 +279,19 @@ export class DysonLinkDevice extends DysonDevice {
   }
 
   /**
+   * Set heating mode on or off (HP-series only)
+   * Alias for setHeating with feature check.
+   *
+   * @param on - True to enable heating, false to disable
+   */
+  async setHeatingMode(on: boolean): Promise<void> {
+    if (!this.supportedFeatures.heating) {
+      throw new Error('Heating not supported on this device');
+    }
+    await this.setHeating(on);
+  }
+
+  /**
    * Set target temperature for heating (HP models only)
    *
    * @param celsius - Target temperature in Celsius (1-37)

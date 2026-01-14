@@ -27,11 +27,10 @@ export interface ContinuousMonitoringServiceConfig {
 }
 
 /**
- * ContinuousMonitoringService handles the Continuous Monitoring Switch HomeKit service
+ * ContinuousMonitoringService handles the Switch HomeKit service for continuous monitoring
  *
- * Maps HomeKit On characteristic to Dyson continuous monitoring (rhtm):
- * - On = true ↔ rhtm: "ON"
- * - On = false ↔ rhtm: "OFF"
+ * Maps HomeKit characteristics to Dyson device state:
+ * - On (boolean) ↔ continuousMonitoring (boolean)
  */
 export class ContinuousMonitoringService {
   private readonly service: Service;
@@ -47,9 +46,9 @@ export class ContinuousMonitoringService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Create a Switch service for continuous monitoring
-    // Use subtype to distinguish from other switch services
-    this.service = config.accessory.getService('Continuous Monitoring') ||
+    // Create a Switch service with a unique subtype to distinguish from other switches
+    const existingService = config.accessory.getServiceById(Service.Switch, 'continuous-monitoring');
+    this.service = existingService ||
       config.accessory.addService(Service.Switch, 'Continuous Monitoring', 'continuous-monitoring');
 
     // Set display name
@@ -82,7 +81,7 @@ export class ContinuousMonitoringService {
    */
   private handleOnGet(): CharacteristicValue {
     const state = this.device.getState();
-    // Default to true if undefined (most users want sensors active)
+    // Default to true if not explicitly set (most users want this on)
     const enabled = state.continuousMonitoring ?? true;
     this.log.debug('Get Continuous Monitoring ->', enabled);
     return enabled;
@@ -109,19 +108,16 @@ export class ContinuousMonitoringService {
    * Updates HomeKit characteristic to reflect current device state
    */
   private handleStateChange(state: DeviceState): void {
-    const Characteristic = this.api.hap.Characteristic;
-
-    // Default to true if undefined
+    // Default to true if not explicitly set
     const enabled = state.continuousMonitoring ?? true;
+    this.log.debug('Continuous monitoring state changed ->', enabled);
 
-    this.service.updateCharacteristic(
-      Characteristic.On,
-      enabled,
-    );
+    const Characteristic = this.api.hap.Characteristic;
+    this.service.updateCharacteristic(Characteristic.On, enabled);
   }
 
   /**
-   * Update characteristics from current device state
+   * Update characteristic from current device state
    * Call this after connecting to sync HomeKit with device
    */
   updateFromState(): void {

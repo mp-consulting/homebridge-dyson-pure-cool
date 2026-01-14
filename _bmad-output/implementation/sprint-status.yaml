@@ -2,54 +2,145 @@
 # Track current sprint progress
 
 sprint:
-  number: 3
-  goal: "Complete device discovery layer and establish device foundation"
+  number: 5
+  goal: "Complete Advanced Features, Air Quality, Filter Monitoring & Custom UI"
   start_date: 2025-01-14
   status: active
+  course_correction:
+    date: 2025-01-14
+    reason: "Urgent need for beautiful custom UI - default schema too complex for users"
+    decision: "Absorb - add E8-S4 Custom UI (5 pts) to sprint"
+    impact: "Sprint increased from 14 to 19 points"
 
-epic:
-  id: E2
-  title: Device Discovery & Connection
-  total_points: 13
-  sprint_points: 2
+epics:
+  - id: E5
+    title: Advanced Fan Features
+    status: complete
+    remaining: []
+  - id: E6
+    title: Air Quality Monitoring
+    status: in_progress
+    remaining: [E6-S1, E6-S2, E6-S3, E6-S4]
+  - id: E7
+    title: Filter & Maintenance
+    status: in_progress
+    remaining: [E7-S1, E7-S2]
+  - id: E8
+    title: Documentation & Release
+    status: in_progress
+    remaining: []
+    completed: [E8-S4]
 
 stories:
-  - id: E2-S4
-    title: Implement Automatic Reconnection
-    status: completed
+  # E5 - Advanced Fan Features
+  - id: E5-S2
+    title: Implement Night Mode
+    status: done
     points: 2
-    priority: P0
+    priority: P1
     assignee: dev
-    notes: "Exponential backoff (1s-16s), max 5 attempts, events for offline/reconnect/reconnectFailed"
+    notes: "NightModeService with Switch service, nmod ON/OFF"
 
-  - id: E3-S1
-    title: Implement Base Device Class
-    status: completed
-    points: 2
-    priority: P0
+  - id: E5-S3
+    title: Implement Continuous Monitoring
+    status: done
+    points: 1
+    priority: P2
     assignee: dev
-    notes: "DysonDevice abstract class with MQTT client, state management, event emission"
+    notes: "ContinuousMonitoringService with Switch service, rhtm ON/OFF"
 
-  - id: E3-S2
-    title: Implement Message Codec
-    status: completed
+  - id: E5-S4
+    title: Implement Heating Support (HP-series)
+    status: done
+    points: 3
+    priority: P1
+    assignee: dev
+    notes: "HeaterCoolerService for HP02/HP04/HP07, hmod HEAT/OFF, hmax temp"
+
+  # E6 - Air Quality Monitoring
+  - id: E6-S1
+    title: Implement Air Quality Service
+    status: todo
     points: 2
+    priority: P1
+    assignee: dev
+    notes: "AirQualitySensor service, AQI from PM2.5"
+
+  - id: E6-S2
+    title: Add PM2.5 Density
+    status: todo
+    points: 1
+    priority: P1
+    assignee: dev
+    notes: "PM2_5Density characteristic, direct from pm25 field"
+
+  - id: E6-S3
+    title: Add PM10 Density
+    status: todo
+    points: 1
+    priority: P2
+    assignee: dev
+    notes: "PM10Density characteristic, direct from pm10 field"
+
+  - id: E6-S4
+    title: Add VOC Index
+    status: todo
+    points: 1
+    priority: P2
+    assignee: dev
+    notes: "VOCDensity characteristic, from vact field"
+
+  # E7 - Filter & Maintenance
+  - id: E7-S1
+    title: Implement Filter Service
+    status: todo
+    points: 2
+    priority: P2
+    assignee: dev
+    notes: "FilterMaintenance service, FilterLifeLevel, FilterChangeIndication"
+
+  - id: E7-S2
+    title: Parse Filter State
+    status: todo
+    points: 1
+    priority: P2
+    assignee: dev
+    notes: "Parse fltf, cflr, filf in MessageCodec"
+
+  # E8 - Documentation & Release (Course Correction Addition)
+  - id: E8-S4
+    title: Implement Custom Homebridge UI
+    status: done
+    points: 5
     priority: P0
     assignee: dev
-    notes: "MessageCodec class - encodes commands, decodes state, speed/temp conversion, 62 tests"
+    notes: |
+      Wizard-style custom UI with homebridge-ui + Bootstrap:
+      - Step 1: Dyson cloud login (email/password, 2FA support)
+      - Step 2: Device selection (auto-fetch from cloud)
+      - Step 3: Per-device options configuration
+      - Beautiful Bootstrap styling
+      - Also update config.schema.json as fallback
+      COMPLETED: Full implementation with server.js and public/index.html
 
 metrics:
-  total_points: 8
-  completed_points: 6
+  total_points: 19
+  completed_points: 11
   in_progress_points: 0
-  velocity_target: 8
-  sprint_2_velocity: 8
+  velocity_target: 19
+  sprint_4_velocity: 10
+  sprint_3_velocity: 13
 
 board:
-  todo: [E2-S6]
+  todo: [E6-S1, E6-S2, E6-S3, E6-S4, E7-S1, E7-S2]
   in_progress: []
   in_review: []
-  done: [E2-S4, E3-S1, E3-S2]
+  done: [E5-S2, E5-S3, E5-S4, E8-S4]
+
+test_coverage:
+  total_tests: 379
+  passing: 379
+  failing: 0
 
 definition_of_done:
   - Code compiles with zero TypeScript errors
@@ -61,15 +152,25 @@ definition_of_done:
 blockers: []
 
 dependencies:
-  - "E2-S6 depends on E3-S1 (Base Device Class)"
+  - "E6-S2/S3/S4 depend on E6-S1 (AirQualityService base)"
+  - "E7-S1 depends on E7-S2 (filter parsing)"
+  - "E5-S4 (Heating) only for HP-series devices"
 
 notes:
-  - "Sprint 3 started on 2025-01-14"
-  - "E2-S5 (Manual Credentials, 1pt P1) deferred - not critical path"
-  - "Focus: Finish E2 and start E3 device layer"
+  - "Sprint 5 started on 2025-01-14"
+  - "Course correction: Added E8-S4 Custom UI (5 pts) - urgent UX need"
+  - "Ambitious sprint: 19 points (well above average velocity)"
+  - "Goal: Complete E5, E6, E7 + Custom UI"
+  - "E5 completed! E8-S4 prioritized as P0 for immediate implementation"
 
 previous_sprint:
-  number: 2
-  epic: E2
-  velocity: 8
+  number: 4
+  epics: [E2, E4, E5]
+  velocity: 10
   status: completed
+  accomplishments:
+    - "Epic 2: Device Discovery & Connection - COMPLETE"
+    - "Epic 4: Environmental Sensors - COMPLETE"
+    - "E5-S1: Auto Mode implemented"
+    - "330 unit tests passing"
+    - "DeviceManager orchestrates full discovery flow"

@@ -5,14 +5,19 @@
 | **Epic ID** | E5 |
 | **Title** | Advanced Fan Features |
 | **Priority** | P1 |
-| **Estimated Points** | 5 |
-| **Status** | Ready |
+| **Estimated Points** | 8 |
+| **Status** | Complete ✅ |
+| **Completed** | E5-S1, E5-S2, E5-S3, E5-S4 (8 pts) |
+| **Includes** | Auto mode, Night mode, Continuous monitoring, HP-series Heating |
 
 ---
 
 ## Description
 
-Implement advanced fan features including auto mode, night mode, and oscillation angle control. These features enhance the user experience beyond basic fan control.
+Implement advanced fan features including auto mode, night mode, oscillation angle control, and **heating support for HP-series devices** (HP02/455, HP04/527, HP07/527E). These features enhance the user experience beyond basic fan control.
+
+### HP02 Heating Support
+The HP02 (product type 455) has heating capability. This epic includes adding HeaterCooler service support for HP-series devices.
 
 ## Value Statement
 
@@ -138,3 +143,62 @@ Dyson field: `rhtm` (continuous monitoring: ON, OFF)
 
 #### Files to Create/Modify
 - `src/accessories/services/continuousMonitoringService.ts` - Create
+
+---
+
+### E5-S4: Implement Heating Support (HP-series)
+
+| Field | Value |
+|-------|-------|
+| **Story ID** | E5-S4 |
+| **Points** | 3 |
+| **Priority** | P1 |
+
+#### User Story
+As a user with an HP-series device (HP02, HP04, HP07), I want heating control so that I can heat my room via HomeKit.
+
+#### Acceptance Criteria
+- [ ] HeaterCooler service for HP-series devices
+- [ ] CurrentHeaterCoolerState characteristic (INACTIVE, IDLE, HEATING, COOLING)
+- [ ] TargetHeaterCoolerState characteristic (AUTO, HEAT, COOL)
+- [ ] HeatingThresholdTemperature for target temp
+- [ ] Sends `hmod: "HEAT"` / `hmod: "OFF"` and `hmax` for temp
+- [ ] State syncs from device
+- [ ] Only enabled for HP-series product types (455, 527, 527E)
+
+#### Technical Notes
+```typescript
+class HeaterCoolerService {
+  constructor(accessory: PlatformAccessory, device: DysonLinkDevice);
+
+  // Target temp: 1°C - 37°C
+  // Dyson uses Kelvin * 10: (celsius + 273.15) * 10
+  private handleHeatingThresholdSet(value: CharacteristicValue): void {
+    const celsius = value as number;
+    this.device.setTargetTemperature(celsius);
+  }
+
+  private handleTargetStateSet(value: CharacteristicValue): void {
+    // 0 = AUTO, 1 = HEAT, 2 = COOL
+    if (value === 1) {
+      this.device.setHeatingMode(true);
+    } else {
+      this.device.setHeatingMode(false);
+    }
+  }
+}
+```
+
+Dyson fields:
+- `hmod`: HEAT, OFF (heating mode)
+- `hmax`: 2740-3100 (target temp in Kelvin × 10)
+
+Product types with heating:
+- 455 (HP02 Pure Hot+Cool Link) - **confirmed via API capture**
+- 527 (HP04 Pure Hot+Cool)
+- 527E (HP07 Purifier Hot+Cool)
+
+#### Files to Create/Modify
+- `src/accessories/services/heaterCoolerService.ts` - Create
+- `src/devices/dysonLinkDevice.ts` - Add heating methods
+- `src/accessories/dysonLinkAccessory.ts` - Conditionally add service

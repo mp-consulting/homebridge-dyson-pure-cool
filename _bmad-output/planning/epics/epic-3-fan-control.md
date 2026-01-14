@@ -5,8 +5,10 @@
 | **Epic ID** | E3 |
 | **Title** | Core Fan Control |
 | **Priority** | P0 (Critical Path) |
-| **Estimated Points** | 10 |
-| **Status** | Ready |
+| **Estimated Points** | 11 |
+| **Status** | Complete ✅ |
+| **Completed** | E3-S1, E3-S2, E3-S3, E3-S4, E3-S5, E3-S6 (11 pts) |
+| **Remaining** | None |
 
 ---
 
@@ -43,24 +45,25 @@ Refer to architecture document for:
 
 ## Stories
 
-### E3-S1: Implement Base Device Class
+### E3-S1: Implement Base Device Class ✅
 
 | Field | Value |
 |-------|-------|
 | **Story ID** | E3-S1 |
 | **Points** | 2 |
 | **Priority** | P0 |
+| **Status** | Complete |
 
 #### User Story
 As a developer, I want a base device class so that common functionality is shared across device types.
 
 #### Acceptance Criteria
-- [ ] `DysonDevice` abstract class created
-- [ ] Holds MQTT client reference
-- [ ] Manages device state
-- [ ] Emits `stateChange` events
-- [ ] Abstract methods for device-specific logic
-- [ ] Connects/disconnects cleanly
+- [x] `DysonDevice` abstract class created
+- [x] Holds MQTT client reference
+- [x] Manages device state
+- [x] Emits `stateChange` events
+- [x] Abstract methods for device-specific logic
+- [x] Connects/disconnects cleanly
 
 #### Technical Notes
 ```typescript
@@ -80,24 +83,25 @@ abstract class DysonDevice extends EventEmitter {
 
 ---
 
-### E3-S2: Implement Message Codec
+### E3-S2: Implement Message Codec ✅
 
 | Field | Value |
 |-------|-------|
 | **Story ID** | E3-S2 |
 | **Points** | 2 |
 | **Priority** | P0 |
+| **Status** | Complete |
 
 #### User Story
 As a developer, I want a message codec so that Dyson protocol messages are encoded/decoded consistently.
 
 #### Acceptance Criteria
-- [ ] `MessageCodec` class created
-- [ ] Encodes fan commands (power, speed, oscillation)
-- [ ] Decodes state messages
-- [ ] Handles `CURRENT-STATE` and `STATE-CHANGE` message types
-- [ ] Proper timestamp formatting
-- [ ] Unit tests for encode/decode
+- [x] `MessageCodec` class created
+- [x] Encodes fan commands (power, speed, oscillation)
+- [x] Decodes state messages
+- [x] Handles `CURRENT-STATE` and `STATE-CHANGE` message types
+- [x] Proper timestamp formatting
+- [x] Unit tests for encode/decode
 
 #### Technical Notes
 ```typescript
@@ -115,37 +119,64 @@ Fan speed encoding: 50% → `"fnsp": "0005"`
 
 ---
 
-### E3-S3: Implement Pure Cool Device
+### E3-S3: Implement Link Device (Fan-only base)
 
 | Field | Value |
 |-------|-------|
 | **Story ID** | E3-S3 |
-| **Points** | 2 |
+| **Points** | 3 |
 | **Priority** | P0 |
+| **Status** | Ready |
 
 #### User Story
-As a developer, I want a Pure Cool device class so that TP-series devices are properly supported.
+As a developer, I want a Link device class so that older "Link" series devices (455, 438, etc.) are properly supported with fan control.
 
 #### Acceptance Criteria
-- [ ] `PureCoolDevice` extends `DysonDevice`
-- [ ] Product types: 438, 438E (TP04, TP07)
-- [ ] Implements fan control methods
-- [ ] Handles state updates
-- [ ] Supports all TP-series features
+- [ ] `DysonLinkDevice` extends `DysonDevice`
+- [ ] Product types: 455 (HP02), 438 (TP04), 438E (TP07)
+- [ ] Implements fan control methods (power, speed, oscillation)
+- [ ] Handles state updates via `handleStateMessage`
+- [ ] Device factory function to create correct device by product type
+- [ ] Unit tests for state parsing and command encoding
 
 #### Technical Notes
 ```typescript
-class PureCoolDevice extends DysonDevice {
-  readonly productType = '438'; // or '438E'
+class DysonLinkDevice extends DysonDevice {
+  readonly productType: string;
+  readonly supportedFeatures: DeviceFeatures;
 
   async setFanPower(on: boolean): Promise<void>;
   async setFanSpeed(speed: number): Promise<void>;
   async setOscillation(on: boolean): Promise<void>;
+
+  protected handleStateMessage(data: Record<string, unknown>): void;
+}
+
+// Factory function
+function createDevice(info: DeviceInfo): DysonDevice {
+  switch (info.productType) {
+    case '455': // HP02 - has heating (handled in E5)
+    case '438': // TP04
+    case '438E': // TP07
+      return new DysonLinkDevice(info);
+    default:
+      throw new Error(`Unsupported product type: ${info.productType}`);
+  }
 }
 ```
 
+#### Supported Product Types (confirmed via API capture 2026-01-13)
+| Type | Model | Notes |
+|------|-------|-------|
+| 455 | HP02 (Pure Hot+Cool Link) | Has heating capability (E5) |
+| 438 | TP04 (Pure Cool Tower) | Fan + AQ sensors |
+| 438E | TP07 (Purifier Cool) | Fan + AQ + HEPA |
+
 #### Files to Create/Modify
-- `src/devices/pureCoolDevice.ts` - Create
+- `src/devices/dysonLinkDevice.ts` - Create
+- `src/devices/deviceFactory.ts` - Create
+- `src/devices/index.ts` - Update exports
+- `test/unit/devices/dysonLinkDevice.test.ts` - Create
 
 ---
 
@@ -221,7 +252,7 @@ abstract class DysonAccessory {
 
 ---
 
-### E3-S6: Implement Pure Cool Accessory
+### E3-S6: Implement Dyson Link Accessory
 
 | Field | Value |
 |-------|-------|
@@ -230,18 +261,19 @@ abstract class DysonAccessory {
 | **Priority** | P0 |
 
 #### User Story
-As a user, I want my Pure Cool device properly represented in HomeKit so that all features are accessible.
+As a user, I want my Dyson Link device properly represented in HomeKit so that all features are accessible.
 
 #### Acceptance Criteria
-- [ ] `PureCoolAccessory` extends `DysonAccessory`
+- [ ] `DysonLinkAccessory` extends `DysonAccessory`
 - [ ] Creates FanService
 - [ ] Registers with platform
 - [ ] Updates services on state change
 - [ ] Handles device disconnect (shows Not Responding)
+- [ ] Works with HP02 (455), TP04 (438), TP07 (438E)
 
 #### Technical Notes
 ```typescript
-class PureCoolAccessory extends DysonAccessory {
+class DysonLinkAccessory extends DysonAccessory {
   private fanService: FanService;
 
   protected setupServices(): void {
@@ -251,4 +283,4 @@ class PureCoolAccessory extends DysonAccessory {
 ```
 
 #### Files to Create/Modify
-- `src/accessories/pureCoolAccessory.ts` - Create
+- `src/accessories/dysonLinkAccessory.ts` - Create

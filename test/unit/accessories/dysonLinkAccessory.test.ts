@@ -90,6 +90,7 @@ function createMockApi() {
         FilterMaintenance: 'FilterMaintenance',
         Thermostat: 'Thermostat',
         HumidifierDehumidifier: 'HumidifierDehumidifier',
+        HeaterCooler: 'HeaterCooler',
       },
       Characteristic: {
         Name: 'Name',
@@ -120,6 +121,9 @@ function createMockApi() {
         WaterLevel: 'WaterLevel',
         TargetFanState: 'TargetFanState',
         CurrentFanState: 'CurrentFanState',
+        CurrentHeaterCoolerState: 'CurrentHeaterCoolerState',
+        TargetHeaterCoolerState: 'TargetHeaterCoolerState',
+        HeatingThresholdTemperature: 'HeatingThresholdTemperature',
       },
     },
     _mockFanService: mockFanService,

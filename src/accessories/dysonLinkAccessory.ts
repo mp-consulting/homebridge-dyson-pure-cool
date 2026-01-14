@@ -23,6 +23,7 @@ import { FilterService } from './services/filterService.js';
 import { ThermostatService } from './services/thermostatService.js';
 import { HumidifierControlService } from './services/humidifierControlService.js';
 import { JetFocusService } from './services/jetFocusService.js';
+import { HeaterCoolerService } from './services/heaterCoolerService.js';
 import type { DysonLinkDevice } from '../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../devices/types.js';
 
@@ -65,7 +66,7 @@ export interface DysonLinkAccessoryConfig {
  * - Air quality sensors (PM2.5, PM10, VOC, NO2)
  * - Filter maintenance status
  * - Night mode and continuous monitoring switches
- * - Thermostat for HP models (heating control)
+ * - Thermostat/HeaterCooler for HP models (heating control)
  * - Humidifier control for PH models
  * - Jet Focus (front airflow) switch
  */
@@ -80,6 +81,7 @@ export class DysonLinkAccessory extends DysonAccessory {
   private thermostatService?: ThermostatService;
   private humidifierControlService?: HumidifierControlService;
   private jetFocusService?: JetFocusService;
+  private heaterCoolerService?: HeaterCoolerService;
 
   private options: DeviceOptions = {};
 
@@ -103,6 +105,8 @@ export class DysonLinkAccessory extends DysonAccessory {
 
   /**
    * Set up device-specific services based on device features
+   *
+   * Creates all HomeKit services based on device features.
    */
   protected setupServices(): void {
     const linkDevice = this.device as DysonLinkDevice;
@@ -179,7 +183,18 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
+    // Create HeaterCoolerService for HP-series devices (alternative heating control)
+    if (features.heating) {
+      this.heaterCoolerService = new HeaterCoolerService({
+        accessory: this.accessory,
+        device: linkDevice,
+        api: this.api,
+        log: this.log,
+      });
+    }
+
     // Create ThermostatService for HP models (heating)
+    // Note: Both HeaterCooler and Thermostat are available - users can choose in HomeKit
     if (features.heating) {
       this.thermostatService = new ThermostatService({
         accessory: this.accessory,
@@ -254,6 +269,7 @@ export class DysonLinkAccessory extends DysonAccessory {
     this.thermostatService?.updateFromState();
     this.humidifierControlService?.updateFromState();
     this.jetFocusService?.updateFromState();
+    this.heaterCoolerService?.updateFromState();
     this.log.info('DysonLinkAccessory: Device reconnected, state synced');
   }
 
@@ -293,17 +309,10 @@ export class DysonLinkAccessory extends DysonAccessory {
   }
 
   /**
-   * Get the AirQualityService instance (if enabled)
+   * Get the HeaterCoolerService instance (if enabled)
    */
-  getAirQualityService(): AirQualityService | undefined {
-    return this.airQualityService;
-  }
-
-  /**
-   * Get the FilterService instance (if enabled)
-   */
-  getFilterService(): FilterService | undefined {
-    return this.filterService;
+  getHeaterCoolerService(): HeaterCoolerService | undefined {
+    return this.heaterCoolerService;
   }
 
   /**
@@ -325,5 +334,19 @@ export class DysonLinkAccessory extends DysonAccessory {
    */
   getJetFocusService(): JetFocusService | undefined {
     return this.jetFocusService;
+  }
+
+  /**
+   * Get the AirQualityService instance (if device supports air quality)
+   */
+  getAirQualityService(): AirQualityService | undefined {
+    return this.airQualityService;
+  }
+
+  /**
+   * Get the FilterService instance (if device has filters)
+   */
+  getFilterService(): FilterService | undefined {
+    return this.filterService;
   }
 }

@@ -62,37 +62,28 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
   }
 
   /**
-   * This is an example method showing how to register discovered accessories.
+   * Discover and register devices from the platform configuration.
    * Accessories must only be registered once, previously created accessories
    * must not be registered again to prevent "duplicate UUID" errors.
    */
   discoverDevices() {
-    // EXAMPLE ONLY
-    // A real plugin you would discover accessories from the local network, cloud services
-    // or a user-defined array in the platform config.
-    const exampleDevices = [
-      {
-        exampleUniqueId: 'ABCD',
-        exampleDisplayName: 'Bedroom',
-      },
-      {
-        exampleUniqueId: 'EFGH',
-        exampleDisplayName: 'Kitchen',
-      },
-      {
-        // This is an example of a device which uses a Custom Service
-        exampleUniqueId: 'IJKL',
-        exampleDisplayName: 'Backyard',
-        CustomService: 'AirPressureSensor',
-      },
-    ];
+    // Get devices from config (populated by the Custom UI wizard)
+    const devices = this.config.devices || [];
 
-    // loop over the discovered devices and register each one if it has not already been registered
-    for (const device of exampleDevices) {
-      // generate a unique id for the accessory this should be generated from
-      // something globally unique, but constant, for example, the device serial
-      // number or MAC address
-      const uuid = this.api.hap.uuid.generate(device.exampleUniqueId);
+    if (devices.length === 0) {
+      this.log.warn('No devices configured. Please use the plugin settings to add your Dyson devices.');
+      return;
+    }
+
+    this.log.info(`Found ${devices.length} device(s) in configuration`);
+
+    // loop over the configured devices and register each one if it has not already been registered
+    for (const device of devices) {
+      // generate a unique id for the accessory using the device serial number
+      const uuid = this.api.hap.uuid.generate(device.serial);
+
+      // determine display name (use configured name, or fall back to serial)
+      const displayName = device.name || `Dyson ${device.serial}`;
 
       // see if an accessory with the same uuid has already been registered and restored from
       // the cached devices we stored in the `configureAccessory` method above
@@ -102,26 +93,20 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
         // the accessory already exists
         this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
 
-        // if you need to update the accessory.context then you should run `api.updatePlatformAccessories`. e.g.:
-        // existingAccessory.context.device = device;
-        // this.api.updatePlatformAccessories([existingAccessory]);
+        // Update the accessory context with the latest device config
+        existingAccessory.context.device = device;
+        this.api.updatePlatformAccessories([existingAccessory]);
 
         // create the accessory handler for the restored accessory
         new DysonPlatformAccessory(this, existingAccessory);
-
-        // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, e.g.:
-        // remove platform accessories when no longer present
-        // this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [existingAccessory]);
-        // this.log.info('Removing existing accessory from cache:', existingAccessory.displayName);
       } else {
         // the accessory does not yet exist, so we need to create it
-        this.log.info('Adding new accessory:', device.exampleDisplayName);
+        this.log.info('Adding new accessory:', displayName);
 
         // create a new accessory
-        const accessory = new this.api.platformAccessory(device.exampleDisplayName, uuid);
+        const accessory = new this.api.platformAccessory(displayName, uuid);
 
         // store a copy of the device object in the `accessory.context`
-        // the `context` property can be used to store any data about the accessory you may need
         accessory.context.device = device;
 
         // create the accessory handler for the newly created accessory
@@ -135,12 +120,10 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
       this.discoveredCacheUUIDs.push(uuid);
     }
 
-    // you can also deal with accessories from the cache which are no longer present by removing them from Homebridge
-    // for example, if your plugin logs into a cloud account to retrieve a device list, and a user has previously removed a device
-    // from this cloud account, then this device will no longer be present in the device list but will still be in the Homebridge cache
+    // Remove cached accessories that are no longer in the config
     for (const [uuid, accessory] of this.accessories) {
       if (!this.discoveredCacheUUIDs.includes(uuid)) {
-        this.log.info('Removing existing accessory from cache:', accessory.displayName);
+        this.log.info('Removing accessory no longer in config:', accessory.displayName);
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }
     }
