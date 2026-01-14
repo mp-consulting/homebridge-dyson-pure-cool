@@ -1,5 +1,5 @@
 /**
- * FanService Unit Tests
+ * FanService Unit Tests (AirPurifier Service)
  */
 
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
@@ -86,14 +86,15 @@ function createMockLog(): Logging {
 function createMockApi() {
   const Characteristic = {
     Active: { UUID: 'active-uuid' },
+    CurrentAirPurifierState: { UUID: 'current-air-purifier-state-uuid' },
+    TargetAirPurifierState: { UUID: 'target-air-purifier-state-uuid' },
     RotationSpeed: { UUID: 'rotation-speed-uuid' },
     SwingMode: { UUID: 'swing-mode-uuid' },
-    TargetFanState: { UUID: 'target-fan-state-uuid' },
     Name: { UUID: 'name-uuid' },
   };
 
   const Service = {
-    Fanv2: { UUID: 'fanv2-uuid' },
+    AirPurifier: { UUID: 'air-purifier-uuid' },
   };
 
   return {
@@ -117,12 +118,13 @@ describe('FanService', () => {
   // Store handlers for testing
   let activeGetHandler: () => unknown;
   let activeSetHandler: (value: unknown) => Promise<void>;
+  let currentStateGetHandler: () => unknown;
+  let targetStateGetHandler: () => unknown;
+  let targetStateSetHandler: (value: unknown) => Promise<void>;
   let speedGetHandler: () => unknown;
   let speedSetHandler: (value: unknown) => Promise<void>;
   let swingModeGetHandler: () => unknown;
   let swingModeSetHandler: (value: unknown) => Promise<void>;
-  let targetFanStateGetHandler: () => unknown;
-  let targetFanStateSetHandler: (value: unknown) => Promise<void>;
 
   const defaultDeviceInfo: DeviceInfo = {
     serial: 'ABC-AB-12345678',
@@ -167,6 +169,13 @@ describe('FanService', () => {
     activeGetHandler = (activeChar!.onGet as jest.Mock).mock.calls[0][0];
     activeSetHandler = (activeChar!.onSet as jest.Mock).mock.calls[0][0];
 
+    const currentStateChar = mockService.getCharacteristic(Characteristic.CurrentAirPurifierState);
+    currentStateGetHandler = (currentStateChar!.onGet as jest.Mock).mock.calls[0][0];
+
+    const targetStateChar = mockService.getCharacteristic(Characteristic.TargetAirPurifierState);
+    targetStateGetHandler = (targetStateChar!.onGet as jest.Mock).mock.calls[0][0];
+    targetStateSetHandler = (targetStateChar!.onSet as jest.Mock).mock.calls[0][0];
+
     const speedChar = mockService.getCharacteristic(Characteristic.RotationSpeed);
     speedGetHandler = (speedChar!.onGet as jest.Mock).mock.calls[0][0];
     speedSetHandler = (speedChar!.onSet as jest.Mock).mock.calls[0][0];
@@ -174,10 +183,6 @@ describe('FanService', () => {
     const swingChar = mockService.getCharacteristic(Characteristic.SwingMode);
     swingModeGetHandler = (swingChar!.onGet as jest.Mock).mock.calls[0][0];
     swingModeSetHandler = (swingChar!.onSet as jest.Mock).mock.calls[0][0];
-
-    const targetFanStateChar = mockService.getCharacteristic(Characteristic.TargetFanState);
-    targetFanStateGetHandler = (targetFanStateChar!.onGet as jest.Mock).mock.calls[0][0];
-    targetFanStateSetHandler = (targetFanStateChar!.onSet as jest.Mock).mock.calls[0][0];
   });
 
   afterEach(() => {
@@ -185,7 +190,7 @@ describe('FanService', () => {
   });
 
   describe('initialization', () => {
-    it('should get or create Fanv2 service', () => {
+    it('should get or create AirPurifier service', () => {
       expect(mockAccessory.getService).toHaveBeenCalled();
     });
 
@@ -198,6 +203,17 @@ describe('FanService', () => {
 
     it('should register Active characteristic handlers', () => {
       const char = mockService.getCharacteristic(mockApi.hap.Characteristic.Active);
+      expect(char!.onGet).toHaveBeenCalled();
+      expect(char!.onSet).toHaveBeenCalled();
+    });
+
+    it('should register CurrentAirPurifierState characteristic handler', () => {
+      const char = mockService.getCharacteristic(mockApi.hap.Characteristic.CurrentAirPurifierState);
+      expect(char!.onGet).toHaveBeenCalled();
+    });
+
+    it('should register TargetAirPurifierState characteristic handlers', () => {
+      const char = mockService.getCharacteristic(mockApi.hap.Characteristic.TargetAirPurifierState);
       expect(char!.onGet).toHaveBeenCalled();
       expect(char!.onSet).toHaveBeenCalled();
     });
@@ -215,12 +231,6 @@ describe('FanService', () => {
 
     it('should register SwingMode characteristic handlers', () => {
       const char = mockService.getCharacteristic(mockApi.hap.Characteristic.SwingMode);
-      expect(char!.onGet).toHaveBeenCalled();
-      expect(char!.onSet).toHaveBeenCalled();
-    });
-
-    it('should register TargetFanState characteristic handlers', () => {
-      const char = mockService.getCharacteristic(mockApi.hap.Characteristic.TargetFanState);
       expect(char!.onGet).toHaveBeenCalled();
       expect(char!.onSet).toHaveBeenCalled();
     });
@@ -264,6 +274,76 @@ describe('FanService', () => {
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { fpwr: 'OFF' },
+        }),
+      );
+    });
+  });
+
+  describe('CurrentAirPurifierState characteristic', () => {
+    it('should return 0 (INACTIVE) when fan is off', () => {
+      const result = currentStateGetHandler();
+      expect(result).toBe(0);
+    });
+
+    it('should return 2 (PURIFYING_AIR) when fan is on with manual speed', async () => {
+      // Simulate state change from device - fan on with manual speed
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { fpwr: 'ON', fnsp: '0005', fmod: 'FAN' } },
+      });
+
+      const result = currentStateGetHandler();
+      expect(result).toBe(2);
+    });
+
+    it('should return 1 (IDLE) when fan is on in auto mode', async () => {
+      // Simulate state change from device - fan on in auto mode
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { fpwr: 'ON', fmod: 'AUTO' } },
+      });
+
+      const result = currentStateGetHandler();
+      expect(result).toBe(1);
+    });
+  });
+
+  describe('TargetAirPurifierState characteristic', () => {
+    it('should return 0 (MANUAL) when auto mode is off', () => {
+      const result = targetStateGetHandler();
+      expect(result).toBe(0);
+    });
+
+    it('should return 1 (AUTO) when auto mode is on', async () => {
+      // Simulate auto mode on
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { fmod: 'AUTO' } },
+      });
+
+      const result = targetStateGetHandler();
+      expect(result).toBe(1);
+    });
+
+    it('should call setAutoMode(true) when set to 1 (AUTO)', async () => {
+      await targetStateSetHandler(1);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { fmod: 'AUTO' },
+        }),
+      );
+    });
+
+    it('should call setAutoMode(false) when set to 0 (MANUAL)', async () => {
+      await targetStateSetHandler(0);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ fmod: 'FAN' }),
         }),
       );
     });
@@ -371,45 +451,6 @@ describe('FanService', () => {
     });
   });
 
-  describe('TargetFanState characteristic', () => {
-    it('should return 0 (MANUAL) when auto mode is off', () => {
-      const result = targetFanStateGetHandler();
-      expect(result).toBe(0);
-    });
-
-    it('should return 1 (AUTO) when auto mode is on', async () => {
-      // Simulate auto mode on
-      mockMqttClient._emit('message', {
-        topic: 'status',
-        payload: Buffer.from('{}'),
-        data: { msg: 'STATE-CHANGE', 'product-state': { fmod: 'AUTO' } },
-      });
-
-      const result = targetFanStateGetHandler();
-      expect(result).toBe(1);
-    });
-
-    it('should call setAutoMode(true) when set to 1 (AUTO)', async () => {
-      await targetFanStateSetHandler(1);
-
-      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: { fmod: 'AUTO' },
-        }),
-      );
-    });
-
-    it('should call setAutoMode(false) when set to 0 (MANUAL)', async () => {
-      await targetFanStateSetHandler(0);
-
-      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ fmod: 'FAN' }),
-        }),
-      );
-    });
-  });
-
   describe('state change handling', () => {
     it('should update characteristics when device state changes', async () => {
       // Simulate full state update
@@ -433,15 +474,19 @@ describe('FanService', () => {
         1,
       );
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.CurrentAirPurifierState,
+        1, // IDLE because auto mode
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.TargetAirPurifierState,
+        1, // AUTO
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.RotationSpeed,
         70,
       );
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.SwingMode,
-        1,
-      );
-      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
-        mockApi.hap.Characteristic.TargetFanState,
         1,
       );
     });
@@ -466,6 +511,10 @@ describe('FanService', () => {
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.Active,
         0,
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.CurrentAirPurifierState,
+        0, // INACTIVE
       );
     });
   });
@@ -496,15 +545,19 @@ describe('FanService', () => {
         1,
       );
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.CurrentAirPurifierState,
+        2, // PURIFYING_AIR
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.TargetAirPurifierState,
+        0, // MANUAL
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.RotationSpeed,
         30,
       );
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.SwingMode,
-        0,
-      );
-      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
-        mockApi.hap.Characteristic.TargetFanState,
         0,
       );
     });
@@ -535,7 +588,7 @@ describe('FanService', () => {
     it('should throw and log error when setAutoMode fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      await expect(targetFanStateSetHandler(1)).rejects.toThrow('MQTT error');
+      await expect(targetStateSetHandler(1)).rejects.toThrow('MQTT error');
       expect(mockLog.error).toHaveBeenCalled();
     });
   });

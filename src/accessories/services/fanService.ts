@@ -1,8 +1,9 @@
 /**
- * Fan Service Handler
+ * Fan Service Handler (Air Purifier)
  *
- * Implements the HomeKit Fanv2 service for Dyson devices.
- * Handles Active, RotationSpeed, SwingMode, and TargetFanState characteristics.
+ * Implements the HomeKit AirPurifier service for Dyson devices.
+ * Handles Active, CurrentAirPurifierState, TargetAirPurifierState,
+ * RotationSpeed, and SwingMode characteristics.
  */
 
 import type {
@@ -28,13 +29,31 @@ export interface FanServiceConfig {
 }
 
 /**
- * FanService handles the Fanv2 HomeKit service
+ * AirPurifier state values
+ */
+const AirPurifierState = {
+  INACTIVE: 0,
+  IDLE: 1,
+  PURIFYING_AIR: 2,
+} as const;
+
+/**
+ * TargetAirPurifierState values
+ */
+const TargetAirPurifierState = {
+  MANUAL: 0,
+  AUTO: 1,
+} as const;
+
+/**
+ * FanService handles the AirPurifier HomeKit service
  *
  * Maps HomeKit characteristics to Dyson device state:
  * - Active (0/1) ↔ isOn (boolean)
+ * - CurrentAirPurifierState (0=INACTIVE, 1=IDLE, 2=PURIFYING) ↔ isOn + fanSpeed
+ * - TargetAirPurifierState (0=MANUAL, 1=AUTO) ↔ autoMode (boolean)
  * - RotationSpeed (0-100%) ↔ fanSpeed (1-10)
  * - SwingMode (0/1) ↔ oscillation (boolean)
- * - TargetFanState (0=MANUAL, 1=AUTO) ↔ autoMode (boolean)
  */
 export class FanService {
   private readonly service: Service;
@@ -52,9 +71,9 @@ export class FanService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Get or create the Fanv2 service
-    this.service = config.accessory.getService(Service.Fanv2) ||
-      config.accessory.addService(Service.Fanv2);
+    // Get or create the AirPurifier service (not Fanv2)
+    this.service = config.accessory.getService(Service.AirPurifier) ||
+      config.accessory.addService(Service.AirPurifier);
 
     // Set display name
     this.service.setCharacteristic(
@@ -66,6 +85,16 @@ export class FanService {
     this.service.getCharacteristic(Characteristic.Active)
       .onGet(this.handleActiveGet.bind(this))
       .onSet(this.handleActiveSet.bind(this));
+
+    // Set up CurrentAirPurifierState characteristic (required, read-only)
+    this.service.getCharacteristic(Characteristic.CurrentAirPurifierState)
+      .onGet(this.handleCurrentStateGet.bind(this));
+
+    // Set up TargetAirPurifierState characteristic (required)
+    // 0 = MANUAL, 1 = AUTO
+    this.service.getCharacteristic(Characteristic.TargetAirPurifierState)
+      .onGet(this.handleTargetStateGet.bind(this))
+      .onSet(this.handleTargetStateSet.bind(this));
 
     // Set up RotationSpeed characteristic (optional but we want it)
     this.service.getCharacteristic(Characteristic.RotationSpeed)
@@ -82,16 +111,10 @@ export class FanService {
       .onGet(this.handleSwingModeGet.bind(this))
       .onSet(this.handleSwingModeSet.bind(this));
 
-    // Set up TargetFanState characteristic for AUTO/MANUAL mode
-    // 0 = MANUAL, 1 = AUTO
-    this.service.getCharacteristic(Characteristic.TargetFanState)
-      .onGet(this.handleTargetFanStateGet.bind(this))
-      .onSet(this.handleTargetFanStateSet.bind(this));
-
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));
 
-    this.log.debug('FanService initialized for', config.accessory.displayName);
+    this.log.debug('FanService (AirPurifier) initialized for', config.accessory.displayName);
   }
 
   /**
@@ -124,6 +147,54 @@ export class FanService {
       await this.device.setFanPower(isOn);
     } catch (error) {
       this.log.error('Failed to set fan power:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle CurrentAirPurifierState GET request
+   * Returns 0 (INACTIVE), 1 (IDLE), or 2 (PURIFYING_AIR)
+   */
+  private handleCurrentStateGet(): CharacteristicValue {
+    const state = this.device.getState();
+
+    let currentState: number;
+    if (!state.isOn) {
+      currentState = AirPurifierState.INACTIVE;
+    } else if (state.fanSpeed === 0 || state.autoMode) {
+      // In auto mode or speed 0, consider it idle/monitoring
+      currentState = AirPurifierState.IDLE;
+    } else {
+      currentState = AirPurifierState.PURIFYING_AIR;
+    }
+
+    this.log.debug('Get CurrentAirPurifierState ->', currentState);
+    return currentState;
+  }
+
+  /**
+   * Handle TargetAirPurifierState GET request
+   * Returns 1 (AUTO) or 0 (MANUAL)
+   */
+  private handleTargetStateGet(): CharacteristicValue {
+    const state = this.device.getState();
+    const targetState = state.autoMode ? TargetAirPurifierState.AUTO : TargetAirPurifierState.MANUAL;
+    this.log.debug('Get TargetAirPurifierState ->', targetState);
+    return targetState;
+  }
+
+  /**
+   * Handle TargetAirPurifierState SET request
+   * @param value - 1 (AUTO) or 0 (MANUAL)
+   */
+  private async handleTargetStateSet(value: CharacteristicValue): Promise<void> {
+    const autoMode = value === TargetAirPurifierState.AUTO;
+    this.log.debug('Set TargetAirPurifierState ->', autoMode ? 'AUTO' : 'MANUAL');
+
+    try {
+      await this.device.setAutoMode(autoMode);
+    } catch (error) {
+      this.log.error('Failed to set auto mode:', error);
       throw error;
     }
   }
@@ -196,33 +267,6 @@ export class FanService {
   }
 
   /**
-   * Handle TargetFanState GET request
-   * Returns 1 (AUTO) or 0 (MANUAL)
-   */
-  private handleTargetFanStateGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const targetState = state.autoMode ? 1 : 0;
-    this.log.debug('Get TargetFanState ->', targetState);
-    return targetState;
-  }
-
-  /**
-   * Handle TargetFanState SET request
-   * @param value - 1 (AUTO) or 0 (MANUAL)
-   */
-  private async handleTargetFanStateSet(value: CharacteristicValue): Promise<void> {
-    const autoMode = value === 1;
-    this.log.debug('Set TargetFanState ->', autoMode ? 'AUTO' : 'MANUAL');
-
-    try {
-      await this.device.setAutoMode(autoMode);
-    } catch (error) {
-      this.log.error('Failed to set auto mode:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Handle device state changes
    * Updates HomeKit characteristics to reflect current device state
    */
@@ -237,6 +281,26 @@ export class FanService {
       state.isOn ? 1 : 0,
     );
 
+    // Update CurrentAirPurifierState
+    let currentState: number;
+    if (!state.isOn) {
+      currentState = AirPurifierState.INACTIVE;
+    } else if (state.fanSpeed === 0 || state.autoMode) {
+      currentState = AirPurifierState.IDLE;
+    } else {
+      currentState = AirPurifierState.PURIFYING_AIR;
+    }
+    this.service.updateCharacteristic(
+      Characteristic.CurrentAirPurifierState,
+      currentState,
+    );
+
+    // Update TargetAirPurifierState
+    this.service.updateCharacteristic(
+      Characteristic.TargetAirPurifierState,
+      state.autoMode ? TargetAirPurifierState.AUTO : TargetAirPurifierState.MANUAL,
+    );
+
     // Update RotationSpeed
     const percent = this.codec.speedToPercent(state.fanSpeed);
     this.service.updateCharacteristic(
@@ -248,12 +312,6 @@ export class FanService {
     this.service.updateCharacteristic(
       Characteristic.SwingMode,
       state.oscillation ? 1 : 0,
-    );
-
-    // Update TargetFanState (AUTO/MANUAL mode)
-    this.service.updateCharacteristic(
-      Characteristic.TargetFanState,
-      state.autoMode ? 1 : 0,
     );
   }
 
