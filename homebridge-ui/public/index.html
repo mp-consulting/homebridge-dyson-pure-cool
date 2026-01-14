@@ -597,26 +597,23 @@
     btnClose: document.getElementById('btn-close'),
   };
 
-  // Product type codes mapped to friendly names
-  const PRODUCT_TYPES = {
-    '438': 'Dyson Pure Cool Tower (TP04)',
-    '438E': 'Dyson Pure Cool Tower (TP07)',
-    '438K': 'Dyson Pure Cool Tower Formaldehyde (TP09)',
-    '520': 'Dyson Pure Cool Desk (DP04)',
-    '527': 'Dyson Pure Hot+Cool (HP04)',
-    '527E': 'Dyson Pure Hot+Cool (HP07)',
-    '527K': 'Dyson Pure Hot+Cool Formaldehyde (HP09)',
-    '455': 'Dyson Pure Hot+Cool Link (HP02)',
-    '469': 'Dyson Pure Cool Link Desk (DP01)',
-    '475': 'Dyson Pure Cool Link Tower (TP02)',
-    '664': 'Dyson Purifier Big+Quiet Formaldehyde (BP03)',
-    '664E': 'Dyson Purifier Big+Quiet Formaldehyde (BP04)',
-  };
+  // Product type codes mapped to friendly names (loaded from server)
+  let PRODUCT_TYPES = {};
 
   // Initialize
   async function init() {
     // Disable save button until wizard completes
     hb.disableSaveButton();
+
+    // Load product types from server (single source of truth)
+    try {
+      const response = await hb.request('/get-product-types', {});
+      if (response.success && response.productTypes) {
+        PRODUCT_TYPES = response.productTypes;
+      }
+    } catch (error) {
+      console.warn('Failed to load product types from server:', error);
+    }
 
     // Load existing config
     const configArray = await hb.getPluginConfig();

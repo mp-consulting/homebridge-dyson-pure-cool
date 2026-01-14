@@ -15,6 +15,9 @@ import { HomebridgePluginUiServer, RequestError } from '@homebridge/plugin-ui-ut
 import { createDecipheriv } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
+// Import product types from the device catalog (single source of truth)
+import { getProductTypeDisplayNames } from '../dist/devices/deviceCatalog.js';
+
 /** Dyson Cloud API base URL */
 const DYSON_API_BASE_URL = 'https://appapi.cp.dyson.com';
 
@@ -35,21 +38,8 @@ const DECRYPT_IV = Buffer.from([
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
 
-/** Product type codes mapped to friendly names */
-const PRODUCT_TYPES = {
-  '438': 'Dyson Pure Cool Tower (TP04)',
-  '438E': 'Dyson Pure Cool Tower (TP07)',
-  '438K': 'Dyson Pure Cool Tower Formaldehyde (TP09)',
-  '520': 'Dyson Pure Cool Desk (DP04)',
-  '527': 'Dyson Pure Hot+Cool (HP04)',
-  '527E': 'Dyson Pure Hot+Cool (HP07)',
-  '527K': 'Dyson Pure Hot+Cool Formaldehyde (HP09)',
-  '455': 'Dyson Pure Hot+Cool Link (HP02)',
-  '469': 'Dyson Pure Cool Link Desk (DP01)',
-  '475': 'Dyson Pure Cool Link Tower (TP02)',
-  '664': 'Dyson Purifier Big+Quiet Formaldehyde (BP03)',
-  '664E': 'Dyson Purifier Big+Quiet Formaldehyde (BP04)',
-};
+/** Product type codes mapped to friendly names (from device catalog) */
+const PRODUCT_TYPES = getProductTypeDisplayNames();
 
 class DysonUiServer extends HomebridgePluginUiServer {
   constructor() {
@@ -66,6 +56,7 @@ class DysonUiServer extends HomebridgePluginUiServer {
     this.onRequest('/authenticate', this.handleAuthenticate.bind(this));
     this.onRequest('/verify-otp', this.handleVerifyOtp.bind(this));
     this.onRequest('/get-devices', this.handleGetDevices.bind(this));
+    this.onRequest('/get-product-types', this.handleGetProductTypes.bind(this));
 
     // Mark as ready
     this.ready();
@@ -206,6 +197,17 @@ class DysonUiServer extends HomebridgePluginUiServer {
       this.clearPendingAuth();
       throw error;
     }
+  }
+
+  /**
+   * Handle product types request
+   * Returns all supported device types from the catalog
+   */
+  async handleGetProductTypes() {
+    return {
+      success: true,
+      productTypes: PRODUCT_TYPES,
+    };
   }
 
   /**
