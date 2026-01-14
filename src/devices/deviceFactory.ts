@@ -20,12 +20,11 @@ const SUPPORTED_PRODUCT_TYPES: Record<string, 'link'> = {
   // Pure Cool Link Desk (DP01)
   '469': 'link',
 
-  // Pure Cool Tower (TP04, TP06, TP07, TP09)
+  // Pure Cool Tower (TP04, TP07, TP09, TP11)
   '438': 'link',
   '438E': 'link',
   '438K': 'link',
-  '358': 'link',
-  '358E': 'link',
+  '438M': 'link',
 
   // Pure Cool Desk (DP04)
   '520': 'link',
@@ -33,16 +32,19 @@ const SUPPORTED_PRODUCT_TYPES: Record<string, 'link'> = {
   // Pure Hot+Cool Link (HP02)
   '455': 'link',
 
-  // Pure Hot+Cool (HP04, HP06, HP07, HP09)
+  // Pure Hot+Cool (HP04, HP06, HP07, HP09, HP1/HP11)
   '527': 'link',
   '527E': 'link',
   '527K': 'link',
+  '527M': 'link',
   '358K': 'link',
 
   // Purifier Humidify+Cool (PH01, PH02, PH03, PH04)
+  '358': 'link',
+  '358E': 'link',
   '358J': 'link',
-  '520E': 'link',
   '358H': 'link',
+  '520E': 'link',
   '520F': 'link',
 
   // Big+Quiet Series (BP02, BP03, BP04, BP06)

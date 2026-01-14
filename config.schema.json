@@ -69,9 +69,9 @@
               "oneOf": [
                 { "title": "TP02 - Pure Cool Link Tower", "enum": ["475"] },
                 { "title": "TP04 - Pure Cool Tower", "enum": ["438"] },
-                { "title": "TP06 - Pure Cool Tower", "enum": ["358"] },
                 { "title": "TP07 - Purifier Cool", "enum": ["438E"] },
                 { "title": "TP09 - Pure Cool Formaldehyde", "enum": ["438K"] },
+                { "title": "TP11 - Purifier Cool", "enum": ["438M"] },
                 { "title": "DP01 - Pure Cool Link Desk", "enum": ["469"] },
                 { "title": "DP04 - Pure Cool Desk", "enum": ["520"] },
                 { "title": "HP02 - Pure Hot+Cool Link", "enum": ["455"] },
@@ -79,9 +79,11 @@
                 { "title": "HP06 - Pure Hot+Cool", "enum": ["358K"] },
                 { "title": "HP07 - Pure Hot+Cool", "enum": ["527E"] },
                 { "title": "HP09 - Pure Hot+Cool Formaldehyde", "enum": ["527K"] },
-                { "title": "PH01 - Purifier Humidify+Cool", "enum": ["358J"] },
+                { "title": "HP1/HP11 - Purifier Hot+Cool", "enum": ["527M"] },
+                { "title": "PH01 - Purifier Humidify+Cool", "enum": ["358"] },
                 { "title": "PH02 - Purifier Humidify+Cool", "enum": ["520E"] },
                 { "title": "PH03 - Purifier Humidify+Cool", "enum": ["358H"] },
+                { "title": "PH03/PH04 - Purifier Humidify+Cool Formaldehyde", "enum": ["358E"] },
                 { "title": "PH04 - Purifier Humidify+Cool Formaldehyde", "enum": ["520F"] },
                 { "title": "BP02 - Purifier Big+Quiet", "enum": ["664"] },
                 { "title": "BP03 - Purifier Big+Quiet Formaldehyde", "enum": ["664B"] },
@@ -116,6 +118,42 @@
               "maximum": 20,
               "description": "Adjust humidity reading by this percentage"
             },
+            "useFahrenheit": {
+              "title": "Use Fahrenheit",
+              "type": "boolean",
+              "default": false,
+              "description": "Display temperature in Fahrenheit in logs"
+            },
+            "isTemperatureIgnored": {
+              "title": "Disable Temperature Sensor",
+              "type": "boolean",
+              "default": false,
+              "description": "Hide temperature sensor for this device"
+            },
+            "isHumidityIgnored": {
+              "title": "Disable Humidity Sensor",
+              "type": "boolean",
+              "default": false,
+              "description": "Hide humidity sensor for this device"
+            },
+            "isAirQualityIgnored": {
+              "title": "Disable Air Quality Sensor",
+              "type": "boolean",
+              "default": false,
+              "description": "Hide air quality sensor for this device"
+            },
+            "isHeatingDisabled": {
+              "title": "Disable Heating Controls",
+              "type": "boolean",
+              "default": false,
+              "description": "Hide thermostat/heater controls for HP models"
+            },
+            "isHeatingSafetyIgnored": {
+              "title": "Ignore Heating Safety",
+              "type": "boolean",
+              "default": false,
+              "description": "Allow heating even when safety restrictions apply (use with caution)"
+            },
             "fullRangeHumidity": {
               "title": "Full Range Humidity",
               "type": "boolean",
@@ -143,6 +181,18 @@
           },
           "required": ["serial", "productType", "localCredentials"]
         }
+      },
+      "isSingleAccessoryModeEnabled": {
+        "title": "Single Accessory Mode",
+        "type": "boolean",
+        "default": false,
+        "description": "Combine all services into a single accessory per device"
+      },
+      "isSingleSensorAccessoryModeEnabled": {
+        "title": "Single Sensor Accessory Mode",
+        "type": "boolean",
+        "default": false,
+        "description": "Combine all sensors into a single accessory per device"
       },
       "enableTemperature": {
         "title": "Enable Temperature Sensor",
@@ -238,7 +288,27 @@
               "expandable": true,
               "items": [
                 "devices[].temperatureOffset",
-                "devices[].humidityOffset"
+                "devices[].humidityOffset",
+                "devices[].useFahrenheit"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "Disable Sensors",
+              "expandable": true,
+              "items": [
+                "devices[].isTemperatureIgnored",
+                "devices[].isHumidityIgnored",
+                "devices[].isAirQualityIgnored"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "Heating Options (HP Models)",
+              "expandable": true,
+              "items": [
+                "devices[].isHeatingDisabled",
+                "devices[].isHeatingSafetyIgnored"
               ]
             },
             {
@@ -254,6 +324,16 @@
             }
           ]
         }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Display Mode",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "isSingleAccessoryModeEnabled",
+        "isSingleSensorAccessoryModeEnabled"
       ]
     },
     {

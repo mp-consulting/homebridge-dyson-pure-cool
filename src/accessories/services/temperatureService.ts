@@ -26,6 +26,8 @@ export interface TemperatureServiceConfig {
   log: Logging;
   /** Temperature offset in Celsius (can be positive or negative) */
   temperatureOffset?: number;
+  /** Use Fahrenheit for logging (HomeKit always uses Celsius internally) */
+  useFahrenheit?: boolean;
 }
 
 /**
@@ -40,12 +42,14 @@ export class TemperatureService {
   private readonly log: Logging;
   private readonly api: API;
   private readonly temperatureOffset: number;
+  private readonly useFahrenheit: boolean;
 
   constructor(config: TemperatureServiceConfig) {
     this.device = config.device;
     this.log = config.log;
     this.api = config.api;
     this.temperatureOffset = config.temperatureOffset ?? 0;
+    this.useFahrenheit = config.useFahrenheit ?? false;
 
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
@@ -84,13 +88,25 @@ export class TemperatureService {
 
   /**
    * Handle CurrentTemperature GET request
-   * Returns temperature in Celsius
+   * Returns temperature in Celsius (HomeKit standard)
    */
   private handleTemperatureGet(): CharacteristicValue {
     const state = this.device.getState();
     const celsius = this.convertTemperature(state.temperature);
-    this.log.debug('Get Temperature ->', celsius, '°C');
+    this.logTemperature('Get Temperature ->', celsius);
     return celsius;
+  }
+
+  /**
+   * Log temperature in configured unit
+   */
+  private logTemperature(message: string, celsius: number): void {
+    if (this.useFahrenheit) {
+      const fahrenheit = Math.round((celsius * 9 / 5 + 32) * 10) / 10;
+      this.log.debug(message, fahrenheit, '°F');
+    } else {
+      this.log.debug(message, celsius, '°C');
+    }
   }
 
   /**
@@ -119,7 +135,7 @@ export class TemperatureService {
    */
   private handleStateChange(state: DeviceState): void {
     const celsius = this.convertTemperature(state.temperature);
-    this.log.debug('Temperature state changed ->', celsius, '°C');
+    this.logTemperature('Temperature state changed ->', celsius);
 
     const Characteristic = this.api.hap.Characteristic;
     this.service.updateCharacteristic(Characteristic.CurrentTemperature, celsius);

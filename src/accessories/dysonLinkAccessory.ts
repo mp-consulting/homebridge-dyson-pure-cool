@@ -31,18 +31,59 @@ import type { DeviceState } from '../devices/types.js';
  * Configuration options for device features
  */
 export interface DeviceOptions {
+  // Sensor calibration
   /** Temperature offset in Celsius */
   temperatureOffset?: number;
   /** Humidity offset percentage */
   humidityOffset?: number;
+
+  // Sensor visibility
+  /** Disable temperature sensor */
+  isTemperatureIgnored?: boolean;
+  /** Disable humidity sensor */
+  isHumidityIgnored?: boolean;
+  /** Disable air quality sensor */
+  isAirQualityIgnored?: boolean;
+  /** Show temperature as separate accessory */
+  isTemperatureSensorEnabled?: boolean;
+  /** Show humidity as separate accessory */
+  isHumiditySensorEnabled?: boolean;
+  /** Show air quality as separate accessory */
+  isAirQualitySensorEnabled?: boolean;
+
+  // Display options
+  /** Use Fahrenheit for temperature display */
+  useFahrenheit?: boolean;
+  /** Combine all services into single accessory */
+  isSingleAccessoryModeEnabled?: boolean;
+  /** Combine all sensors into single accessory */
+  isSingleSensorAccessoryModeEnabled?: boolean;
+
+  // Heating options (HP models)
+  /** Disable heating controls */
+  isHeatingDisabled?: boolean;
+  /** Override heating safety restrictions */
+  isHeatingSafetyIgnored?: boolean;
+
+  // Humidifier options (PH models)
   /** Enable full humidity range (0-100%) for humidifier */
   fullRangeHumidity?: boolean;
+
+  // Activation behaviors
   /** Enable auto mode on device activation */
   enableAutoModeWhenActivating?: boolean;
   /** Enable oscillation on device activation */
   enableOscillationWhenActivating?: boolean;
   /** Enable night mode on device activation */
   enableNightModeWhenActivating?: boolean;
+
+  // Service toggles
+  /** Enable night mode switch */
+  isNightModeEnabled?: boolean;
+  /** Enable jet focus switch */
+  isJetFocusEnabled?: boolean;
+  /** Enable continuous monitoring switch */
+  isContinuousMonitoringEnabled?: boolean;
 }
 
 /**
@@ -111,6 +152,7 @@ export class DysonLinkAccessory extends DysonAccessory {
   protected setupServices(): void {
     const linkDevice = this.device as DysonLinkDevice;
     const features = linkDevice.getFeatures();
+    const opts = this.options ?? {};
 
     // Create FanService for fan control (all devices)
     this.fanService = new FanService({
@@ -120,30 +162,32 @@ export class DysonLinkAccessory extends DysonAccessory {
       log: this.log,
     });
 
-    // Create TemperatureService if device supports it
-    if (features.temperatureSensor) {
+    // Create TemperatureService if device supports it and not ignored
+    if (features.temperatureSensor && !opts.isTemperatureIgnored) {
       this.temperatureService = new TemperatureService({
         accessory: this.accessory,
         device: linkDevice,
         api: this.api,
         log: this.log,
-        temperatureOffset: this.options?.temperatureOffset,
+        temperatureOffset: opts.temperatureOffset,
+        useFahrenheit: opts.useFahrenheit,
       });
     }
 
-    // Create HumidityService if device supports it
-    if (features.humiditySensor) {
+    // Create HumidityService if device supports it and not ignored
+    if (features.humiditySensor && !opts.isHumidityIgnored) {
       this.humidityService = new HumidityService({
         accessory: this.accessory,
         device: linkDevice,
         api: this.api,
         log: this.log,
-        humidityOffset: this.options?.humidityOffset,
+        humidityOffset: opts.humidityOffset,
       });
     }
 
-    // Create NightModeService if device supports it
-    if (features.nightMode) {
+    // Create NightModeService if device supports it and enabled (default: true)
+    const nightModeEnabled = opts.isNightModeEnabled !== false;
+    if (features.nightMode && nightModeEnabled) {
       this.nightModeService = new NightModeService({
         accessory: this.accessory,
         device: linkDevice,
@@ -152,8 +196,9 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
-    // Create ContinuousMonitoringService if device supports it
-    if (features.continuousMonitoring) {
+    // Create ContinuousMonitoringService if device supports it and enabled
+    const continuousMonitoringEnabled = opts.isContinuousMonitoringEnabled === true;
+    if (features.continuousMonitoring && continuousMonitoringEnabled) {
       this.continuousMonitoringService = new ContinuousMonitoringService({
         accessory: this.accessory,
         device: linkDevice,
@@ -162,8 +207,8 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
-    // Create AirQualityService if device supports it
-    if (features.airQualitySensor) {
+    // Create AirQualityService if device supports it and not ignored
+    if (features.airQualitySensor && !opts.isAirQualityIgnored) {
       this.airQualityService = new AirQualityService({
         accessory: this.accessory,
         device: linkDevice,
@@ -183,8 +228,8 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
-    // Create HeaterCoolerService for HP-series devices (alternative heating control)
-    if (features.heating) {
+    // Create HeaterCoolerService for HP-series devices (if heating not disabled)
+    if (features.heating && !opts.isHeatingDisabled) {
       this.heaterCoolerService = new HeaterCoolerService({
         accessory: this.accessory,
         device: linkDevice,
@@ -195,7 +240,7 @@ export class DysonLinkAccessory extends DysonAccessory {
 
     // Create ThermostatService for HP models (heating)
     // Note: Both HeaterCooler and Thermostat are available - users can choose in HomeKit
-    if (features.heating) {
+    if (features.heating && !opts.isHeatingDisabled) {
       this.thermostatService = new ThermostatService({
         accessory: this.accessory,
         device: linkDevice,
@@ -211,12 +256,13 @@ export class DysonLinkAccessory extends DysonAccessory {
         device: linkDevice,
         api: this.api,
         log: this.log,
-        fullRangeHumidity: this.options?.fullRangeHumidity,
+        fullRangeHumidity: opts.fullRangeHumidity,
       });
     }
 
-    // Create JetFocusService if device supports front airflow
-    if (features.frontAirflow) {
+    // Create JetFocusService if device supports it and enabled (default: true)
+    const jetFocusEnabled = opts.isJetFocusEnabled !== false;
+    if (features.frontAirflow && jetFocusEnabled) {
       this.jetFocusService = new JetFocusService({
         accessory: this.accessory,
         device: linkDevice,

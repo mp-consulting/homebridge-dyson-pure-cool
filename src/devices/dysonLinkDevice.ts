@@ -68,6 +68,23 @@ const PURE_HOT_COOL_FEATURES: DeviceFeatures = {
 };
 
 /**
+ * Features for newer Pure Hot+Cool without Jet Focus (HP1/HP11)
+ */
+const PURE_HOT_COOL_NO_JET_FEATURES: DeviceFeatures = {
+  ...PURE_COOL_FEATURES,
+  heating: true,
+  frontAirflow: false,
+};
+
+/**
+ * Features for newer Pure Cool without Jet Focus (TP11)
+ */
+const PURE_COOL_NO_JET_FEATURES: DeviceFeatures = {
+  ...PURE_COOL_FEATURES,
+  frontAirflow: false,
+};
+
+/**
  * Features for Purifier Humidify+Cool (PH01, PH02, PH03, PH04)
  */
 const PURIFIER_HUMIDIFY_FEATURES: DeviceFeatures = {
@@ -105,16 +122,15 @@ const PRODUCT_FEATURES: Record<string, DeviceFeatures> = {
   // Pure Cool Desk Link (DP01)
   '469': PURE_COOL_LINK_FEATURES,
 
-  // Pure Cool Tower (TP04, TP06)
+  // Pure Cool Tower (TP04)
   '438': PURE_COOL_JET_FOCUS_FEATURES,
-  '358': PURE_COOL_JET_FOCUS_FEATURES,
 
-  // Pure Cool Tower (TP07, newer naming)
+  // Pure Cool Tower (TP07, TP09)
   '438E': PURE_COOL_JET_FOCUS_FEATURES,
-  '358E': PURE_COOL_JET_FOCUS_FEATURES,
-
-  // Pure Cool Tower Formaldehyde (TP09)
   '438K': FORMALDEHYDE_FEATURES,
+
+  // Pure Cool Tower (TP11) - no jet focus
+  '438M': PURE_COOL_NO_JET_FEATURES,
 
   // Pure Cool Desk (DP04)
   '520': PURE_COOL_JET_FOCUS_FEATURES,
@@ -132,7 +148,16 @@ const PRODUCT_FEATURES: Record<string, DeviceFeatures> = {
   // Pure Hot+Cool Formaldehyde (HP09)
   '527K': { ...PURE_HOT_COOL_FEATURES, no2Sensor: true },
 
-  // Purifier Humidify+Cool (PH01, PH02, PH03)
+  // Pure Hot+Cool (HP1/HP11) - no jet focus
+  '527M': PURE_HOT_COOL_NO_JET_FEATURES,
+
+  // Pure Humidify+Cool (PH01)
+  '358': PURIFIER_HUMIDIFY_FEATURES,
+
+  // Purifier Humidify+Cool Formaldehyde (PH03, PH04)
+  '358E': { ...PURIFIER_HUMIDIFY_FEATURES, no2Sensor: true },
+
+  // Purifier Humidify+Cool (PH02, PH03)
   '358J': PURIFIER_HUMIDIFY_FEATURES,
   '520E': PURIFIER_HUMIDIFY_FEATURES,
   '358H': PURIFIER_HUMIDIFY_FEATURES,
