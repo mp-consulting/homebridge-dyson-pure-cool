@@ -188,6 +188,12 @@
               "type": "boolean",
               "default": false,
               "description": "Automatically enable night mode when turning device on"
+            },
+            "isContinuousMonitoringEnabled": {
+              "title": "Enable Continuous Monitoring",
+              "type": "boolean",
+              "default": false,
+              "description": "Show continuous monitoring switch to keep sensors active when device is off"
             }
           },
           "required": ["serial", "productType", "localCredentials"]
@@ -317,9 +323,10 @@
               "type": "fieldset",
               "title": "Heating Options (HP Models)",
               "expandable": true,
+              "expanded": true,
               "items": [
-                "devices[].isHeatingDisabled",
                 "devices[].heatingServiceType",
+                "devices[].isHeatingDisabled",
                 "devices[].isHeatingSafetyIgnored"
               ]
             },
@@ -331,7 +338,8 @@
                 "devices[].enableAutoModeWhenActivating",
                 "devices[].enableOscillationWhenActivating",
                 "devices[].enableNightModeWhenActivating",
-                "devices[].fullRangeHumidity"
+                "devices[].fullRangeHumidity",
+                "devices[].isContinuousMonitoringEnabled"
               ]
             }
           ]

@@ -26,6 +26,11 @@ export interface AirQualityServiceConfig {
   log: Logging;
   /** Whether device supports NO2 sensor */
   hasNo2Sensor?: boolean;
+  /**
+   * Whether device has basic air quality sensor (Link series)
+   * Basic sensors use pact/vact index (0-9 scale) instead of PM2.5 µg/m³
+   */
+  basicAirQualitySensor?: boolean;
 }
 
 /**
@@ -61,12 +66,14 @@ export class AirQualityService {
   private readonly log: Logging;
   private readonly api: API;
   private readonly hasNo2Sensor: boolean;
+  private readonly basicAirQualitySensor: boolean;
 
   constructor(config: AirQualityServiceConfig) {
     this.device = config.device;
     this.log = config.log;
     this.api = config.api;
     this.hasNo2Sensor = config.hasNo2Sensor ?? false;
+    this.basicAirQualitySensor = config.basicAirQualitySensor ?? false;
 
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
@@ -118,17 +125,31 @@ export class AirQualityService {
   }
 
   /**
-   * Calculate HomeKit AirQuality level from PM2.5
+   * Calculate HomeKit AirQuality level from sensor data
    *
-   * @param pm25 - PM2.5 value in µg/m³
+   * For advanced sensors: Uses PM2.5 value in µg/m³
+   * For basic sensors (Link): Uses pact index (0-9 scale)
+   *
+   * @param pm25 - PM2.5 value in µg/m³ or pact index for basic sensors
+   * @param vocIndex - VOC index value for basic sensors
    * @returns HomeKit AirQuality value (0-5)
    */
-  private calculateAirQuality(pm25: number | undefined): number {
+  private calculateAirQuality(pm25: number | undefined, vocIndex?: number): number {
     // 0 = UNKNOWN
     if (pm25 === undefined || pm25 < 0) {
       return 0;
     }
 
+    if (this.basicAirQualitySensor) {
+      // Basic sensors (Link series) - pm25 is actually pact index (0-9)
+      // Calculate quality from pact (particulate) and vact (VOC) indices
+      // Use the worse of the two readings
+      const pactQuality = this.calculateBasicPactQuality(pm25);
+      const vactQuality = vocIndex !== undefined ? this.calculateBasicVactQuality(vocIndex) : 1;
+      return Math.max(pactQuality, vactQuality);
+    }
+
+    // Advanced sensors - pm25 is actual PM2.5 in µg/m³
     // Map PM2.5 to HomeKit AirQuality levels
     if (pm25 <= PM25_THRESHOLDS.EXCELLENT) {
       return 1; // EXCELLENT
@@ -144,13 +165,42 @@ export class AirQualityService {
   }
 
   /**
+   * Calculate air quality from basic sensor pact index (0-9)
+   * Based on reference implementation thresholds
+   */
+  private calculateBasicPactQuality(pact: number): number {
+    if (pact <= 2) return 1; // EXCELLENT
+    if (pact <= 4) return 2; // GOOD
+    if (pact <= 7) return 3; // FAIR
+    if (pact <= 9) return 4; // INFERIOR
+    return 5; // POOR
+  }
+
+  /**
+   * Calculate air quality from basic sensor vact index
+   * Based on reference implementation thresholds
+   */
+  private calculateBasicVactQuality(vact: number): number {
+    const scaled = vact * 0.125;
+    if (scaled <= 3) return 1; // EXCELLENT
+    if (scaled <= 6) return 2; // GOOD
+    if (scaled <= 8) return 3; // FAIR
+    if (scaled <= 9) return 4; // INFERIOR
+    return 5; // POOR
+  }
+
+  /**
    * Handle AirQuality GET request
    * Returns 0-5 (UNKNOWN to POOR)
    */
   private handleAirQualityGet(): CharacteristicValue {
     const state = this.device.getState();
-    const airQuality = this.calculateAirQuality(state.pm25);
-    this.log.debug('Get AirQuality ->', airQuality, '(PM2.5:', state.pm25, ')');
+    const airQuality = this.calculateAirQuality(state.pm25, state.vocIndex);
+    if (this.basicAirQualitySensor) {
+      this.log.debug('Get AirQuality ->', airQuality, '(pact:', state.pm25, ', vact:', state.vocIndex, ')');
+    } else {
+      this.log.debug('Get AirQuality ->', airQuality, '(PM2.5:', state.pm25, 'µg/m³)');
+    }
     return airQuality;
   }
 
@@ -206,16 +256,16 @@ export class AirQualityService {
     const Characteristic = this.api.hap.Characteristic;
 
     // Update AirQuality
-    const airQuality = this.calculateAirQuality(state.pm25);
+    const airQuality = this.calculateAirQuality(state.pm25, state.vocIndex);
     this.service.updateCharacteristic(Characteristic.AirQuality, airQuality);
 
-    // Update PM2.5
+    // Update PM2.5 (or pact index for basic sensors)
     this.service.updateCharacteristic(
       Characteristic.PM2_5Density,
       state.pm25 ?? 0,
     );
 
-    // Update PM10
+    // Update PM10 (not available on basic sensors)
     this.service.updateCharacteristic(
       Characteristic.PM10Density,
       state.pm10 ?? 0,

@@ -370,34 +370,46 @@ export abstract class DysonDevice extends EventEmitter {
       }
     }
 
-    // PM2.5
+    // PM2.5 - newer models use pm25, older Link models use pact
     if ('pm25' in sensorData) {
       const pm25 = sensorData.pm25;
-      if (typeof pm25 === 'string') {
+      if (typeof pm25 === 'string' && pm25 !== 'INIT' && pm25 !== 'OFF') {
         stateUpdate.pm25 = parseInt(pm25, 10);
+      }
+    } else if ('pact' in sensorData) {
+      // Older Link series (HP02, TP02) use pact for particulate matter
+      const pact = sensorData.pact;
+      if (typeof pact === 'string' && pact !== 'INIT' && pact !== 'OFF') {
+        stateUpdate.pm25 = parseInt(pact, 10);
       }
     }
 
-    // PM10
+    // PM10 - only on newer models
     if ('pm10' in sensorData) {
       const pm10 = sensorData.pm10;
-      if (typeof pm10 === 'string') {
+      if (typeof pm10 === 'string' && pm10 !== 'INIT' && pm10 !== 'OFF') {
         stateUpdate.pm10 = parseInt(pm10, 10);
       }
     }
 
-    // VOC index
+    // VOC index - newer models use va10, older Link models use vact
     if ('va10' in sensorData) {
       const voc = sensorData.va10;
-      if (typeof voc === 'string') {
+      if (typeof voc === 'string' && voc !== 'INIT' && voc !== 'OFF') {
         stateUpdate.vocIndex = parseInt(voc, 10);
+      }
+    } else if ('vact' in sensorData) {
+      // Older Link series (HP02, TP02) use vact for VOC
+      const vact = sensorData.vact;
+      if (typeof vact === 'string' && vact !== 'INIT' && vact !== 'OFF') {
+        stateUpdate.vocIndex = parseInt(vact, 10);
       }
     }
 
-    // NO2 index
+    // NO2 index - only on newer models with formaldehyde sensor
     if ('noxl' in sensorData) {
       const no2 = sensorData.noxl;
-      if (typeof no2 === 'string') {
+      if (typeof no2 === 'string' && no2 !== 'INIT' && no2 !== 'OFF') {
         stateUpdate.no2Index = parseInt(no2, 10);
       }
     }

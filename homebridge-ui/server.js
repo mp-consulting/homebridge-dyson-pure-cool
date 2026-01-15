@@ -15,7 +15,9 @@ import { HomebridgePluginUiServer, RequestError } from '@homebridge/plugin-ui-ut
 import { createDecipheriv } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
-import { getProductTypeDisplayNames } from '../dist/config/index.js';
+import { getProductTypeDisplayNames, getDeviceFeatures, getHeatingDevices } from '../dist/config/index.js';
+import { DysonMqttClient } from '../dist/protocol/mqttClient.js';
+import { MdnsDiscovery } from '../dist/discovery/mdnsDiscovery.js';
 
 // =============================================================================
 // Constants
@@ -267,16 +269,24 @@ async function handleGetDevices(payload) {
 
     console.log(`[DysonUI] Found ${manifest?.length || 0} devices`);
 
-    const devices = (manifest || []).map((d) => ({
-      serial: d.Serial,
-      name: d.Name,
-      productType: d.ProductType,
-      productName: productTypes[d.ProductType] || `Unknown (${d.ProductType})`,
-      version: d.Version,
-      localCredentials: decryptCredentials(d.LocalCredentials),
-      autoUpdate: d.AutoUpdate,
-      newVersionAvailable: d.NewVersionAvailable,
-    }));
+    const devices = (manifest || []).map((d) => {
+      const features = getDeviceFeatures(d.ProductType);
+      return {
+        serial: d.Serial,
+        name: d.Name,
+        productType: d.ProductType,
+        productName: productTypes[d.ProductType] || `Unknown (${d.ProductType})`,
+        version: d.Version,
+        localCredentials: decryptCredentials(d.LocalCredentials),
+        autoUpdate: d.AutoUpdate,
+        newVersionAvailable: d.NewVersionAvailable,
+        // Expose device capabilities from catalog
+        hasHeating: features.heating,
+        hasHumidifier: features.humidifier,
+        hasOscillation: features.oscillation,
+        hasJetFocus: features.frontAirflow,
+      };
+    });
 
     return { success: true, devices };
   } catch (error) {
@@ -289,7 +299,185 @@ async function handleGetDevices(payload) {
 }
 
 async function handleGetProductTypes() {
-  return { success: true, productTypes: getProductTypeDisplayNames() };
+  // Get product types with heating capability
+  const heatingProductTypes = getHeatingDevices().map((d) => d.productType);
+  return {
+    success: true,
+    productTypes: getProductTypeDisplayNames(),
+    heatingProductTypes,
+  };
+}
+
+// =============================================================================
+// Device MQTT Communication
+// =============================================================================
+
+/** Cache discovered device IPs (serial -> IP) */
+const deviceIpCache = new Map();
+
+/** MQTT connection timeout */
+const MQTT_TIMEOUT = 10000;
+
+/** mDNS discovery timeout */
+const MDNS_TIMEOUT = 5000;
+
+/**
+ * Discover device IP via mDNS
+ */
+async function discoverDeviceIp(serial) {
+  // Check cache first
+  if (deviceIpCache.has(serial)) {
+    return deviceIpCache.get(serial);
+  }
+
+  console.log(`[DysonUI] Discovering device ${serial} via mDNS...`);
+  const discovery = new MdnsDiscovery();
+
+  try {
+    const devices = await discovery.discover({ timeout: MDNS_TIMEOUT });
+    console.log(`[DysonUI] mDNS found ${devices.size} devices`);
+
+    // Cache all discovered devices
+    for (const [discoveredSerial, ip] of devices) {
+      deviceIpCache.set(discoveredSerial, ip);
+    }
+
+    return devices.get(serial) || null;
+  } catch (error) {
+    console.error('[DysonUI] mDNS discovery error:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Get device state via MQTT
+ */
+async function handleGetDeviceState(payload) {
+  const { serial, productType, localCredentials } = payload;
+
+  if (!serial || !productType || !localCredentials) {
+    throw new RequestError('Missing device info (serial, productType, localCredentials)', { status: 400 });
+  }
+
+  // Discover device IP
+  const ip = await discoverDeviceIp(serial);
+  if (!ip) {
+    throw new RequestError(`Device ${serial} not found on network`, { status: 404 });
+  }
+
+  console.log(`[DysonUI] Connecting to ${serial} at ${ip}`);
+
+  const client = new DysonMqttClient({
+    host: ip,
+    serial,
+    credentials: localCredentials,
+    productType,
+    timeout: MQTT_TIMEOUT,
+    autoReconnect: false,
+  });
+
+  try {
+    await client.connect();
+    await client.subscribeToStatus();
+
+    // Request current state and wait for response
+    const state = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout waiting for device state'));
+      }, MQTT_TIMEOUT);
+
+      client.on('message', (msg) => {
+        if (msg.data?.msg === 'CURRENT-STATE') {
+          clearTimeout(timeout);
+          resolve(msg.data);
+        }
+      });
+
+      client.requestCurrentState().catch(reject);
+    });
+
+    await client.disconnect();
+
+    // Parse continuous monitoring state from rhtm field
+    const continuousMonitoring = state['product-state']?.rhtm === 'ON';
+
+    console.log(`[DysonUI] Device state: continuousMonitoring=${continuousMonitoring}`);
+
+    return {
+      success: true,
+      continuousMonitoring,
+      rawState: state['product-state'],
+    };
+  } catch (error) {
+    console.error('[DysonUI] MQTT error:', error.message);
+    try {
+      await client.disconnect();
+    } catch {
+      // Ignore disconnect errors
+    }
+    throw new RequestError(`Failed to get device state: ${error.message}`, { status: 500 });
+  }
+}
+
+/**
+ * Set continuous monitoring via MQTT
+ */
+async function handleSetContinuousMonitoring(payload) {
+  const { serial, productType, localCredentials, enabled } = payload;
+
+  if (!serial || !productType || !localCredentials) {
+    throw new RequestError('Missing device info (serial, productType, localCredentials)', { status: 400 });
+  }
+
+  if (typeof enabled !== 'boolean') {
+    throw new RequestError('enabled must be a boolean', { status: 400 });
+  }
+
+  // Discover device IP
+  const ip = await discoverDeviceIp(serial);
+  if (!ip) {
+    throw new RequestError(`Device ${serial} not found on network`, { status: 404 });
+  }
+
+  console.log(`[DysonUI] Setting continuous monitoring to ${enabled} for ${serial}`);
+
+  const client = new DysonMqttClient({
+    host: ip,
+    serial,
+    credentials: localCredentials,
+    productType,
+    timeout: MQTT_TIMEOUT,
+    autoReconnect: false,
+  });
+
+  try {
+    await client.connect();
+
+    // Send STATE-SET command
+    const command = {
+      msg: 'STATE-SET',
+      time: new Date().toISOString(),
+      'mode-reason': 'LAPP',
+      data: {
+        rhtm: enabled ? 'ON' : 'OFF',
+      },
+    };
+
+    await client.publishCommand(command);
+    await client.disconnect();
+
+    console.log(`[DysonUI] Continuous monitoring set to ${enabled}`);
+
+    return { success: true, continuousMonitoring: enabled };
+  } catch (error) {
+    console.error('[DysonUI] MQTT error:', error.message);
+    try {
+      await client.disconnect();
+    } catch {
+      // Ignore disconnect errors
+    }
+    throw new RequestError(`Failed to set continuous monitoring: ${error.message}`, { status: 500 });
+  }
 }
 
 // =============================================================================
@@ -307,6 +495,8 @@ class DysonUiServer extends HomebridgePluginUiServer {
     this.onRequest('/verify-otp', (p) => handleVerifyOtp(this, p));
     this.onRequest('/get-devices', handleGetDevices);
     this.onRequest('/get-product-types', handleGetProductTypes);
+    this.onRequest('/get-device-state', handleGetDeviceState);
+    this.onRequest('/set-continuous-monitoring', handleSetContinuousMonitoring);
 
     this.ready();
   }

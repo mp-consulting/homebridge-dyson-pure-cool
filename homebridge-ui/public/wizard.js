@@ -64,6 +64,7 @@
   };
 
   let productTypes = {};
+  let heatingProductTypes = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -151,6 +152,11 @@
     const selected = state.selectedDevices.has(device.serial);
     const typeName = productTypes[device.productType] || device.productType;
     const defaultName = typeName || 'Dyson Device';
+    // Use hasHeating from device catalog (set by server from getDeviceFeatures)
+    const hasHeating = device.hasHeating === true;
+    const heatingServiceType = device.heatingServiceType || 'thermostat';
+    // Continuous monitoring is available on all devices
+    const continuousMonitoring = device.isContinuousMonitoringEnabled === true;
 
     return `
       <div class="device-card ${selected ? 'selected' : ''}" ${isSelectable ? `data-serial="${device.serial}"` : ''}>
@@ -166,6 +172,28 @@
               : `<div class="device-name">${escapeHtml(device.name || defaultName)}</div>`}
             <div class="device-type">${escapeHtml(typeName)}</div>
             <div class="device-serial">${escapeHtml(device.serial)}</div>
+            ${isSelectable ? `
+              <div class="mt-2" onclick="event.stopPropagation()">
+                <div class="form-check form-switch">
+                  <input class="form-check-input continuous-monitoring-check" type="checkbox" role="switch"
+                    data-serial="${device.serial}" ${continuousMonitoring ? 'checked' : ''}>
+                  <label class="form-check-label small">
+                    Continuous Monitoring
+                    <span class="text-muted d-block" style="font-size: 0.75em;">Keep sensors active when device is off</span>
+                  </label>
+                </div>
+              </div>
+            ` : ''}
+            ${hasHeating && isSelectable ? `
+              <div class="mt-2" onclick="event.stopPropagation()">
+                <label class="form-label small text-muted mb-1">Heating Service</label>
+                <select class="form-select form-select-sm heating-service-select" data-serial="${device.serial}">
+                  <option value="thermostat" ${heatingServiceType === 'thermostat' ? 'selected' : ''}>Thermostat (Recommended)</option>
+                  <option value="heater-cooler" ${heatingServiceType === 'heater-cooler' ? 'selected' : ''}>Heater Cooler</option>
+                  <option value="both" ${heatingServiceType === 'both' ? 'selected' : ''}>Both</option>
+                </select>
+              </div>
+            ` : ''}
           </div>
           ${isSelectable
             ? `<div class="form-check"><input class="form-check-input" type="checkbox" ${selected ? 'checked' : ''}></div>`
@@ -175,16 +203,103 @@
     `;
   }
 
+  // Auto-save config when on step 0 (existing config view)
+  async function autoSaveConfig() {
+    if (state.currentStep !== 0) return;
+    try {
+      await hb.updatePluginConfig([buildConfig()]);
+      await hb.savePluginConfig();
+      hb.toast.success('Settings saved');
+    } catch (error) {
+      hb.toast.error('Failed to save: ' + (error.message || 'Unknown error'));
+    }
+  }
+
+  // Debounce helper for auto-save
+  let autoSaveTimeout = null;
+  function debouncedAutoSave() {
+    if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+    autoSaveTimeout = setTimeout(autoSaveConfig, 500);
+  }
+
+  // Fetch continuous monitoring state from device
+  async function fetchDeviceContinuousMonitoring(device, checkbox) {
+    try {
+      checkbox.disabled = true;
+      const response = await hb.request('/get-device-state', {
+        serial: device.serial,
+        productType: device.productType,
+        localCredentials: device.localCredentials,
+      });
+      checkbox.checked = response.continuousMonitoring;
+      device.isContinuousMonitoringEnabled = response.continuousMonitoring;
+    } catch (error) {
+      console.warn(`Failed to fetch state for ${device.serial}:`, error.message);
+      // Keep default value on error
+    } finally {
+      checkbox.disabled = false;
+    }
+  }
+
   function renderExistingDevices(devices) {
     el.existingDeviceList.innerHTML = devices.map((d) => renderDeviceCard(d, true)).join('');
 
-    // Handle name input changes for existing devices
+    // Handle name input changes for existing devices (with auto-save)
     el.existingDeviceList.querySelectorAll('.device-name-input').forEach((input) => {
       input.addEventListener('input', (e) => {
         const serial = e.target.dataset.serial;
         const device = state.devices.find((d) => d.serial === serial);
         if (device) {
           device.name = e.target.value.trim();
+          debouncedAutoSave();
+        }
+      });
+    });
+
+    // Handle continuous monitoring checkbox changes for existing devices
+    // This sends the command directly to the device via MQTT
+    el.existingDeviceList.querySelectorAll('.continuous-monitoring-check').forEach((checkbox) => {
+      const serial = checkbox.dataset.serial;
+      const device = state.devices.find((d) => d.serial === serial);
+
+      // Fetch initial state from device
+      if (device) {
+        fetchDeviceContinuousMonitoring(device, checkbox);
+      }
+
+      checkbox.addEventListener('change', async (e) => {
+        const dev = state.devices.find((d) => d.serial === e.target.dataset.serial);
+        if (!dev) return;
+
+        const enabled = e.target.checked;
+        checkbox.disabled = true;
+
+        try {
+          await hb.request('/set-continuous-monitoring', {
+            serial: dev.serial,
+            productType: dev.productType,
+            localCredentials: dev.localCredentials,
+            enabled,
+          });
+          hb.toast.success(`Continuous monitoring ${enabled ? 'enabled' : 'disabled'}`);
+        } catch (error) {
+          // Revert checkbox on error
+          checkbox.checked = !enabled;
+          hb.toast.error(error.message || 'Failed to set continuous monitoring');
+        } finally {
+          checkbox.disabled = false;
+        }
+      });
+    });
+
+    // Handle heating service type changes for existing devices (with auto-save)
+    el.existingDeviceList.querySelectorAll('.heating-service-select').forEach((select) => {
+      select.addEventListener('change', (e) => {
+        const serial = e.target.dataset.serial;
+        const device = state.devices.find((d) => d.serial === serial);
+        if (device) {
+          device.heatingServiceType = e.target.value;
+          autoSaveConfig();
         }
       });
     });
@@ -192,7 +307,7 @@
     // Make cards non-clickable for selection (just show as configured)
     el.existingDeviceList.querySelectorAll('.device-card').forEach((card) => {
       card.style.cursor = 'default';
-      const checkbox = card.querySelector('input[type="checkbox"]');
+      const checkbox = card.querySelector('input[type="checkbox"]:not(.continuous-monitoring-check)');
       if (checkbox) {
         checkbox.style.display = 'none';
       }
@@ -206,7 +321,7 @@
     el.deviceList.querySelectorAll('.device-card').forEach((card) => {
       card.addEventListener('click', () => {
         const serial = card.dataset.serial;
-        const checkbox = card.querySelector('input[type="checkbox"]');
+        const checkbox = card.querySelector('input[type="checkbox"]:not(.continuous-monitoring-check)');
         const isSelected = state.selectedDevices.has(serial);
 
         if (isSelected) {
@@ -227,6 +342,46 @@
         const device = state.devices.find((d) => d.serial === serial);
         if (device) {
           device.name = e.target.value.trim();
+        }
+      });
+    });
+
+    // Handle continuous monitoring checkbox changes
+    // This sends the command directly to the device via MQTT
+    el.deviceList.querySelectorAll('.continuous-monitoring-check').forEach((checkbox) => {
+      checkbox.addEventListener('change', async (e) => {
+        const serial = e.target.dataset.serial;
+        const device = state.devices.find((d) => d.serial === serial);
+        if (!device) return;
+
+        const enabled = e.target.checked;
+        checkbox.disabled = true;
+
+        try {
+          await hb.request('/set-continuous-monitoring', {
+            serial: device.serial,
+            productType: device.productType,
+            localCredentials: device.localCredentials,
+            enabled,
+          });
+          hb.toast.success(`Continuous monitoring ${enabled ? 'enabled' : 'disabled'}`);
+        } catch (error) {
+          // Revert checkbox on error
+          checkbox.checked = !enabled;
+          hb.toast.error(error.message || 'Failed to set continuous monitoring');
+        } finally {
+          checkbox.disabled = false;
+        }
+      });
+    });
+
+    // Handle heating service type changes
+    el.deviceList.querySelectorAll('.heating-service-select').forEach((select) => {
+      select.addEventListener('change', (e) => {
+        const serial = e.target.dataset.serial;
+        const device = state.devices.find((d) => d.serial === serial);
+        if (device) {
+          device.heatingServiceType = e.target.value;
         }
       });
     });
@@ -252,6 +407,8 @@
       state.devices = config.devices.map((d) => ({
         ...d,
         productName: productTypes[d.productType] || `Unknown (${d.productType})`,
+        // Set hasHeating from catalog for existing devices
+        hasHeating: heatingProductTypes.includes(d.productType),
       }));
       state.selectedDevices = new Set(config.devices.map((d) => d.serial));
     }
@@ -265,12 +422,23 @@
       platform: 'DysonPureCool',
       name: 'Dyson Pure Cool',
       countryCode: el.country.value,
-      devices: selectedDevices.map((d) => ({
-        serial: d.serial,
-        name: d.name,
-        productType: d.productType,
-        localCredentials: d.localCredentials,
-      })),
+      devices: selectedDevices.map((d) => {
+        const deviceConfig = {
+          serial: d.serial,
+          name: d.name,
+          productType: d.productType,
+          localCredentials: d.localCredentials,
+        };
+        // Include continuous monitoring if enabled
+        if (d.isContinuousMonitoringEnabled) {
+          deviceConfig.isContinuousMonitoringEnabled = true;
+        }
+        // Only include heatingServiceType for devices that support heating
+        if (d.hasHeating && d.heatingServiceType) {
+          deviceConfig.heatingServiceType = d.heatingServiceType;
+        }
+        return deviceConfig;
+      }),
       enableTemperature: opts.temperature.checked,
       enableHumidity: opts.humidity.checked,
       enableAirQuality: opts.airQuality.checked,
@@ -431,10 +599,13 @@
   async function init() {
     hb.disableSaveButton();
 
-    // Load product types
+    // Load product types and heating capability info from device catalog
     try {
       const response = await hb.request('/get-product-types', {});
-      if (response.success) productTypes = response.productTypes;
+      if (response.success) {
+        productTypes = response.productTypes;
+        heatingProductTypes = response.heatingProductTypes || [];
+      }
     } catch (e) {
       console.warn('Failed to load product types:', e);
     }

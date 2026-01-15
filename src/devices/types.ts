@@ -127,6 +127,12 @@ export interface DeviceFeatures {
   humiditySensor: boolean;
   /** Has air quality sensors */
   airQualitySensor: boolean;
+  /**
+   * Has basic air quality sensor (Link series)
+   * Basic sensors use pact/vact index (0-9 scale)
+   * Advanced sensors use pm25/pm10/va10 actual values
+   */
+  basicAirQualitySensor: boolean;
   /** Has NO2 sensor (newer models) */
   no2Sensor: boolean;
   /** Supports heating */
@@ -152,6 +158,7 @@ export const DEFAULT_FEATURES: DeviceFeatures = {
   temperatureSensor: false,
   humiditySensor: false,
   airQualitySensor: false,
+  basicAirQualitySensor: false,
   no2Sensor: false,
   heating: false,
   humidifier: false,

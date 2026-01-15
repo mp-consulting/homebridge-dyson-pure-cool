@@ -60,10 +60,12 @@ const PURE_COOL_BASE: DeviceFeatures = {
 
 /**
  * Pure Cool Link (older models without jet focus)
+ * Uses basic air quality sensors (pact/vact index 0-9)
  */
 const FEATURES_PURE_COOL_LINK: DeviceFeatures = {
   ...PURE_COOL_BASE,
   frontAirflow: false,
+  basicAirQualitySensor: true,
 };
 
 /**
@@ -92,11 +94,13 @@ const FEATURES_PURE_COOL_FORMALDEHYDE: DeviceFeatures = {
 
 /**
  * Hot+Cool Link (older models)
+ * Uses basic air quality sensors (pact/vact index 0-9)
  */
 const FEATURES_HOT_COOL_LINK: DeviceFeatures = {
   ...PURE_COOL_BASE,
   frontAirflow: false,
   heating: true,
+  basicAirQualitySensor: true,
 };
 
 /**

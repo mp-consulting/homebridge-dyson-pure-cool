@@ -171,11 +171,18 @@
   font-family: monospace;
 }
 
-.device-card .form-check {
+/* Selection checkbox positioned at right */
+.device-card > .d-flex > .form-check {
   position: absolute;
   right: 1rem;
   top: 50%;
   transform: translateY(-50%);
+}
+
+/* Form switches inside device cards should not be absolutely positioned */
+.device-card .form-switch {
+  position: static;
+  transform: none;
 }
 
 /* Country Select */
