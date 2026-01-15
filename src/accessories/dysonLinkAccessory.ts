@@ -64,6 +64,13 @@ export interface DeviceOptions {
   isHeatingDisabled?: boolean;
   /** Override heating safety restrictions */
   isHeatingSafetyIgnored?: boolean;
+  /**
+   * Heating service type to expose in HomeKit
+   * - 'thermostat': Traditional Thermostat service (matches reference plugin)
+   * - 'heater-cooler': HeaterCooler service (modern HomeKit approach)
+   * - 'both': Expose both services (default for backwards compatibility)
+   */
+  heatingServiceType?: 'thermostat' | 'heater-cooler' | 'both';
 
   // Humidifier options (PH models)
   /** Enable full humidity range (0-100%) for humidifier */
@@ -228,25 +235,30 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
-    // Create HeaterCoolerService for HP-series devices (if heating not disabled)
+    // Create heating services for HP-series devices (if heating not disabled)
+    // Users can choose between Thermostat, HeaterCooler, or both
     if (features.heating && !opts.isHeatingDisabled) {
-      this.heaterCoolerService = new HeaterCoolerService({
-        accessory: this.accessory,
-        device: linkDevice,
-        api: this.api,
-        log: this.log,
-      });
-    }
+      const heatingServiceType = opts.heatingServiceType ?? 'thermostat';
 
-    // Create ThermostatService for HP models (heating)
-    // Note: Both HeaterCooler and Thermostat are available - users can choose in HomeKit
-    if (features.heating && !opts.isHeatingDisabled) {
-      this.thermostatService = new ThermostatService({
-        accessory: this.accessory,
-        device: linkDevice,
-        api: this.api,
-        log: this.log,
-      });
+      // Create HeaterCooler if requested
+      if (heatingServiceType === 'heater-cooler' || heatingServiceType === 'both') {
+        this.heaterCoolerService = new HeaterCoolerService({
+          accessory: this.accessory,
+          device: linkDevice,
+          api: this.api,
+          log: this.log,
+        });
+      }
+
+      // Create Thermostat if requested (default behavior, matches reference plugin)
+      if (heatingServiceType === 'thermostat' || heatingServiceType === 'both') {
+        this.thermostatService = new ThermostatService({
+          accessory: this.accessory,
+          device: linkDevice,
+          api: this.api,
+          log: this.log,
+        });
+      }
     }
 
     // Create HumidifierControlService for PH models

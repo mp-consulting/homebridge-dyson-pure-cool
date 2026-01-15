@@ -148,6 +148,17 @@
               "default": false,
               "description": "Hide thermostat/heater controls for HP models"
             },
+            "heatingServiceType": {
+              "title": "Heating Service Type",
+              "type": "string",
+              "default": "thermostat",
+              "description": "Which HomeKit service to use for heating control",
+              "oneOf": [
+                { "title": "Thermostat (Recommended)", "enum": ["thermostat"] },
+                { "title": "Heater Cooler", "enum": ["heater-cooler"] },
+                { "title": "Both", "enum": ["both"] }
+              ]
+            },
             "isHeatingSafetyIgnored": {
               "title": "Ignore Heating Safety",
               "type": "boolean",
@@ -308,6 +319,7 @@
               "expandable": true,
               "items": [
                 "devices[].isHeatingDisabled",
+                "devices[].heatingServiceType",
                 "devices[].isHeatingSafetyIgnored"
               ]
             },

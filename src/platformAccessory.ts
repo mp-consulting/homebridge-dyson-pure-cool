@@ -47,6 +47,8 @@ interface DeviceConfig {
   useFahrenheit?: boolean;
   /** Disable heating controls */
   isHeatingDisabled?: boolean;
+  /** Heating service type: 'thermostat', 'heater-cooler', or 'both' */
+  heatingServiceType?: 'thermostat' | 'heater-cooler' | 'both';
   /** Enable full humidity range (0-100%) */
   fullRangeHumidity?: boolean;
   /** Enable auto mode on device activation */
@@ -151,6 +153,7 @@ export class DysonPlatformAccessory {
         isAirQualityIgnored: config.isAirQualityIgnored,
         useFahrenheit: config.useFahrenheit,
         isHeatingDisabled: config.isHeatingDisabled,
+        heatingServiceType: config.heatingServiceType,
         fullRangeHumidity: config.fullRangeHumidity,
         enableAutoModeWhenActivating: config.enableAutoModeWhenActivating,
         isNightModeEnabled: config.isNightModeEnabled,
