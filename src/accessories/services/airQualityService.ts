@@ -169,10 +169,18 @@ export class AirQualityService {
    * Based on reference implementation thresholds
    */
   private calculateBasicPactQuality(pact: number): number {
-    if (pact <= 2) return 1; // EXCELLENT
-    if (pact <= 4) return 2; // GOOD
-    if (pact <= 7) return 3; // FAIR
-    if (pact <= 9) return 4; // INFERIOR
+    if (pact <= 2) {
+      return 1; // EXCELLENT
+    }
+    if (pact <= 4) {
+      return 2; // GOOD
+    }
+    if (pact <= 7) {
+      return 3; // FAIR
+    }
+    if (pact <= 9) {
+      return 4; // INFERIOR
+    }
     return 5; // POOR
   }
 
@@ -182,10 +190,18 @@ export class AirQualityService {
    */
   private calculateBasicVactQuality(vact: number): number {
     const scaled = vact * 0.125;
-    if (scaled <= 3) return 1; // EXCELLENT
-    if (scaled <= 6) return 2; // GOOD
-    if (scaled <= 8) return 3; // FAIR
-    if (scaled <= 9) return 4; // INFERIOR
+    if (scaled <= 3) {
+      return 1; // EXCELLENT
+    }
+    if (scaled <= 6) {
+      return 2; // GOOD
+    }
+    if (scaled <= 8) {
+      return 3; // FAIR
+    }
+    if (scaled <= 9) {
+      return 4; // INFERIOR
+    }
     return 5; // POOR
   }
 
