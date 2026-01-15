@@ -153,7 +153,7 @@ If you prefer not to use your Dyson account, you can configure devices manually:
 ### Thermostat (HP Models)
 
 - **Heating Mode**: Turn heating on/off
-- **Target Temperature**: Set target temperature (1-37°C)
+- **Target Temperature**: Set target temperature (10-38°C)
 - **Current Temperature**: Displays current room temperature
 
 ### Humidifier (PH Models)

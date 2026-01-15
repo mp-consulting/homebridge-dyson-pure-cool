@@ -104,13 +104,13 @@ export class HeaterCoolerService {
       });
 
     // Set up HeatingThresholdTemperature characteristic
-    // Dyson supports 1°C - 37°C
+    // HomeKit standard range is 10-38°C to avoid Home app issues
     // Set initial value within range before setting props to avoid warning
     this.service.getCharacteristic(Characteristic.HeatingThresholdTemperature)
       .updateValue(20) // Default to 20°C
       .setProps({
-        minValue: 1,
-        maxValue: 37,
+        minValue: 10,
+        maxValue: 38,
         minStep: 1,
       })
       .onGet(this.handleHeatingThresholdGet.bind(this))

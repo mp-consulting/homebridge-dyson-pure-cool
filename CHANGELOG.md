@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Filter status with replacement indicator
 - **Thermostat Service** - For Hot+Cool models (HP series)
   - Heating mode control
-  - Target temperature setting (1-37°C)
+  - Target temperature setting (10-38°C)
   - Configurable service type (HeaterCooler or Thermostat)
 - **Humidifier Service** - For Humidify+Cool models (PH series)
   - Humidity target control
