@@ -1,5 +1,5 @@
 {
-  "name": "homebridge-dyson-pure-cool",
+  "name": "@mp-consulting/homebridge-dyson-pure-cool",
   "displayName": "Dyson Pure Cool",
   "type": "module",
   "version": "1.0.1",
