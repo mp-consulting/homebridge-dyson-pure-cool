@@ -25,8 +25,10 @@ interface DeviceConfig {
   productType: string;
   /** User-assigned device name */
   name?: string;
-  /** Local MQTT credentials (base64 encoded) */
-  credentials: string;
+  /** Local MQTT credentials - supports both field names for compatibility */
+  credentials?: string;
+  /** Local MQTT credentials (from cloud API) */
+  localCredentials?: string;
   /** Device IP address on local network */
   ipAddress?: string;
 
@@ -107,12 +109,20 @@ export class DysonPlatformAccessory {
       return false;
     }
 
-    if (!config.credentials) {
+    // Accept either 'credentials' or 'localCredentials' field
+    if (!config.credentials && !config.localCredentials) {
       this.log.error(`Device ${config.serial} missing credentials`);
       return false;
     }
 
     return true;
+  }
+
+  /**
+   * Get credentials from config (supports both field names)
+   */
+  private getCredentials(config: DeviceConfig): string {
+    return config.credentials || config.localCredentials || '';
   }
 
   /**
@@ -128,7 +138,7 @@ export class DysonPlatformAccessory {
         serial: config.serial,
         productType: config.productType,
         name: config.name || `Dyson ${config.serial}`,
-        credentials: config.credentials,
+        credentials: this.getCredentials(config),
         ipAddress: config.ipAddress,
       }) as DysonLinkDevice;
 

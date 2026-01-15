@@ -43,6 +43,7 @@
   height: 36px;
   border-radius: 50%;
   background: var(--bs-secondary-bg);
+  color: var(--bs-secondary);
   border: 2px solid transparent;
   display: flex;
   align-items: center;
@@ -147,6 +148,16 @@
 .device-card .device-name {
   font-weight: 600;
   margin-bottom: 0.25rem;
+}
+
+.device-card .device-name-input {
+  font-weight: 600;
+  max-width: 250px;
+}
+
+.device-card .device-name-input::placeholder {
+  font-weight: 400;
+  color: var(--bs-secondary);
 }
 
 .device-card .device-type {

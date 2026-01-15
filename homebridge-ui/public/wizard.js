@@ -150,13 +150,20 @@
   function renderDeviceCard(device, isSelectable = false) {
     const selected = state.selectedDevices.has(device.serial);
     const typeName = productTypes[device.productType] || device.productType;
+    const defaultName = typeName || 'Dyson Device';
 
     return `
       <div class="device-card ${selected ? 'selected' : ''}" ${isSelectable ? `data-serial="${device.serial}"` : ''}>
         <div class="d-flex align-items-center ${isSelectable ? 'position-relative' : ''}">
           <div class="device-icon">&#127744;</div>
           <div class="flex-grow-1">
-            <div class="device-name">${escapeHtml(device.name || 'Dyson Device')}</div>
+            ${isSelectable
+              ? `<input type="text" class="form-control form-control-sm device-name-input mb-1"
+                   data-serial="${device.serial}"
+                   value="${escapeHtml(device.name || '')}"
+                   placeholder="${escapeHtml(defaultName)}"
+                   onclick="event.stopPropagation()">`
+              : `<div class="device-name">${escapeHtml(device.name || defaultName)}</div>`}
             <div class="device-type">${escapeHtml(typeName)}</div>
             <div class="device-serial">${escapeHtml(device.serial)}</div>
           </div>
@@ -169,12 +176,33 @@
   }
 
   function renderExistingDevices(devices) {
-    el.existingDeviceList.innerHTML = devices.map((d) => renderDeviceCard(d, false)).join('');
+    el.existingDeviceList.innerHTML = devices.map((d) => renderDeviceCard(d, true)).join('');
+
+    // Handle name input changes for existing devices
+    el.existingDeviceList.querySelectorAll('.device-name-input').forEach((input) => {
+      input.addEventListener('input', (e) => {
+        const serial = e.target.dataset.serial;
+        const device = state.devices.find((d) => d.serial === serial);
+        if (device) {
+          device.name = e.target.value.trim();
+        }
+      });
+    });
+
+    // Make cards non-clickable for selection (just show as configured)
+    el.existingDeviceList.querySelectorAll('.device-card').forEach((card) => {
+      card.style.cursor = 'default';
+      const checkbox = card.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        checkbox.style.display = 'none';
+      }
+    });
   }
 
   function renderDeviceList() {
     el.deviceList.innerHTML = state.devices.map((d) => renderDeviceCard(d, true)).join('');
 
+    // Handle card selection
     el.deviceList.querySelectorAll('.device-card').forEach((card) => {
       card.addEventListener('click', () => {
         const serial = card.dataset.serial;
@@ -189,6 +217,17 @@
 
         card.classList.toggle('selected', !isSelected);
         checkbox.checked = !isSelected;
+      });
+    });
+
+    // Handle name input changes
+    el.deviceList.querySelectorAll('.device-name-input').forEach((input) => {
+      input.addEventListener('input', (e) => {
+        const serial = e.target.dataset.serial;
+        const device = state.devices.find((d) => d.serial === serial);
+        if (device) {
+          device.name = e.target.value.trim();
+        }
       });
     });
   }
@@ -405,7 +444,7 @@
     if (configs.length > 0 && configs[0].devices?.length > 0) {
       state.existingConfig = configs[0];
       loadExistingConfig(configs[0]);
-      renderExistingDevices(configs[0].devices);
+      renderExistingDevices(state.devices);
       goToStep(0);
     } else {
       goToStep(1);
