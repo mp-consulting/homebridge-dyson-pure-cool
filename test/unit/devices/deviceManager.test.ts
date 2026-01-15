@@ -440,4 +440,5 @@ describe('DeviceManager', () => {
       expect(freshManager).toBeInstanceOf(FreshDeviceManager);
     });
   });
+
 });

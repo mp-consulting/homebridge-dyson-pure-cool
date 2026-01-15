@@ -86,6 +86,7 @@ function createMockApi() {
         PM2_5Density: 'PM2_5Density',
         PM10Density: 'PM10Density',
         VOCDensity: 'VOCDensity',
+        NitrogenDioxideDensity: 'NitrogenDioxideDensity',
       },
     },
     _mockAirQualityService: mockAirQualityService,
@@ -407,6 +408,210 @@ describe('AirQualityService', () => {
       expect(mockApi._mockAirQualityService.updateCharacteristic).toHaveBeenCalledWith('PM2_5Density', 10);
       expect(mockApi._mockAirQualityService.updateCharacteristic).toHaveBeenCalledWith('PM10Density', 20);
       expect(mockApi._mockAirQualityService.updateCharacteristic).toHaveBeenCalledWith('VOCDensity', 1);
+    });
+  });
+
+  describe('NO2 sensor support', () => {
+    it('should register NO2 characteristic when hasNo2Sensor is true', () => {
+      service = new AirQualityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        hasNo2Sensor: true,
+      });
+
+      const chars = mockApi._mockAirQualityService._getCharacteristics();
+      expect(chars.get('NitrogenDioxideDensity')?.onGet).toHaveBeenCalled();
+    });
+
+    it('should not register NO2 characteristic when hasNo2Sensor is false', () => {
+      service = new AirQualityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        hasNo2Sensor: false,
+      });
+
+      const chars = mockApi._mockAirQualityService._getCharacteristics();
+      // NO2 characteristic should not have onGet called
+      expect(chars.has('NitrogenDioxideDensity')).toBe(false);
+    });
+
+    it('should return NO2 index value', () => {
+      service = new AirQualityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        hasNo2Sensor: true,
+      });
+
+      const no2Char = mockApi._mockAirQualityService._getCharacteristics().get('NitrogenDioxideDensity');
+      const no2GetHandler = no2Char!.onGet.mock.calls[0][0] as () => number;
+
+      device.state.no2Index = 5;
+      expect(no2GetHandler()).toBe(5);
+    });
+
+    it('should return 0 when NO2 index is undefined', () => {
+      service = new AirQualityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        hasNo2Sensor: true,
+      });
+
+      const no2Char = mockApi._mockAirQualityService._getCharacteristics().get('NitrogenDioxideDensity');
+      const no2GetHandler = no2Char!.onGet.mock.calls[0][0] as () => number;
+
+      device.state.no2Index = undefined;
+      expect(no2GetHandler()).toBe(0);
+    });
+
+    it('should update NO2 characteristic on state change', () => {
+      service = new AirQualityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        hasNo2Sensor: true,
+      });
+
+      mockApi._mockAirQualityService.updateCharacteristic.mockClear();
+
+      device.updateState({
+        no2Index: 7,
+      });
+
+      expect(mockApi._mockAirQualityService.updateCharacteristic).toHaveBeenCalledWith('NitrogenDioxideDensity', 7);
+    });
+  });
+
+  describe('basic air quality sensor (Link series)', () => {
+    let airQualityGetHandler: () => number;
+
+    beforeEach(() => {
+      service = new AirQualityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        basicAirQualitySensor: true,
+      });
+
+      const airQualityChar = mockApi._mockAirQualityService._getCharacteristics().get('AirQuality');
+      airQualityGetHandler = airQualityChar!.onGet.mock.calls[0][0] as () => number;
+    });
+
+    describe('pact (particulate) index calculation', () => {
+      it('should return EXCELLENT (1) for pact 0-2', () => {
+        device.state.pm25 = 0;
+        expect(airQualityGetHandler()).toBe(1);
+
+        device.state.pm25 = 2;
+        expect(airQualityGetHandler()).toBe(1);
+      });
+
+      it('should return GOOD (2) for pact 3-4', () => {
+        device.state.pm25 = 3;
+        expect(airQualityGetHandler()).toBe(2);
+
+        device.state.pm25 = 4;
+        expect(airQualityGetHandler()).toBe(2);
+      });
+
+      it('should return FAIR (3) for pact 5-7', () => {
+        device.state.pm25 = 5;
+        expect(airQualityGetHandler()).toBe(3);
+
+        device.state.pm25 = 7;
+        expect(airQualityGetHandler()).toBe(3);
+      });
+
+      it('should return INFERIOR (4) for pact 8-9', () => {
+        device.state.pm25 = 8;
+        expect(airQualityGetHandler()).toBe(4);
+
+        device.state.pm25 = 9;
+        expect(airQualityGetHandler()).toBe(4);
+      });
+
+      it('should return POOR (5) for pact > 9', () => {
+        device.state.pm25 = 10;
+        expect(airQualityGetHandler()).toBe(5);
+      });
+    });
+
+    describe('vact (VOC) index calculation', () => {
+      it('should return EXCELLENT (1) for vact scaled 0-3', () => {
+        // scaled = vact * 0.125, so vact <= 24 gives scaled <= 3
+        device.state.pm25 = 0; // Good pact
+        device.state.vocIndex = 0;
+        expect(airQualityGetHandler()).toBe(1);
+
+        device.state.vocIndex = 24;
+        expect(airQualityGetHandler()).toBe(1);
+      });
+
+      it('should return GOOD (2) for vact scaled 3-6', () => {
+        // scaled = vact * 0.125, so vact 25-48 gives scaled ~3.125-6
+        device.state.pm25 = 0; // Good pact
+        device.state.vocIndex = 32; // scaled = 4
+        expect(airQualityGetHandler()).toBe(2);
+
+        device.state.vocIndex = 48; // scaled = 6
+        expect(airQualityGetHandler()).toBe(2);
+      });
+
+      it('should return FAIR (3) for vact scaled 6-8', () => {
+        // scaled = vact * 0.125, so vact 49-64 gives scaled ~6.125-8
+        device.state.pm25 = 0; // Good pact
+        device.state.vocIndex = 56; // scaled = 7
+        expect(airQualityGetHandler()).toBe(3);
+
+        device.state.vocIndex = 64; // scaled = 8
+        expect(airQualityGetHandler()).toBe(3);
+      });
+
+      it('should return INFERIOR (4) for vact scaled 8-9', () => {
+        // scaled = vact * 0.125, so vact 65-72 gives scaled ~8.125-9
+        device.state.pm25 = 0; // Good pact
+        device.state.vocIndex = 68; // scaled = 8.5
+        expect(airQualityGetHandler()).toBe(4);
+
+        device.state.vocIndex = 72; // scaled = 9
+        expect(airQualityGetHandler()).toBe(4);
+      });
+
+      it('should return POOR (5) for vact scaled > 9', () => {
+        // scaled = vact * 0.125, so vact > 72 gives scaled > 9
+        device.state.pm25 = 0; // Good pact
+        device.state.vocIndex = 80; // scaled = 10
+        expect(airQualityGetHandler()).toBe(5);
+      });
+    });
+
+    describe('combined pact and vact quality', () => {
+      it('should return worse of pact and vact quality', () => {
+        // Bad pact (5), good vact - should return bad pact
+        device.state.pm25 = 5; // FAIR (3)
+        device.state.vocIndex = 0; // EXCELLENT (1)
+        expect(airQualityGetHandler()).toBe(3);
+
+        // Good pact (0), bad vact - should return bad vact
+        device.state.pm25 = 0; // EXCELLENT (1)
+        device.state.vocIndex = 80; // POOR (5)
+        expect(airQualityGetHandler()).toBe(5);
+      });
+
+      it('should use vact quality of 1 when vocIndex is undefined', () => {
+        device.state.pm25 = 5; // FAIR (3)
+        device.state.vocIndex = undefined;
+        expect(airQualityGetHandler()).toBe(3); // Should only use pact
+      });
     });
   });
 });
