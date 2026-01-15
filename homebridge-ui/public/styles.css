@@ -1,0 +1,221 @@
+.dyson-wizard {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.wizard-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.wizard-header img {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 1rem;
+}
+
+.wizard-header h4 {
+  margin-bottom: 0.5rem;
+}
+
+.wizard-header .text-muted {
+  font-size: 0.9rem;
+}
+
+/* Step Progress Indicator */
+.step-progress {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.step-progress li {
+  display: flex;
+  align-items: center;
+  color: var(--bs-secondary);
+  transition: all 0.3s ease;
+}
+
+.step-progress li .step-number {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bs-secondary-bg);
+  border: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-right: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.step-progress li .step-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+/* Active step - highlighted with ring and pulse */
+.step-progress li.active .step-number {
+  background: var(--bs-primary);
+  color: white;
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), 0.25);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.step-progress li.active .step-label {
+  color: var(--bs-primary);
+  font-weight: 600;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), 0.25); }
+  50% { box-shadow: 0 0 0 8px rgba(var(--bs-primary-rgb), 0.15); }
+}
+
+/* Completed step */
+.step-progress li.completed .step-number {
+  background: var(--bs-success);
+  color: white;
+  border-color: var(--bs-success);
+}
+
+.step-progress li.completed .step-label {
+  color: var(--bs-success);
+}
+
+/* Connector lines */
+.step-progress .step-connector {
+  width: 40px;
+  height: 3px;
+  background: var(--bs-secondary-bg);
+  margin: 0 0.75rem;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+.step-progress li.completed + .step-connector,
+.step-progress .step-connector.completed {
+  background: var(--bs-success);
+}
+
+/* Wizard Steps */
+.wizard-step {
+  display: none;
+}
+
+.wizard-step.active {
+  display: block;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Device Cards */
+.device-card {
+  border: 2px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.device-card:hover {
+  border-color: var(--bs-primary);
+  background: var(--bs-light);
+}
+
+.device-card.selected {
+  border-color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), 0.1);
+}
+
+.device-card .device-icon {
+  font-size: 2rem;
+  margin-right: 1rem;
+}
+
+.device-card .device-name {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.device-card .device-type {
+  font-size: 0.85rem;
+  color: var(--bs-secondary);
+}
+
+.device-card .device-serial {
+  font-size: 0.75rem;
+  color: var(--bs-secondary);
+  font-family: monospace;
+}
+
+.device-card .form-check {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Country Select */
+.country-select {
+  max-width: 200px;
+}
+
+/* Success Animation */
+.success-icon {
+  font-size: 4rem;
+  color: var(--bs-success);
+  animation: scaleIn 0.5s ease;
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+/* Alert styling */
+.alert-icon {
+  font-size: 1.25rem;
+  margin-right: 0.5rem;
+}
+
+/* Loading state */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+/* Options form */
+.options-section {
+  background: var(--bs-light);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.options-section h6 {
+  margin-bottom: 1rem;
+  color: var(--bs-secondary);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+}

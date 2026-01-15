@@ -11,7 +11,6 @@ import type { MqttConnectFn } from '../protocol/mqttClient.js';
 import { DysonLinkDevice } from './dysonLinkDevice.js';
 import {
   isProductTypeSupported as catalogIsSupported,
-  getSupportedProductTypes as catalogGetTypes,
   getDeviceModelName,
 } from '../config/index.js';
 

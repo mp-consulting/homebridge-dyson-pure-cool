@@ -14,8 +14,12 @@ export type {
   ChallengeResponse,
   CloudApiConfig,
   CloudDeviceInfo,
+  ConnectedConfig,
   DeviceCredentials,
   DeviceInfo,
-  RawDeviceManifest,
+  MqttConfig,
+  RawDeviceManifestV2,
+  RawDeviceManifestV3,
+  UserStatusResponse,
 } from './types.js';
 export { CloudApiError, CloudApiErrorType } from './types.js';

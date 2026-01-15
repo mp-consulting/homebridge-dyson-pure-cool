@@ -1,8 +1,13 @@
 /**
  * DysonCloudApi Unit Tests
+ *
+ * Tests the v3 authentication flow:
+ * 1. POST /v3/userregistration/email/userstatus - Check account status
+ * 2. POST /v3/userregistration/email/auth - Request OTP
+ * 3. POST /v3/userregistration/email/verify - Verify OTP and get token
  */
 
-import { createHash, createCipheriv } from 'node:crypto';
+import { createCipheriv } from 'node:crypto';
 
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 
@@ -29,6 +34,45 @@ function createEncryptedCredentials(data: { apPasswordHash: string }): string {
   return encrypted.toString('base64');
 }
 
+/**
+ * Helper to create a mock user status response (active account)
+ */
+function mockUserStatusResponse() {
+  return {
+    ok: true,
+    json: async () => ({
+      accountStatus: 'ACTIVE',
+      authenticationMethod: 'EMAIL_PWD_2FA',
+    }),
+  } as Response;
+}
+
+/**
+ * Helper to create a mock auth response with token (non-2FA flow)
+ */
+function mockAuthTokenResponse(token = 'test-token-123') {
+  return {
+    ok: true,
+    json: async () => ({
+      account: 'test-account',
+      token,
+      tokenType: 'Bearer',
+    }),
+  } as Response;
+}
+
+/**
+ * Helper to create a mock auth response with challengeId (2FA flow)
+ */
+function mockAuthChallengeResponse(challengeId = 'challenge-123') {
+  return {
+    ok: true,
+    json: async () => ({
+      challengeId,
+    }),
+  } as Response;
+}
+
 // Mock fetch globally
 const mockFetch = jest.fn<typeof fetch>();
 global.fetch = mockFetch;
@@ -47,41 +91,39 @@ describe('DysonCloudApi', () => {
   });
 
   describe('authenticate', () => {
-    it('should authenticate successfully and store token', async () => {
-      const mockResponse = {
-        ok: true,
-        json: async () => ({
-          account: 'test-account',
-          token: 'test-token-123',
-          tokenType: 'Bearer',
-        }),
-      };
-      mockFetch.mockResolvedValueOnce(mockResponse as Response);
+    it('should authenticate successfully and store token (non-2FA account)', async () => {
+      // Step 1: User status check
+      mockFetch.mockResolvedValueOnce(mockUserStatusResponse());
+      // Step 2: Auth returns token directly (non-2FA)
+      mockFetch.mockResolvedValueOnce(mockAuthTokenResponse());
 
       await api.authenticate();
 
       expect(api.isAuthenticated()).toBe(true);
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
 
-      const [url, options] = mockFetch.mock.calls[0];
-      expect(url).toBe('https://appapi.cp.dyson.com/v3/userregistration/email/auth');
-      expect((options as RequestInit).method).toBe('POST');
+      // Verify user status request
+      const [statusUrl, statusOptions] = mockFetch.mock.calls[0];
+      expect(statusUrl).toBe('https://appapi.cp.dyson.com/v3/userregistration/email/userstatus');
+      expect((statusOptions as RequestInit).method).toBe('POST');
+      expect(((statusOptions as RequestInit).headers as Record<string, string>).country).toBe('US');
 
-      const body = JSON.parse((options as RequestInit).body as string);
-      expect(body.Email).toBe('test@example.com');
-      // Password should be SHA-512 hashed and base64 encoded
-      const expectedHash = createHash('sha512').update('testpassword', 'utf8').digest('base64');
-      expect(body.Password).toBe(expectedHash);
+      // Verify auth request
+      const [authUrl, authOptions] = mockFetch.mock.calls[1];
+      expect(authUrl).toBe('https://appapi.cp.dyson.com/v3/userregistration/email/auth');
+      expect((authOptions as RequestInit).method).toBe('POST');
+      expect(((authOptions as RequestInit).headers as Record<string, string>).country).toBe('US');
+      expect(((authOptions as RequestInit).headers as Record<string, string>).culture).toBe('en-US');
+
+      const body = JSON.parse((authOptions as RequestInit).body as string);
+      expect(body.email).toBe('test@example.com');
     });
 
     it('should throw TWO_FACTOR_REQUIRED when 2FA is needed', async () => {
-      const mockResponse = {
-        ok: true,
-        json: async () => ({
-          challengeId: 'challenge-123',
-        }),
-      };
-      mockFetch.mockResolvedValueOnce(mockResponse as Response);
+      // Step 1: User status check
+      mockFetch.mockResolvedValueOnce(mockUserStatusResponse());
+      // Step 2: Auth returns challengeId (2FA required)
+      mockFetch.mockResolvedValueOnce(mockAuthChallengeResponse());
 
       let thrownError: CloudApiError | null = null;
       try {
@@ -94,10 +136,31 @@ describe('DysonCloudApi', () => {
       expect(thrownError?.type).toBe(CloudApiErrorType.TWO_FACTOR_REQUIRED);
     });
 
+    it('should throw ACCOUNT_NOT_FOUND when account is not active', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          accountStatus: 'INACTIVE',
+          authenticationMethod: 'EMAIL_PWD_2FA',
+        }),
+      } as Response);
+
+      let thrownError: CloudApiError | null = null;
+      try {
+        await api.authenticate();
+      } catch (error) {
+        thrownError = error as CloudApiError;
+      }
+
+      expect(thrownError).toBeInstanceOf(CloudApiError);
+      expect(thrownError?.type).toBe(CloudApiErrorType.ACCOUNT_NOT_FOUND);
+    });
+
     it('should throw AUTHENTICATION_FAILED on 401 response', async () => {
       const mockResponse = {
         ok: false,
         status: 401,
+        json: async () => ({}),
       };
       mockFetch.mockResolvedValueOnce(mockResponse as Response);
 
@@ -117,6 +180,7 @@ describe('DysonCloudApi', () => {
       const mockResponse = {
         ok: false,
         status: 429,
+        json: async () => ({}),
       };
       mockFetch.mockResolvedValueOnce(mockResponse as Response);
 
@@ -135,6 +199,7 @@ describe('DysonCloudApi', () => {
       const mockResponse = {
         ok: false,
         status: 404,
+        json: async () => ({}),
       };
       mockFetch.mockResolvedValueOnce(mockResponse as Response);
 
@@ -150,11 +215,8 @@ describe('DysonCloudApi', () => {
     });
 
     it('should include correct headers in request', async () => {
-      const mockResponse = {
-        ok: true,
-        json: async () => ({ token: 'test-token' }),
-      };
-      mockFetch.mockResolvedValueOnce(mockResponse as Response);
+      mockFetch.mockResolvedValueOnce(mockUserStatusResponse());
+      mockFetch.mockResolvedValueOnce(mockAuthTokenResponse());
 
       await api.authenticate();
 
@@ -162,7 +224,6 @@ describe('DysonCloudApi', () => {
       const headers = (options as RequestInit).headers as Record<string, string>;
       expect(headers['User-Agent']).toContain('DysonLink');
       expect(headers.Accept).toBe('application/json');
-      expect(headers.Country).toBe('US');
       expect(headers['Content-Type']).toBe('application/json');
     });
   });
@@ -170,10 +231,8 @@ describe('DysonCloudApi', () => {
   describe('verifyOtp', () => {
     it('should verify OTP and store token', async () => {
       // First trigger 2FA
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ challengeId: 'challenge-123' }),
-      } as Response);
+      mockFetch.mockResolvedValueOnce(mockUserStatusResponse());
+      mockFetch.mockResolvedValueOnce(mockAuthChallengeResponse());
 
       try {
         await api.authenticate();
@@ -191,11 +250,15 @@ describe('DysonCloudApi', () => {
 
       expect(api.isAuthenticated()).toBe(true);
 
-      const [url, options] = mockFetch.mock.calls[1];
+      const [url, options] = mockFetch.mock.calls[2];
       expect(url).toBe('https://appapi.cp.dyson.com/v3/userregistration/email/verify');
+      expect(((options as RequestInit).headers as Record<string, string>).country).toBe('US');
       const body = JSON.parse((options as RequestInit).body as string);
       expect(body.challengeId).toBe('challenge-123');
       expect(body.otpCode).toBe('123456');
+      expect(body.email).toBe('test@example.com');
+      // Password should be sent in plaintext per Dyson v3 API
+      expect(body.password).toBe('testpassword');
     });
 
     it('should throw error if no active challenge', async () => {
@@ -213,11 +276,9 @@ describe('DysonCloudApi', () => {
 
   describe('getDevices', () => {
     beforeEach(async () => {
-      // Authenticate first
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ token: 'test-token' }),
-      } as Response);
+      // Authenticate first (non-2FA flow)
+      mockFetch.mockResolvedValueOnce(mockUserStatusResponse());
+      mockFetch.mockResolvedValueOnce(mockAuthTokenResponse('test-token'));
       await api.authenticate();
     });
 
@@ -297,7 +358,8 @@ describe('DysonCloudApi', () => {
 
       await api.getDevices();
 
-      const [url, options] = mockFetch.mock.calls[1];
+      // Skip the first two calls (user status + auth)
+      const [url, options] = mockFetch.mock.calls[2];
       expect(url).toBe('https://appapi.cp.dyson.com/v2/provisioningservice/manifest');
       expect((options as RequestInit).headers as Record<string, string>).toHaveProperty('Authorization', 'Bearer test-token');
     });
@@ -306,6 +368,7 @@ describe('DysonCloudApi', () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 403,
+        json: async () => ({}),
       } as Response);
 
       let thrownError: CloudApiError | null = null;
@@ -322,16 +385,28 @@ describe('DysonCloudApi', () => {
 
   describe('logout', () => {
     it('should clear authentication state', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ token: 'test-token' }),
-      } as Response);
+      mockFetch.mockResolvedValueOnce(mockUserStatusResponse());
+      mockFetch.mockResolvedValueOnce(mockAuthTokenResponse());
 
       await api.authenticate();
       expect(api.isAuthenticated()).toBe(true);
 
       api.logout();
       expect(api.isAuthenticated()).toBe(false);
+    });
+  });
+
+  describe('getAuthToken', () => {
+    it('should return null when not authenticated', () => {
+      expect(api.getAuthToken()).toBeNull();
+    });
+
+    it('should return token when authenticated', async () => {
+      mockFetch.mockResolvedValueOnce(mockUserStatusResponse());
+      mockFetch.mockResolvedValueOnce(mockAuthTokenResponse('my-token'));
+
+      await api.authenticate();
+      expect(api.getAuthToken()).toBe('my-token');
     });
   });
 
@@ -374,14 +449,14 @@ describe('DysonCloudApi', () => {
     it('should respect rate limiting between requests', async () => {
       const startTime = Date.now();
 
-      // First request
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ token: 'test-token' }),
-      } as Response);
+      // First request (user status)
+      mockFetch.mockResolvedValueOnce(mockUserStatusResponse());
+      // Second request (auth)
+      mockFetch.mockResolvedValueOnce(mockAuthTokenResponse());
+
       await api.authenticate();
 
-      // Second request immediately after
+      // Third request (get devices)
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ([]),
@@ -389,17 +464,15 @@ describe('DysonCloudApi', () => {
       await api.getDevices();
 
       const elapsed = Date.now() - startTime;
-      // Should have at least 1 second delay between requests
-      expect(elapsed).toBeGreaterThanOrEqual(900); // Allow small margin
+      // Should have delays between requests (3 requests = at least 2 second delay)
+      expect(elapsed).toBeGreaterThanOrEqual(1800); // Allow small margin
     });
   });
 
   describe('credential decryption', () => {
     it('should return empty string for invalid credentials', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ token: 'test-token' }),
-      } as Response);
+      mockFetch.mockResolvedValueOnce(mockUserStatusResponse());
+      mockFetch.mockResolvedValueOnce(mockAuthTokenResponse());
       await api.authenticate();
 
       mockFetch.mockResolvedValueOnce({

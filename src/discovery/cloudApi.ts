@@ -1,9 +1,18 @@
 /**
  * Dyson Cloud API Client
  * Handles authentication and device list retrieval from Dyson cloud services
+ *
+ * Authentication flow (from Android app analysis 2026-01-15):
+ * 1. POST /v3/userregistration/email/userstatus - Check account status
+ * 2. POST /v3/userregistration/email/auth - Request OTP (sends email)
+ * 3. POST /v3/userregistration/email/verify - Verify OTP and get token
+ *
+ * Device retrieval:
+ * - GET /v2/provisioningservice/manifest - Get devices with LocalCredentials
+ * - GET /v3/manifest - Get devices with newer format (localBrokerCredentials)
  */
 
-import { createHash, createDecipheriv } from 'node:crypto';
+import { createDecipheriv } from 'node:crypto';
 
 import type {
   AuthResponse,
@@ -12,7 +21,9 @@ import type {
   CloudDeviceInfo,
   DeviceCredentials,
   DeviceInfo,
-  RawDeviceManifest,
+  RawDeviceManifestV2,
+  RawDeviceManifestV3,
+  UserStatusResponse,
 } from './types.js';
 import { CloudApiError, CloudApiErrorType } from './types.js';
 
@@ -69,46 +80,73 @@ export class DysonCloudApi {
 
   /**
    * Authenticate with Dyson Cloud API
-   * May throw CloudApiError with TWO_FACTOR_REQUIRED if 2FA is needed
+   * Flow: Check user status -> Request OTP -> Wait for verifyOtp()
    *
-   * @throws {CloudApiError} If authentication fails
+   * @throws {CloudApiError} If authentication fails or 2FA is required
    */
   async authenticate(): Promise<void> {
     await this.rateLimitDelay();
 
-    const hashedPassword = this.hashPassword(this.password);
+    // Step 1: Check user status
+    const statusResponse = await this.request<UserStatusResponse>(
+      '/v3/userregistration/email/userstatus',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          email: this.email,
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'country': this.countryCode,
+        },
+      },
+    );
 
+    if (statusResponse.accountStatus !== 'ACTIVE') {
+      throw new CloudApiError(
+        CloudApiErrorType.ACCOUNT_NOT_FOUND,
+        'Account not active or not found. Please check your email address.',
+      );
+    }
+
+    await this.rateLimitDelay();
+
+    // Step 2: Request OTP (initiates email with verification code)
     const response = await this.request<AuthResponse | ChallengeResponse>(
       '/v3/userregistration/email/auth',
       {
         method: 'POST',
         body: JSON.stringify({
-          Email: this.email,
-          Password: hashedPassword,
+          email: this.email,
         }),
         headers: {
           'Content-Type': 'application/json',
+          'country': this.countryCode,
+          'culture': `en-${this.countryCode}`,
         },
       },
     );
 
-    // Check if 2FA is required
+    // Check if 2FA is required (most accounts)
     if ('challengeId' in response) {
       this.challengeId = response.challengeId;
       throw new CloudApiError(
         CloudApiErrorType.TWO_FACTOR_REQUIRED,
-        'Two-factor authentication required. Use verifyOtp() with your OTP code.',
+        'Two-factor authentication required. Check your email for a verification code.',
       );
     }
 
-    // Store auth token
-    this.authToken = response.token;
+    // Direct authentication succeeded (rare - non-2FA account)
+    if ('token' in response) {
+      this.authToken = response.token;
+    }
   }
 
   /**
    * Verify OTP code for two-factor authentication
+   * Password is sent in plaintext per Dyson API requirements
    *
-   * @param otpCode - One-time password from email/SMS
+   * @param otpCode - One-time password from email
    * @throws {CloudApiError} If OTP verification fails
    */
   async verifyOtp(otpCode: string): Promise<void> {
@@ -121,20 +159,20 @@ export class DysonCloudApi {
 
     await this.rateLimitDelay();
 
-    const hashedPassword = this.hashPassword(this.password);
-
+    // Password is sent in PLAINTEXT per Dyson API (not hashed)
     const response = await this.request<AuthResponse>(
       '/v3/userregistration/email/verify',
       {
         method: 'POST',
         body: JSON.stringify({
-          Email: this.email,
-          Password: hashedPassword,
+          email: this.email,
+          password: this.password,
           challengeId: this.challengeId,
           otpCode,
         }),
         headers: {
           'Content-Type': 'application/json',
+          'country': this.countryCode,
         },
       },
     );
@@ -144,7 +182,8 @@ export class DysonCloudApi {
   }
 
   /**
-   * Get list of devices from Dyson Cloud
+   * Get list of devices from Dyson Cloud using v2 API
+   * This endpoint provides LocalCredentials for MQTT authentication
    *
    * @returns Array of device info with credentials
    * @throws {CloudApiError} If not authenticated or request fails
@@ -153,7 +192,7 @@ export class DysonCloudApi {
     this.ensureAuthenticated();
     await this.rateLimitDelay();
 
-    const manifest = await this.request<RawDeviceManifest[]>(
+    const manifest = await this.request<RawDeviceManifestV2[]>(
       '/v2/provisioningservice/manifest',
       {
         method: 'GET',
@@ -163,7 +202,36 @@ export class DysonCloudApi {
       },
     );
 
-    return manifest.map((device) => this.parseDeviceManifest(device));
+    return manifest.map((device) => this.parseDeviceManifestV2(device));
+  }
+
+  /**
+   * Get list of devices from Dyson Cloud using v3 API
+   * This endpoint provides newer device format with localBrokerCredentials
+   *
+   * @param market - Market code (e.g., 'US', 'GB')
+   * @param locale - Locale code (e.g., 'en-US', 'en-GB')
+   * @returns Array of device info from v3 manifest
+   * @throws {CloudApiError} If not authenticated or request fails
+   */
+  async getDevicesV3(market?: string, locale?: string): Promise<DeviceInfo[]> {
+    this.ensureAuthenticated();
+    await this.rateLimitDelay();
+
+    const marketParam = market ?? this.countryCode;
+    const localeParam = locale ?? `en-${this.countryCode}`;
+
+    const manifest = await this.request<RawDeviceManifestV3[]>(
+      `/v3/manifest?market=${marketParam}&locale=${localeParam}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.authToken}`,
+        },
+      },
+    );
+
+    return manifest.map((device) => this.parseDeviceManifestV3(device));
   }
 
   /**
@@ -171,6 +239,13 @@ export class DysonCloudApi {
    */
   isAuthenticated(): boolean {
     return this.authToken !== null;
+  }
+
+  /**
+   * Get the current auth token (for external use)
+   */
+  getAuthToken(): string | null {
+    return this.authToken;
   }
 
   /**
@@ -198,10 +273,11 @@ export class DysonCloudApi {
         ...init,
         signal: controller.signal,
         headers: {
-          'User-Agent': 'DysonLink/36376 CFNetwork/1399 Darwin/22.1.0',
+          'User-Agent': 'DysonLink/212630 CFNetwork/3860.300.31 Darwin/25.2.0',
           'Accept': 'application/json',
-          'Accept-Language': 'en-US',
-          'Country': this.countryCode,
+          'Accept-Language': 'en-GB,en;q=0.9',
+          'X-App-Version': '6.4.25500',
+          'X-Platform': 'ios',
           ...init.headers,
         },
       });
@@ -209,7 +285,7 @@ export class DysonCloudApi {
       this.lastRequestTime = Date.now();
 
       if (!response.ok) {
-        this.handleErrorResponse(response);
+        await this.handleErrorResponse(response);
       }
 
       const data = await response.json() as T;
@@ -238,15 +314,24 @@ export class DysonCloudApi {
   /**
    * Handle error responses from Dyson API
    */
-  private handleErrorResponse(response: Response): never {
+  private async handleErrorResponse(response: Response): Promise<never> {
     const { status } = response;
+
+    // Try to get error message from response body
+    let errorMessage = '';
+    try {
+      const body = await response.json() as { Message?: string };
+      errorMessage = body.Message ?? '';
+    } catch {
+      // Ignore JSON parse errors
+    }
 
     switch (status) {
       case 401:
         this.authToken = null;
         throw new CloudApiError(
           CloudApiErrorType.AUTHENTICATION_FAILED,
-          'Invalid email or password',
+          errorMessage || 'Invalid email or password',
           status,
         );
 
@@ -274,7 +359,7 @@ export class DysonCloudApi {
       default:
         throw new CloudApiError(
           CloudApiErrorType.NETWORK_ERROR,
-          `HTTP error ${status}`,
+          errorMessage || `HTTP error ${status}`,
           status,
         );
     }
@@ -290,16 +375,6 @@ export class DysonCloudApi {
         'Not authenticated. Call authenticate() first.',
       );
     }
-  }
-
-  /**
-   * Hash password using SHA-512 and Base64 encoding
-   * Dyson API requires this specific format
-   */
-  private hashPassword(password: string): string {
-    const hash = createHash('sha512');
-    hash.update(password, 'utf8');
-    return hash.digest('base64');
   }
 
   /**
@@ -329,9 +404,9 @@ export class DysonCloudApi {
   }
 
   /**
-   * Parse raw device manifest into DeviceInfo
+   * Parse raw device manifest v2 into DeviceInfo
    */
-  private parseDeviceManifest(raw: RawDeviceManifest): DeviceInfo {
+  private parseDeviceManifestV2(raw: RawDeviceManifestV2): DeviceInfo {
     const deviceInfo: CloudDeviceInfo = {
       serial: raw.Serial,
       productType: raw.ProductType,
@@ -344,6 +419,39 @@ export class DysonCloudApi {
     const credentials: DeviceCredentials = {
       serial: raw.Serial,
       localCredentials: this.decryptCredentials(raw.LocalCredentials),
+    };
+
+    return {
+      ...deviceInfo,
+      ...credentials,
+    };
+  }
+
+  /**
+   * Parse raw device manifest v3 into DeviceInfo
+   */
+  private parseDeviceManifestV3(raw: RawDeviceManifestV3): DeviceInfo {
+    // Extract credentials from v3 format
+    let localCredentials = '';
+    if (raw.connectedConfiguration?.mqtt?.localBrokerCredentials) {
+      // v3 credentials may be in a different format - try to decrypt
+      localCredentials = this.decryptCredentials(
+        raw.connectedConfiguration.mqtt.localBrokerCredentials,
+      );
+    }
+
+    const deviceInfo: CloudDeviceInfo = {
+      serial: raw.serialNumber,
+      productType: raw.type,
+      name: raw.name ?? raw.productName ?? 'Dyson Device',
+      version: '', // v3 doesn't include version directly
+      autoUpdate: raw.connectedConfiguration?.firmware?.autoUpdate ?? false,
+      newVersionAvailable: false, // v3 doesn't include this
+    };
+
+    const credentials: DeviceCredentials = {
+      serial: raw.serialNumber,
+      localCredentials,
     };
 
     return {

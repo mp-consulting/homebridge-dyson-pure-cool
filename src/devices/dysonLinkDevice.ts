@@ -7,7 +7,6 @@
 
 import { DysonDevice } from './dysonDevice.js';
 import type { DeviceFeatures, DeviceInfo } from './types.js';
-import { DEFAULT_FEATURES } from './types.js';
 import { MessageCodec } from '../protocol/messageCodec.js';
 import type { MqttClientFactory } from './dysonDevice.js';
 import type { MqttConnectFn } from '../protocol/mqttClient.js';

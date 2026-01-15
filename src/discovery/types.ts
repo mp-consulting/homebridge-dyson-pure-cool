@@ -60,9 +60,9 @@ export interface ChallengeResponse {
 }
 
 /**
- * Raw device manifest from Dyson Cloud API
+ * Raw device manifest from Dyson Cloud API v2
  */
-export interface RawDeviceManifest {
+export interface RawDeviceManifestV2 {
   Serial: string;
   Name: string;
   ProductType: string;
@@ -70,6 +70,48 @@ export interface RawDeviceManifest {
   LocalCredentials: string;
   AutoUpdate: boolean;
   NewVersionAvailable: boolean;
+}
+
+/**
+ * MQTT configuration from v3 manifest
+ */
+export interface MqttConfig {
+  remoteBrokerType: string;
+  localBrokerCredentials: string | null;
+  mqttRootTopicLevel: string;
+}
+
+/**
+ * Connected configuration from v3 manifest
+ */
+export interface ConnectedConfig {
+  mqtt: MqttConfig;
+  firmware: {
+    autoUpdate: boolean;
+  };
+}
+
+/**
+ * Raw device manifest from Dyson Cloud API v3
+ */
+export interface RawDeviceManifestV3 {
+  serialNumber: string;
+  name: string | null;
+  type: string;
+  variant: string | null;
+  model: string | null;
+  connectedConfiguration: ConnectedConfig | null;
+  category: string;
+  connectionCategory: string;
+  productName: string | null;
+}
+
+/**
+ * User status response from Dyson Cloud API
+ */
+export interface UserStatusResponse {
+  accountStatus: 'ACTIVE' | 'INACTIVE' | 'UNREGISTERED';
+  authenticationMethod: 'EMAIL_PWD_2FA' | 'EMAIL_PWD';
 }
 
 /**
