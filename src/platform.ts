@@ -2,9 +2,13 @@ import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAcces
 
 import { DysonPlatformAccessory } from './platformAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './config/index.js';
+import { MdnsDiscovery } from './discovery/index.js';
 
 // This is only required when using Custom Services and Characteristics not support by HomeKit
 import { EveHomeKitTypes } from 'homebridge-lib/EveHomeKitTypes';
+
+/** Default mDNS discovery timeout in milliseconds */
+const DEFAULT_DISCOVERY_TIMEOUT = 10000;
 
 /**
  * DysonPureCoolPlatform
@@ -43,10 +47,10 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
     // Dynamic Platform plugins should only register new accessories after this event was fired,
     // in order to ensure they weren't added to homebridge already. This event can also be used
     // to start discovery of new accessories.
-    this.api.on('didFinishLaunching', () => {
+    this.api.on('didFinishLaunching', async () => {
       log.debug('Executed didFinishLaunching callback');
       // run the method to discover / register your devices as accessories
-      this.discoverDevices();
+      await this.discoverDevices();
     });
   }
 
@@ -66,7 +70,7 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
    * Accessories must only be registered once, previously created accessories
    * must not be registered again to prevent "duplicate UUID" errors.
    */
-  discoverDevices() {
+  async discoverDevices(): Promise<void> {
     // Get devices from config (populated by the Custom UI wizard)
     const devices = this.config.devices || [];
 
@@ -77,8 +81,35 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
 
     this.log.info(`Found ${devices.length} device(s) in configuration`);
 
+    // Run mDNS discovery for devices without IP addresses
+    const devicesNeedingIP = devices.filter((d: { ipAddress?: string }) => !d.ipAddress);
+    let discoveredIPs = new Map<string, string>();
+
+    if (devicesNeedingIP.length > 0) {
+      this.log.info(`Discovering IP addresses for ${devicesNeedingIP.length} device(s) via mDNS...`);
+      const timeout = this.config.discoveryTimeout ?? DEFAULT_DISCOVERY_TIMEOUT;
+
+      try {
+        const discovery = new MdnsDiscovery();
+        discoveredIPs = await discovery.discover({ timeout });
+        this.log.info(`mDNS discovery found ${discoveredIPs.size} device(s)`);
+
+        // Log discovered devices
+        for (const [serial, ip] of discoveredIPs) {
+          this.log.debug(`Discovered device ${serial} at ${ip}`);
+        }
+      } catch (error) {
+        this.log.warn('mDNS discovery failed:', error);
+      }
+    }
+
     // loop over the configured devices and register each one if it has not already been registered
     for (const device of devices) {
+      // Inject discovered IP address if not already configured
+      if (!device.ipAddress && discoveredIPs.has(device.serial)) {
+        device.ipAddress = discoveredIPs.get(device.serial);
+        this.log.info(`Using discovered IP ${device.ipAddress} for device ${device.serial}`);
+      }
       // generate a unique id for the accessory using the device serial number
       const uuid = this.api.hap.uuid.generate(device.serial);
 
