@@ -222,7 +222,7 @@ describe('DysonCloudApi', () => {
 
       const [, options] = mockFetch.mock.calls[0];
       const headers = (options as RequestInit).headers as Record<string, string>;
-      expect(headers['User-Agent']).toContain('DysonLink');
+      expect(headers['User-Agent']).toContain('Dalvik');
       expect(headers.Accept).toBe('application/json');
       expect(headers['Content-Type']).toBe('application/json');
     });

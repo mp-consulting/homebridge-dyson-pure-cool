@@ -37,11 +37,11 @@ const DECRYPT_IV = Buffer.from([
 ]);
 
 const DEFAULT_HEADERS = {
-  'User-Agent': 'DysonLink/212630 CFNetwork/3860.300.31 Darwin/25.2.0',
+  'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 14)',
   'Accept': 'application/json',
   'Accept-Language': 'en-GB,en;q=0.9',
   'X-App-Version': '6.4.25500',
-  'X-Platform': 'ios',
+  'X-Platform': 'android',
 };
 
 // =============================================================================
