@@ -1,7 +1,7 @@
 # homebridge-dyson-pure-cool
 
-[![npm version](https://img.shields.io/npm/v/homebridge-dyson-pure-cool.svg)](https://www.npmjs.com/package/homebridge-dyson-pure-cool)
-[![License](https://img.shields.io/npm/l/homebridge-dyson-pure-cool.svg)](https://github.com/mp-consulting/homebridge-dyson-pure-cool/blob/main/LICENSE)
+[![npm version](https://img.shields.io/npm/v/@mp-consulting/homebridge-dyson-pure-cool.svg)](https://www.npmjs.com/package/@mp-consulting/homebridge-dyson-pure-cool)
+[![License](https://img.shields.io/npm/l/@mp-consulting/homebridge-dyson-pure-cool.svg)](https://github.com/mp-consulting/homebridge-dyson-pure-cool/blob/main/LICENSE)
 
 **The most feature-rich Dyson plugin for HomeKit.** Control your Dyson Pure Cool, Hot+Cool, Humidify+Cool, and Big+Quiet devices through Apple HomeKit.
 
@@ -36,14 +36,14 @@
 
 ### Using Homebridge Config UI X (Recommended)
 
-1. Search for `homebridge-dyson-pure-cool` in the Plugins tab
+1. Search for `@mp-consulting/homebridge-dyson-pure-cool` in the Plugins tab
 2. Click **Install**
 3. Configure the plugin in the Settings
 
 ### Manual Installation
 
 ```bash
-npm install -g homebridge-dyson-pure-cool
+npm install -g @mp-consulting/homebridge-dyson-pure-cool
 ```
 
 ## Configuration
