@@ -312,9 +312,6 @@ async function handleGetProductTypes() {
 // Device MQTT Communication
 // =============================================================================
 
-/** Cache discovered device IPs (serial -> IP) */
-const deviceIpCache = new Map();
-
 /** MQTT connection timeout */
 const MQTT_TIMEOUT = 10000;
 
@@ -322,14 +319,20 @@ const MQTT_TIMEOUT = 10000;
 const MDNS_TIMEOUT = 5000;
 
 /**
- * Discover device IP via mDNS
+ * Get device IP - uses config IP first, falls back to mDNS discovery
+ * @param {object} ctx - Server context with access to config
+ * @param {string} serial - Device serial number
+ * @param {string} [configIp] - IP address from config (if available)
+ * @returns {Promise<{ip: string, discovered: boolean}>} IP and whether it was discovered
  */
-async function discoverDeviceIp(serial) {
-  // Check cache first
-  if (deviceIpCache.has(serial)) {
-    return deviceIpCache.get(serial);
+async function getDeviceIp(ctx, serial, configIp) {
+  // Try config IP first if provided
+  if (configIp) {
+    console.log(`[DysonUI] Using cached IP ${configIp} for ${serial}`);
+    return { ip: configIp, discovered: false };
   }
 
+  // Fall back to mDNS discovery
   console.log(`[DysonUI] Discovering device ${serial} via mDNS...`);
   const discovery = new MdnsDiscovery();
 
@@ -337,30 +340,33 @@ async function discoverDeviceIp(serial) {
     const devices = await discovery.discover({ timeout: MDNS_TIMEOUT });
     console.log(`[DysonUI] mDNS found ${devices.size} devices`);
 
-    // Cache all discovered devices
-    for (const [discoveredSerial, ip] of devices) {
-      deviceIpCache.set(discoveredSerial, ip);
+    const ip = devices.get(serial);
+    if (ip) {
+      return { ip, discovered: true };
     }
 
-    return devices.get(serial) || null;
+    return { ip: null, discovered: false };
   } catch (error) {
     console.error('[DysonUI] mDNS discovery error:', error.message);
-    return null;
+    return { ip: null, discovered: false };
   }
 }
+
 
 /**
  * Get device state via MQTT
  */
-async function handleGetDeviceState(payload) {
-  const { serial, productType, localCredentials } = payload;
+async function handleGetDeviceState(ctx, payload) {
+  const { serial, productType, localCredentials, ipAddress } = payload;
 
   if (!serial || !productType || !localCredentials) {
     throw new RequestError('Missing device info (serial, productType, localCredentials)', { status: 400 });
   }
 
-  // Discover device IP
-  const ip = await discoverDeviceIp(serial);
+  // Get device IP - use config IP first, fall back to mDNS
+  let { ip, discovered } = await getDeviceIp(ctx, serial, ipAddress);
+
+  // If config IP fails, try mDNS discovery
   if (!ip) {
     throw new RequestError(`Device ${serial} not found on network`, { status: 404 });
   }
@@ -403,10 +409,12 @@ async function handleGetDeviceState(payload) {
 
     console.log(`[DysonUI] Device state: continuousMonitoring=${continuousMonitoring}`);
 
+    // Return discovered IP so client can save it to config
     return {
       success: true,
       continuousMonitoring,
       rawState: state['product-state'],
+      discoveredIp: discovered ? ip : undefined,
     };
   } catch (error) {
     console.error('[DysonUI] MQTT error:', error.message);
@@ -415,6 +423,17 @@ async function handleGetDeviceState(payload) {
     } catch {
       // Ignore disconnect errors
     }
+
+    // If connection failed with cached IP, try mDNS discovery
+    if (ipAddress && !discovered) {
+      console.log(`[DysonUI] Cached IP ${ipAddress} failed, trying mDNS discovery...`);
+      const freshResult = await getDeviceIp(ctx, serial, null);
+      if (freshResult.ip && freshResult.ip !== ipAddress) {
+        // Retry with freshly discovered IP
+        return handleGetDeviceState(ctx, { ...payload, ipAddress: freshResult.ip, _retried: true });
+      }
+    }
+
     throw new RequestError(`Failed to get device state: ${error.message}`, { status: 500 });
   }
 }
@@ -422,8 +441,8 @@ async function handleGetDeviceState(payload) {
 /**
  * Set continuous monitoring via MQTT
  */
-async function handleSetContinuousMonitoring(payload) {
-  const { serial, productType, localCredentials, enabled } = payload;
+async function handleSetContinuousMonitoring(ctx, payload) {
+  const { serial, productType, localCredentials, enabled, ipAddress } = payload;
 
   if (!serial || !productType || !localCredentials) {
     throw new RequestError('Missing device info (serial, productType, localCredentials)', { status: 400 });
@@ -433,8 +452,8 @@ async function handleSetContinuousMonitoring(payload) {
     throw new RequestError('enabled must be a boolean', { status: 400 });
   }
 
-  // Discover device IP
-  const ip = await discoverDeviceIp(serial);
+  // Get device IP - use config IP first, fall back to mDNS
+  let { ip, discovered } = await getDeviceIp(ctx, serial, ipAddress);
   if (!ip) {
     throw new RequestError(`Device ${serial} not found on network`, { status: 404 });
   }
@@ -468,7 +487,12 @@ async function handleSetContinuousMonitoring(payload) {
 
     console.log(`[DysonUI] Continuous monitoring set to ${enabled}`);
 
-    return { success: true, continuousMonitoring: enabled };
+    // Return discovered IP so client can save it to config
+    return {
+      success: true,
+      continuousMonitoring: enabled,
+      discoveredIp: discovered ? ip : undefined,
+    };
   } catch (error) {
     console.error('[DysonUI] MQTT error:', error.message);
     try {
@@ -476,6 +500,17 @@ async function handleSetContinuousMonitoring(payload) {
     } catch {
       // Ignore disconnect errors
     }
+
+    // If connection failed with cached IP, try mDNS discovery
+    if (ipAddress && !discovered) {
+      console.log(`[DysonUI] Cached IP ${ipAddress} failed, trying mDNS discovery...`);
+      const freshResult = await getDeviceIp(ctx, serial, null);
+      if (freshResult.ip && freshResult.ip !== ipAddress) {
+        // Retry with freshly discovered IP
+        return handleSetContinuousMonitoring(ctx, { ...payload, ipAddress: freshResult.ip, _retried: true });
+      }
+    }
+
     throw new RequestError(`Failed to set continuous monitoring: ${error.message}`, { status: 500 });
   }
 }
@@ -495,8 +530,8 @@ class DysonUiServer extends HomebridgePluginUiServer {
     this.onRequest('/verify-otp', (p) => handleVerifyOtp(this, p));
     this.onRequest('/get-devices', handleGetDevices);
     this.onRequest('/get-product-types', handleGetProductTypes);
-    this.onRequest('/get-device-state', handleGetDeviceState);
-    this.onRequest('/set-continuous-monitoring', handleSetContinuousMonitoring);
+    this.onRequest('/get-device-state', (p) => handleGetDeviceState(this, p));
+    this.onRequest('/set-continuous-monitoring', (p) => handleSetContinuousMonitoring(this, p));
 
     this.ready();
   }

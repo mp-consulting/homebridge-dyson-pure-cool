@@ -14,6 +14,7 @@ import { DysonLinkAccessory } from './accessories/dysonLinkAccessory.js';
 import type { DeviceOptions } from './accessories/dysonLinkAccessory.js';
 import type { DysonLinkDevice } from './devices/dysonLinkDevice.js';
 import { getDeviceModelName, isProductTypeSupported } from './config/index.js';
+import { MdnsDiscovery } from './discovery/index.js';
 
 /**
  * Device configuration from plugin settings
@@ -144,30 +145,13 @@ export class DysonPlatformAccessory {
         ipAddress: config.ipAddress,
       }) as DysonLinkDevice;
 
-      // Extract device options from config
-      const options: DeviceOptions = {
-        temperatureOffset: config.temperatureOffset,
-        humidityOffset: config.humidityOffset,
-        isTemperatureIgnored: config.isTemperatureIgnored,
-        isHumidityIgnored: config.isHumidityIgnored,
-        isAirQualityIgnored: config.isAirQualityIgnored,
-        useFahrenheit: config.useFahrenheit,
-        isHeatingDisabled: config.isHeatingDisabled,
-        heatingServiceType: config.heatingServiceType,
-        fullRangeHumidity: config.fullRangeHumidity,
-        enableAutoModeWhenActivating: config.enableAutoModeWhenActivating,
-        isNightModeEnabled: config.isNightModeEnabled,
-        isJetFocusEnabled: config.isJetFocusEnabled,
-        isContinuousMonitoringEnabled: config.isContinuousMonitoringEnabled,
-      };
-
       // Create the accessory handler
       this.accessoryHandler = new DysonLinkAccessory({
         accessory: this.accessory,
         device: this.device,
         api: this.platform.api,
         log: this.log,
-        options,
+        options: this.extractDeviceOptions(config),
       });
 
       // Connect to the device if IP address is available
@@ -182,21 +166,106 @@ export class DysonPlatformAccessory {
     }
   }
 
+  /** mDNS discovery timeout for IP refresh */
+  private static readonly MDNS_TIMEOUT = 10000;
+
   /**
    * Connect to the Dyson device
+   * If connection fails with cached IP, attempts to rediscover via mDNS
    */
   private async connectDevice(): Promise<void> {
     if (!this.device) {
       return;
     }
 
+    const config = this.accessory.context.device as DeviceConfig;
+
     try {
       this.log.debug(`Connecting to device ${this.device.getSerial()}...`);
       await this.device.connect();
       this.log.info(`Connected to ${this.device.getSerial()}`);
     } catch (error) {
-      this.log.error(`Failed to connect to device ${this.device.getSerial()}:`, error);
+      this.log.warn(`Failed to connect to device ${this.device.getSerial()}:`, error);
+
+      // If we had a cached IP, try to rediscover
+      if (config.ipAddress) {
+        this.log.info(`Attempting to rediscover IP for ${config.serial} via mDNS...`);
+        const newIp = await this.rediscoverDeviceIp(config.serial);
+
+        if (newIp && newIp !== config.ipAddress) {
+          this.log.info(`Found new IP ${newIp} for ${config.serial} (was ${config.ipAddress}). Retrying connection...`);
+
+          // Update device with new IP and retry connection
+          this.device = createDevice({
+            serial: config.serial,
+            productType: config.productType,
+            name: config.name || `Dyson ${config.serial}`,
+            credentials: this.getCredentials(config),
+            ipAddress: newIp,
+          }) as DysonLinkDevice;
+
+          try {
+            await this.device.connect();
+            this.log.info(`Connected to ${this.device.getSerial()} at new IP ${newIp}`);
+
+            // Update config context with new IP for future restarts
+            config.ipAddress = newIp;
+            this.accessory.context.device = config;
+
+            // Recreate the accessory handler with the new device
+            this.accessoryHandler = new DysonLinkAccessory({
+              accessory: this.accessory,
+              device: this.device,
+              api: this.platform.api,
+              log: this.log,
+              options: this.extractDeviceOptions(config),
+            });
+          } catch (retryError) {
+            this.log.error(`Failed to connect to ${config.serial} at new IP ${newIp}:`, retryError);
+          }
+        } else if (newIp === config.ipAddress) {
+          this.log.error(`Device ${config.serial} still at same IP ${config.ipAddress} but not responding`);
+        } else {
+          this.log.error(`Could not find device ${config.serial} on network`);
+        }
+      }
     }
+  }
+
+  /**
+   * Rediscover device IP via mDNS
+   */
+  private async rediscoverDeviceIp(serial: string): Promise<string | null> {
+    try {
+      const discovery = new MdnsDiscovery();
+      const devices = await discovery.discover({ timeout: DysonPlatformAccessory.MDNS_TIMEOUT });
+
+      return devices.get(serial) || null;
+    } catch (error) {
+      this.log.error('mDNS discovery failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Extract device options from config
+   */
+  private extractDeviceOptions(config: DeviceConfig): DeviceOptions {
+    return {
+      temperatureOffset: config.temperatureOffset,
+      humidityOffset: config.humidityOffset,
+      isTemperatureIgnored: config.isTemperatureIgnored,
+      isHumidityIgnored: config.isHumidityIgnored,
+      isAirQualityIgnored: config.isAirQualityIgnored,
+      useFahrenheit: config.useFahrenheit,
+      isHeatingDisabled: config.isHeatingDisabled,
+      heatingServiceType: config.heatingServiceType,
+      fullRangeHumidity: config.fullRangeHumidity,
+      enableAutoModeWhenActivating: config.enableAutoModeWhenActivating,
+      isNightModeEnabled: config.isNightModeEnabled,
+      isJetFocusEnabled: config.isJetFocusEnabled,
+      isContinuousMonitoringEnabled: config.isContinuousMonitoringEnabled,
+    };
   }
 
   /**

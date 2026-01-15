@@ -155,6 +155,9 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
         // link the accessory to your platform FIRST
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
 
+        // Add to our accessories map to prevent double registration
+        this.accessories.set(uuid, accessory);
+
         // create the accessory handler for the newly created accessory AFTER registration
         new DysonPlatformAccessory(this, accessory);
       }

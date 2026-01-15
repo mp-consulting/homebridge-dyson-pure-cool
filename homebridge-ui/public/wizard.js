@@ -171,7 +171,7 @@
                    onclick="event.stopPropagation()">`
               : `<div class="device-name">${escapeHtml(device.name || defaultName)}</div>`}
             <div class="device-type">${escapeHtml(typeName)}</div>
-            <div class="device-serial">${escapeHtml(device.serial)}</div>
+            <div class="device-serial">${escapeHtml(device.serial)}${device.ipAddress ? ` • ${escapeHtml(device.ipAddress)}` : ''}</div>
             ${isSelectable ? `
               <div class="mt-2" onclick="event.stopPropagation()">
                 <div class="form-check form-switch">
@@ -179,7 +179,7 @@
                     data-serial="${device.serial}" ${continuousMonitoring ? 'checked' : ''}>
                   <label class="form-check-label small">
                     Continuous Monitoring
-                    <span class="text-muted d-block" style="font-size: 0.75em;">Keep sensors active when device is off</span>
+                    <span class="text-muted d-block" style="font-size: 0.75em;">Keep sensors active when off (required for HomeKit control while off)</span>
                   </label>
                 </div>
               </div>
@@ -230,9 +230,17 @@
         serial: device.serial,
         productType: device.productType,
         localCredentials: device.localCredentials,
+        ipAddress: device.ipAddress, // Use cached IP if available
       });
       checkbox.checked = response.continuousMonitoring;
       device.isContinuousMonitoringEnabled = response.continuousMonitoring;
+
+      // Save discovered IP to device config for future use
+      if (response.discoveredIp && response.discoveredIp !== device.ipAddress) {
+        device.ipAddress = response.discoveredIp;
+        console.log(`[Wizard] Cached IP ${response.discoveredIp} for ${device.serial}`);
+        debouncedAutoSave();
+      }
     } catch (error) {
       console.warn(`Failed to fetch state for ${device.serial}:`, error.message);
       // Keep default value on error
@@ -275,13 +283,20 @@
         checkbox.disabled = true;
 
         try {
-          await hb.request('/set-continuous-monitoring', {
+          const response = await hb.request('/set-continuous-monitoring', {
             serial: dev.serial,
             productType: dev.productType,
             localCredentials: dev.localCredentials,
+            ipAddress: dev.ipAddress, // Use cached IP if available
             enabled,
           });
           hb.toast.success(`Continuous monitoring ${enabled ? 'enabled' : 'disabled'}`);
+
+          // Save discovered IP to device config for future use
+          if (response.discoveredIp && response.discoveredIp !== dev.ipAddress) {
+            dev.ipAddress = response.discoveredIp;
+            debouncedAutoSave();
+          }
         } catch (error) {
           // Revert checkbox on error
           checkbox.checked = !enabled;
@@ -358,13 +373,19 @@
         checkbox.disabled = true;
 
         try {
-          await hb.request('/set-continuous-monitoring', {
+          const response = await hb.request('/set-continuous-monitoring', {
             serial: device.serial,
             productType: device.productType,
             localCredentials: device.localCredentials,
+            ipAddress: device.ipAddress, // Use cached IP if available
             enabled,
           });
           hb.toast.success(`Continuous monitoring ${enabled ? 'enabled' : 'disabled'}`);
+
+          // Save discovered IP to device config for future use
+          if (response.discoveredIp && response.discoveredIp !== device.ipAddress) {
+            device.ipAddress = response.discoveredIp;
+          }
         } catch (error) {
           // Revert checkbox on error
           checkbox.checked = !enabled;
@@ -429,6 +450,10 @@
           productType: d.productType,
           localCredentials: d.localCredentials,
         };
+        // Include cached IP address if available
+        if (d.ipAddress) {
+          deviceConfig.ipAddress = d.ipAddress;
+        }
         // Include continuous monitoring if enabled
         if (d.isContinuousMonitoringEnabled) {
           deviceConfig.isContinuousMonitoringEnabled = true;
