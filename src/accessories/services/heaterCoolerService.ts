@@ -85,12 +85,14 @@ export class HeaterCoolerService {
 
     // Set up TargetHeaterCoolerState characteristic (required)
     // Only support HEAT mode since Dyson HP devices don't have active cooling
+    // Set value to HEAT first, then restrict valid values to avoid warning
     this.service.getCharacteristic(Characteristic.TargetHeaterCoolerState)
-      .onGet(this.handleTargetStateGet.bind(this))
-      .onSet(this.handleTargetStateSet.bind(this))
+      .updateValue(this.TARGET_STATE.HEAT)
       .setProps({
         validValues: [this.TARGET_STATE.HEAT],
-      });
+      })
+      .onGet(this.handleTargetStateGet.bind(this))
+      .onSet(this.handleTargetStateSet.bind(this));
 
     // Set up CurrentTemperature characteristic (required)
     this.service.getCharacteristic(Characteristic.CurrentTemperature)
@@ -103,14 +105,16 @@ export class HeaterCoolerService {
 
     // Set up HeatingThresholdTemperature characteristic
     // Dyson supports 1°C - 37°C
+    // Set initial value within range before setting props to avoid warning
     this.service.getCharacteristic(Characteristic.HeatingThresholdTemperature)
-      .onGet(this.handleHeatingThresholdGet.bind(this))
-      .onSet(this.handleHeatingThresholdSet.bind(this))
+      .updateValue(20) // Default to 20°C
       .setProps({
         minValue: 1,
         maxValue: 37,
         minStep: 1,
-      });
+      })
+      .onGet(this.handleHeatingThresholdGet.bind(this))
+      .onSet(this.handleHeatingThresholdSet.bind(this));
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));

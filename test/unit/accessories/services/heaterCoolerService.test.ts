@@ -45,6 +45,7 @@ function createMockService() {
     onSet: jest.Mock;
     setProps: jest.Mock;
     getValue: jest.Mock;
+    updateValue: jest.Mock;
   }>();
 
   const mockService = {
@@ -59,6 +60,7 @@ function createMockService() {
           onSet: jest.fn().mockReturnThis(),
           setProps: jest.fn().mockReturnThis(),
           getValue: jest.fn(),
+          updateValue: jest.fn().mockReturnThis(),
         };
         characteristics.set(uuid, charMock);
       }
