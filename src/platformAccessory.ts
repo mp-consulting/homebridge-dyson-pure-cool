@@ -1,148 +1,216 @@
-import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
+/**
+ * Platform Accessory Handler
+ *
+ * Creates and manages Dyson device accessories for Homebridge.
+ * Uses the device catalog to determine device features and creates
+ * appropriate HomeKit services based on device capabilities.
+ */
+
+import type { PlatformAccessory, Logging } from 'homebridge';
 
 import type { DysonPureCoolPlatform } from './platform.js';
+import { createDevice } from './devices/deviceFactory.js';
+import { DysonLinkAccessory } from './accessories/dysonLinkAccessory.js';
+import type { DeviceOptions } from './accessories/dysonLinkAccessory.js';
+import type { DysonLinkDevice } from './devices/dysonLinkDevice.js';
+import { getDeviceModelName, isProductTypeSupported } from './config/index.js';
+
+/**
+ * Device configuration from plugin settings
+ */
+interface DeviceConfig {
+  /** Device serial number */
+  serial: string;
+  /** Dyson product type code (e.g., '455', '438') */
+  productType: string;
+  /** User-assigned device name */
+  name?: string;
+  /** Local MQTT credentials (base64 encoded) */
+  credentials: string;
+  /** Device IP address on local network */
+  ipAddress?: string;
+
+  // Optional device settings
+  /** Temperature offset in Celsius */
+  temperatureOffset?: number;
+  /** Humidity offset percentage */
+  humidityOffset?: number;
+  /** Disable temperature sensor */
+  isTemperatureIgnored?: boolean;
+  /** Disable humidity sensor */
+  isHumidityIgnored?: boolean;
+  /** Disable air quality sensor */
+  isAirQualityIgnored?: boolean;
+  /** Use Fahrenheit for temperature display */
+  useFahrenheit?: boolean;
+  /** Disable heating controls */
+  isHeatingDisabled?: boolean;
+  /** Enable full humidity range (0-100%) */
+  fullRangeHumidity?: boolean;
+  /** Enable auto mode on device activation */
+  enableAutoModeWhenActivating?: boolean;
+  /** Enable night mode switch */
+  isNightModeEnabled?: boolean;
+  /** Enable jet focus switch */
+  isJetFocusEnabled?: boolean;
+  /** Enable continuous monitoring switch */
+  isContinuousMonitoringEnabled?: boolean;
+}
 
 /**
  * DysonPlatformAccessory
- * Base accessory class for Dyson devices.
- * This is a placeholder that will be replaced with device-specific implementations.
+ *
+ * Handles the creation and lifecycle of Dyson device accessories.
+ * Creates the appropriate device instance and accessory handler based
+ * on the device's product type and features.
  */
 export class DysonPlatformAccessory {
-  private service: Service;
-
-  /**
-   * These are just used to create a working example
-   * You should implement your own code to track the state of your accessory
-   */
-  private exampleStates = {
-    On: false,
-    Brightness: 100,
-  };
+  private readonly log: Logging;
+  private device?: DysonLinkDevice;
+  private accessoryHandler?: DysonLinkAccessory;
 
   constructor(
     private readonly platform: DysonPureCoolPlatform,
     private readonly accessory: PlatformAccessory,
   ) {
-    // set accessory information
-    this.accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Default-Manufacturer')
-      .setCharacteristic(this.platform.Characteristic.Model, 'Default-Model')
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, 'Default-Serial');
+    this.log = platform.log;
 
-    // get the LightBulb service if it exists, otherwise create a new LightBulb service
-    // you can create multiple services for each accessory
+    const deviceConfig = accessory.context.device as DeviceConfig;
 
-    if (accessory.context.device.CustomService) {
-      // This is only required when using Custom Services and Characteristics not support by HomeKit
-      this.service = this.accessory.getService(this.platform.CustomServices[accessory.context.device.CustomService]) ||
-        this.accessory.addService(this.platform.CustomServices[accessory.context.device.CustomService]);
-    } else {
-      this.service = this.accessory.getService(this.platform.Service.Lightbulb) || this.accessory.addService(this.platform.Service.Lightbulb);
+    // Validate device configuration
+    if (!this.validateConfig(deviceConfig)) {
+      return;
     }
 
-    // set the service name, this is what is displayed as the default name on the Home app
-    // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
-    this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.exampleDisplayName);
+    // Check if product type is supported
+    if (!isProductTypeSupported(deviceConfig.productType)) {
+      const modelName = getDeviceModelName(deviceConfig.productType);
+      this.log.warn(`Unsupported device type: ${modelName}. Device will not be added.`);
+      return;
+    }
 
-    // each service must implement at-minimum the "required characteristics" for the given service type
-    // see https://developers.homebridge.io/#/service/Lightbulb
-
-    // register handlers for the On/Off Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setOn.bind(this)) // SET - bind to the `setOn` method below
-      .onGet(this.getOn.bind(this)); // GET - bind to the `getOn` method below
-
-    // register handlers for the Brightness Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.Brightness)
-      .onSet(this.setBrightness.bind(this)); // SET - bind to the `setBrightness` method below
-
-    /**
-     * Creating multiple services of the same type.
-     *
-     * To avoid "Cannot add a Service with the same UUID another Service without also defining a unique 'subtype' property." error,
-     * when creating multiple services of the same type, you need to use the following syntax to specify a name and subtype id:
-     * this.accessory.getService('NAME') || this.accessory.addService(this.platform.Service.Lightbulb, 'NAME', 'USER_DEFINED_SUBTYPE_ID');
-     *
-     * The USER_DEFINED_SUBTYPE must be unique to the platform accessory (if you platform exposes multiple accessories, each accessory
-     * can use the same subtype id.)
-     */
-
-    // Example: add two "motion sensor" services to the accessory
-    const motionSensorOneService = this.accessory.getService('Motion Sensor One Name')
-      || this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor One Name', 'YourUniqueIdentifier-1');
-
-    const motionSensorTwoService = this.accessory.getService('Motion Sensor Two Name')
-      || this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor Two Name', 'YourUniqueIdentifier-2');
-
-    /**
-     * Updating characteristics values asynchronously.
-     *
-     * Example showing how to update the state of a Characteristic asynchronously instead
-     * of using the `on('get')` handlers.
-     * Here we change update the motion sensor trigger states on and off every 10 seconds
-     * the `updateCharacteristic` method.
-     *
-     */
-    let motionDetected = false;
-    setInterval(() => {
-      // EXAMPLE - inverse the trigger
-      motionDetected = !motionDetected;
-
-      // push the new value to HomeKit
-      motionSensorOneService.updateCharacteristic(this.platform.Characteristic.MotionDetected, motionDetected);
-      motionSensorTwoService.updateCharacteristic(this.platform.Characteristic.MotionDetected, !motionDetected);
-
-      this.platform.log.debug('Triggering motionSensorOneService:', motionDetected);
-      this.platform.log.debug('Triggering motionSensorTwoService:', !motionDetected);
-    }, 10000);
+    // Initialize the device
+    this.initializeDevice(deviceConfig);
   }
 
   /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, turning on a Light bulb.
+   * Validate device configuration
    */
-  async setOn(value: CharacteristicValue) {
-    // implement your own code to turn your device on/off
-    this.exampleStates.On = value as boolean;
+  private validateConfig(config: DeviceConfig): boolean {
+    if (!config.serial) {
+      this.log.error('Device configuration missing serial number');
+      return false;
+    }
 
-    this.platform.log.debug('Set Characteristic On ->', value);
+    if (!config.productType) {
+      this.log.error(`Device ${config.serial} missing product type`);
+      return false;
+    }
+
+    if (!config.credentials) {
+      this.log.error(`Device ${config.serial} missing credentials`);
+      return false;
+    }
+
+    return true;
   }
 
   /**
-   * Handle the "GET" requests from HomeKit
-   * These are sent when HomeKit wants to know the current state of the accessory, for example, checking if a Light bulb is on.
-   *
-   * GET requests should return as fast as possible. A long delay here will result in
-   * HomeKit being unresponsive and a bad user experience in general.
-   *
-   * If your device takes time to respond you should update the status of your device
-   * asynchronously instead using the `updateCharacteristic` method instead.
-   * In this case, you may decide not to implement `onGet` handlers, which may speed up
-   * the responsiveness of your device in the Home app.
-
-   * @example
-   * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
+   * Initialize the Dyson device and accessory handler
    */
-  async getOn(): Promise<CharacteristicValue> {
-    // implement your own code to check if the device is on
-    const isOn = this.exampleStates.On;
+  private initializeDevice(config: DeviceConfig): void {
+    const modelName = getDeviceModelName(config.productType);
+    this.log.info(`Initializing ${modelName} (${config.serial})`);
 
-    this.platform.log.debug('Get Characteristic On ->', isOn);
+    try {
+      // Create the device instance using the factory
+      this.device = createDevice({
+        serial: config.serial,
+        productType: config.productType,
+        name: config.name || `Dyson ${config.serial}`,
+        credentials: config.credentials,
+        ipAddress: config.ipAddress,
+      }) as DysonLinkDevice;
 
-    // if you need to return an error to show the device as "Not Responding" in the Home app:
-    // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+      // Extract device options from config
+      const options: DeviceOptions = {
+        temperatureOffset: config.temperatureOffset,
+        humidityOffset: config.humidityOffset,
+        isTemperatureIgnored: config.isTemperatureIgnored,
+        isHumidityIgnored: config.isHumidityIgnored,
+        isAirQualityIgnored: config.isAirQualityIgnored,
+        useFahrenheit: config.useFahrenheit,
+        isHeatingDisabled: config.isHeatingDisabled,
+        fullRangeHumidity: config.fullRangeHumidity,
+        enableAutoModeWhenActivating: config.enableAutoModeWhenActivating,
+        isNightModeEnabled: config.isNightModeEnabled,
+        isJetFocusEnabled: config.isJetFocusEnabled,
+        isContinuousMonitoringEnabled: config.isContinuousMonitoringEnabled,
+      };
 
-    return isOn;
+      // Create the accessory handler
+      this.accessoryHandler = new DysonLinkAccessory({
+        accessory: this.accessory,
+        device: this.device,
+        api: this.platform.api,
+        log: this.log,
+        options,
+      });
+
+      // Connect to the device if IP address is available
+      if (config.ipAddress) {
+        this.connectDevice();
+      } else {
+        this.log.warn(`Device ${config.serial} has no IP address configured. Device discovery may be needed.`);
+      }
+
+    } catch (error) {
+      this.log.error(`Failed to initialize device ${config.serial}:`, error);
+    }
   }
 
   /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, changing the Brightness
+   * Connect to the Dyson device
    */
-  async setBrightness(value: CharacteristicValue) {
-    // implement your own code to set the brightness
-    this.exampleStates.Brightness = value as number;
+  private async connectDevice(): Promise<void> {
+    if (!this.device) {
+      return;
+    }
 
-    this.platform.log.debug('Set Characteristic Brightness -> ', value);
+    try {
+      this.log.debug(`Connecting to device ${this.device.getSerial()}...`);
+      await this.device.connect();
+      this.log.info(`Connected to ${this.device.getSerial()}`);
+    } catch (error) {
+      this.log.error(`Failed to connect to device ${this.device.getSerial()}:`, error);
+    }
+  }
+
+  /**
+   * Disconnect from the Dyson device
+   */
+  async disconnect(): Promise<void> {
+    if (this.device) {
+      try {
+        await this.device.disconnect();
+        this.log.debug(`Disconnected from ${this.device.getSerial()}`);
+      } catch (error) {
+        this.log.error('Error disconnecting from device:', error);
+      }
+    }
+  }
+
+  /**
+   * Get the device instance
+   */
+  getDevice(): DysonLinkDevice | undefined {
+    return this.device;
+  }
+
+  /**
+   * Get the accessory handler
+   */
+  getAccessoryHandler(): DysonLinkAccessory | undefined {
+    return this.accessoryHandler;
   }
 }

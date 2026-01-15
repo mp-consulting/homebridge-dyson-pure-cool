@@ -109,11 +109,11 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
         // store a copy of the device object in the `accessory.context`
         accessory.context.device = device;
 
-        // create the accessory handler for the newly created accessory
-        new DysonPlatformAccessory(this, accessory);
-
-        // link the accessory to your platform
+        // link the accessory to your platform FIRST
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+
+        // create the accessory handler for the newly created accessory AFTER registration
+        new DysonPlatformAccessory(this, accessory);
       }
 
       // push into discoveredCacheUUIDs
