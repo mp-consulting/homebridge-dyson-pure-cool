@@ -1,4 +1,10 @@
-import { getProductTypeDisplayNames } from './devices/deviceCatalog.js';
+/**
+ * Platform Configuration Constants
+ *
+ * Core settings for the Homebridge plugin.
+ */
+
+import { getProductTypeDisplayNames } from './deviceCatalog.js';
 
 /**
  * Platform name for Homebridge registration.

@@ -15,8 +15,8 @@ import { HomebridgePluginUiServer, RequestError } from '@homebridge/plugin-ui-ut
 import { createDecipheriv } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
-// Import product types from the device catalog (single source of truth)
-import { getProductTypeDisplayNames } from '../dist/devices/deviceCatalog.js';
+// Import product types from the config module (single source of truth)
+import { getProductTypeDisplayNames } from '../dist/config/index.js';
 
 /** Dyson Cloud API base URL */
 const DYSON_API_BASE_URL = 'https://appapi.cp.dyson.com';

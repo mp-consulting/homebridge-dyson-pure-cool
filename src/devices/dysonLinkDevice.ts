@@ -11,7 +11,7 @@ import { DEFAULT_FEATURES } from './types.js';
 import { MessageCodec } from '../protocol/messageCodec.js';
 import type { MqttClientFactory } from './dysonDevice.js';
 import type { MqttConnectFn } from '../protocol/mqttClient.js';
-import { getDeviceFeatures } from './deviceCatalog.js';
+import { getDeviceFeatures } from '../config/index.js';
 
 // ============================================================================
 // Constants - No Magic Numbers

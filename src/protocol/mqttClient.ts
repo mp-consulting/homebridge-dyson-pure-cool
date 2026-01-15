@@ -7,7 +7,7 @@ import { EventEmitter } from 'events';
 import mqtt from 'mqtt';
 import type { MqttClient as MqttClientType, IClientOptions } from 'mqtt';
 
-import { DYSON_MQTT_PORT } from '../settings.js';
+import { DYSON_MQTT_PORT } from '../config/index.js';
 import { sleep, calculateBackoff, RECONNECT_DEFAULTS } from '../utils/retry.js';
 
 /**

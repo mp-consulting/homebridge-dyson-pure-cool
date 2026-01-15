@@ -5,7 +5,7 @@
 
 import { Bonjour, type Browser, type Service } from 'bonjour-service';
 
-import { DYSON_MDNS_SERVICE } from '../settings.js';
+import { DYSON_MDNS_SERVICE } from '../config/index.js';
 
 /** Default discovery timeout in milliseconds */
 const DEFAULT_TIMEOUT = 10000;

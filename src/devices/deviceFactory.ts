@@ -13,10 +13,10 @@ import {
   isProductTypeSupported as catalogIsSupported,
   getSupportedProductTypes as catalogGetTypes,
   getDeviceModelName,
-} from './deviceCatalog.js';
+} from '../config/index.js';
 
 // Re-export catalog functions for backward compatibility
-export { isProductTypeSupported, getSupportedProductTypes } from './deviceCatalog.js';
+export { isProductTypeSupported, getSupportedProductTypes } from '../config/index.js';
 
 /**
  * Create a DysonDevice instance for the given device info

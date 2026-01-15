@@ -5,9 +5,9 @@ import {
   DYSON_MQTT_PORT,
   DYSON_MDNS_SERVICE,
   DYSON_PRODUCT_TYPES,
-} from '../../src/settings.js';
+} from '../../src/config/index.js';
 
-describe('settings', () => {
+describe('config constants', () => {
   describe('PLATFORM_NAME', () => {
     it('should be DysonPureCool', () => {
       expect(PLATFORM_NAME).toBe('DysonPureCool');

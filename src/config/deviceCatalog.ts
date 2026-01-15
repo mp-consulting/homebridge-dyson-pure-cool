@@ -5,8 +5,8 @@
  * Single source of truth for product types, features, and metadata.
  */
 
-import type { DeviceFeatures } from './types.js';
-import { DEFAULT_FEATURES } from './types.js';
+import type { DeviceFeatures } from '../devices/types.js';
+import { DEFAULT_FEATURES } from '../devices/types.js';
 
 /**
  * Device series classification

@@ -1,7 +1,7 @@
 import type { API } from 'homebridge';
 
 import { DysonPureCoolPlatform } from './platform.js';
-import { PLATFORM_NAME } from './settings.js';
+import { PLATFORM_NAME } from './config/index.js';
 
 /**
  * Registers the Dyson Pure Cool platform with Homebridge.

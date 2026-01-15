@@ -1,7 +1,7 @@
 import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
 
 import { DysonPlatformAccessory } from './platformAccessory.js';
-import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
+import { PLATFORM_NAME, PLUGIN_NAME } from './config/index.js';
 
 // This is only required when using Custom Services and Characteristics not support by HomeKit
 import { EveHomeKitTypes } from 'homebridge-lib/EveHomeKitTypes';
