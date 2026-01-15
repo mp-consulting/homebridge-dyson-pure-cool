@@ -2,35 +2,66 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2025-01-14
+## [1.0.0] - 2026-01-15
 
 ### Added
 
-- **Fan Control**: Power on/off, speed (1-10), oscillation, auto mode via HomeKit Fanv2 service
-- **Temperature Sensor**: Room temperature display via TemperatureSensor service
-- **Humidity Sensor**: Relative humidity display via HumiditySensor service
-- **Air Quality Sensor**: PM2.5, PM10, VOC levels with overall air quality rating (Excellent to Poor)
-- **Filter Status**: Filter life percentage and replacement indicator via FilterMaintenance service
-- **Night Mode**: Toggle switch for quiet operation with dimmed display
-- **Continuous Monitoring**: Toggle switch to keep sensors active when fan is off
-- **Dyson Cloud API**: Automatic device discovery and credential retrieval
-- **mDNS Discovery**: Local network device discovery
-- **MQTT Communication**: Real-time device control and state updates
-- **Automatic Reconnection**: Exponential backoff reconnection with configurable attempts
-- **Configuration UI**: Full support for Homebridge Config UI X
+- **Complete Homebridge Plugin** - Full-featured plugin for Dyson Pure Cool devices
+- **Dyson Cloud Authentication** - Automatic device discovery via Dyson account
+  - Email/password authentication with 2FA support
+  - OTP verification via email
+  - Automatic credential extraction for local MQTT connection
+- **Custom Configuration UI** - Wizard-based setup in Homebridge Config UI X
+  - Step-by-step device configuration
+  - Visual progress indicator with animations
+  - Device selection with checkboxes
+  - Feature toggle options
+- **Local MQTT Communication** - Direct device control without cloud dependency
+  - mDNS device discovery on local network
+  - Encrypted local credentials for authentication
+  - Real-time state updates via MQTT subscriptions
+- **Air Purifier Service** - Proper HomeKit integration using AirPurifier service type
+  - Power on/off control
+  - Fan speed adjustment (1-10 mapped to 10-100%)
+  - Auto mode toggle
+  - Oscillation control
+- **Sensor Services**
+  - Temperature sensor with calibration offset
+  - Humidity sensor with calibration offset
+  - Air Quality sensor (PM2.5, PM10, VOC, NO2)
+- **Additional Controls**
+  - Night mode switch
+  - Continuous monitoring switch
+  - Jet focus switch (where supported)
+  - Filter status with replacement indicator
+- **Thermostat Service** - For Hot+Cool models (HP series)
+  - Heating mode control
+  - Target temperature setting (1-37C)
+- **Humidifier Service** - For Humidify+Cool models (PH series)
+  - Humidity target control
+  - Water level status
+- **Periodic Polling** - Configurable state refresh interval
+- **Device Catalog** - Centralized device definitions for all supported models
 
 ### Supported Devices
 
-- Dyson Pure Cool Tower (TP04) - Product type 438
-- Dyson Purifier Cool (TP07) - Product type 438E
-- Dyson Pure Hot+Cool Link (HP02) - Product type 455
+- Pure Cool Link: TP02, DP01
+- Pure Cool: TP04, TP06, TP07, DP04
+- Pure Cool Formaldehyde: TP09
+- Pure Hot+Cool Link: HP02
+- Pure Hot+Cool: HP04, HP06, HP07
+- Pure Hot+Cool Formaldehyde: HP09
+- Purifier Humidify+Cool: PH01, PH02, PH03
+- Purifier Humidify+Cool Formaldehyde: PH04
+- Purifier Big+Quiet: BP02, BP03, BP04, BP06
 
-### Technical Details
+### Technical
 
-- TypeScript ES2022 with ESM modules
-- Comprehensive test suite (400+ unit tests)
-- HomeKit services: Fanv2, TemperatureSensor, HumiditySensor, AirQualitySensor, FilterMaintenance, Switch
-- Protocol support for Dyson MQTT STATE-SET, CURRENT-STATE, STATE-CHANGE, ENVIRONMENTAL-CURRENT-SENSOR-DATA messages
+- TypeScript with ES modules
+- Node.js 20.18+, 22.10+, or 24.0+
+- Homebridge 1.8+ or 2.0 beta
+- Jest test framework
+- ESLint with TypeScript support

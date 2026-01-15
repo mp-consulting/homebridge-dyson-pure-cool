@@ -1,7 +1,7 @@
 # homebridge-dyson-pure-cool
 
 [![npm version](https://img.shields.io/npm/v/homebridge-dyson-pure-cool.svg)](https://www.npmjs.com/package/homebridge-dyson-pure-cool)
-[![License](https://img.shields.io/npm/l/homebridge-dyson-pure-cool.svg)](https://github.com/homebridge/homebridge-dyson-pure-cool/blob/main/LICENSE)
+[![License](https://img.shields.io/npm/l/homebridge-dyson-pure-cool.svg)](https://github.com/mp-consulting/homebridge-dyson-pure-cool/blob/main/LICENSE)
 
 **The most feature-rich Dyson plugin for HomeKit.** Control your Dyson Pure Cool, Hot+Cool, Humidify+Cool, and Big+Quiet devices through Apple HomeKit.
 
@@ -236,6 +236,10 @@ Contributions are welcome! Please read the contributing guidelines before submit
 3. Make your changes
 4. Run tests: `npm test`
 5. Submit a pull request
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a list of changes.
 
 ## License
 
