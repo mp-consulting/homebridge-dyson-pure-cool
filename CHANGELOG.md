@@ -11,16 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Complete Homebridge Plugin** - Full-featured plugin for Dyson Pure Cool devices
 - **Dyson Cloud Authentication** - Automatic device discovery via Dyson account
-  - Email/password authentication with 2FA support
-  - OTP verification via email
+  - Secure two-factor authentication (2FA) via email
+  - OTP verification code entry
   - Automatic credential extraction for local MQTT connection
 - **Custom Configuration UI** - Wizard-based setup in Homebridge Config UI X
   - Step-by-step device configuration
   - Visual progress indicator with animations
   - Device selection with checkboxes
   - Feature toggle options
+  - Country selector grouped by region (Americas, Asia Pacific, Europe, Middle East)
 - **Local MQTT Communication** - Direct device control without cloud dependency
   - mDNS device discovery on local network
+  - IP address caching for faster reconnection
+  - Auto-rediscovery when cached IP fails
   - Encrypted local credentials for authentication
   - Real-time state updates via MQTT subscriptions
 - **Air Purifier Service** - Proper HomeKit integration using AirPurifier service type
@@ -34,12 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Air Quality sensor (PM2.5, PM10, VOC, NO2)
 - **Additional Controls**
   - Night mode switch
-  - Continuous monitoring switch
+  - Continuous monitoring switch with MQTT control
   - Jet focus switch (where supported)
   - Filter status with replacement indicator
 - **Thermostat Service** - For Hot+Cool models (HP series)
   - Heating mode control
-  - Target temperature setting (1-37C)
+  - Target temperature setting (1-37°C)
+  - Configurable service type (HeaterCooler or Thermostat)
 - **Humidifier Service** - For Humidify+Cool models (PH series)
   - Humidity target control
   - Water level status

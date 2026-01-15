@@ -50,25 +50,14 @@ npm install -g homebridge-dyson-pure-cool
 
 ### Using Dyson Account (Recommended)
 
-The easiest way to set up the plugin is using your Dyson account credentials. The plugin will automatically discover your devices.
+The easiest way to set up the plugin is through the Homebridge Config UI X settings page. The plugin uses Dyson's secure two-factor authentication (2FA) flow:
 
-```json
-{
-  "platforms": [
-    {
-      "platform": "DysonPureCool",
-      "name": "Dyson Pure Cool",
-      "email": "your-email@example.com",
-      "password": "your-dyson-password",
-      "countryCode": "US"
-    }
-  ]
-}
-```
+1. Enter your Dyson account email, password, and country
+2. Click **Connect Account** - a verification code will be sent to your email
+3. Enter the 6-digit code to complete authentication
+4. Select which devices to add to HomeKit
 
-#### Two-Factor Authentication (2FA)
-
-If your Dyson account uses 2FA, you'll need to complete the verification process. Check the Homebridge logs for the OTP prompt during first setup.
+Your local device credentials are securely retrieved and stored - your Dyson account password is never saved.
 
 ### Manual Device Configuration
 
@@ -102,8 +91,6 @@ If you prefer not to use your Dyson account, you can configure devices manually:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `email` | string | - | Dyson account email |
-| `password` | string | - | Dyson account password |
 | `countryCode` | string | `US` | Account country code (US, GB, DE, etc.) |
 | `discoveryTimeout` | number | `30` | mDNS discovery timeout in seconds |
 | `pollInterval` | number | `60` | State polling interval in seconds |
@@ -187,10 +174,10 @@ If you prefer not to use your Dyson account, you can configure devices manually:
 
 ### Authentication Failed
 
-1. Verify your Dyson account email and password
-2. Check the `countryCode` matches your account region
-3. If using 2FA, complete the verification in Homebridge logs
-4. Try logging into the Dyson app to verify credentials work
+1. Verify your Dyson account email and password are correct
+2. Check that the country matches your account region
+3. Ensure you enter the 2FA verification code within the time limit
+4. Try logging into the Dyson app to verify your credentials work
 
 ### Device Shows "Not Responding"
 
