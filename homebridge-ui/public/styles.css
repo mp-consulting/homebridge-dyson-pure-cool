@@ -26,13 +26,16 @@
 .step-progress {
   display: flex;
   justify-content: center;
+  align-items: center;
   margin-bottom: 2rem;
   padding: 0;
   list-style: none;
+  gap: 0;
 }
 
 .step-progress li {
   display: flex;
+  flex-direction: column;
   align-items: center;
   color: var(--bs-secondary);
   transition: all 0.3s ease;
@@ -44,20 +47,21 @@
   border-radius: 50%;
   background: var(--bs-secondary-bg);
   color: var(--bs-secondary);
-  border: 2px solid transparent;
+  border: 2px solid var(--bs-border-color);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
   font-size: 0.875rem;
-  margin-right: 0.5rem;
+  margin-bottom: 0.5rem;
   transition: all 0.3s ease;
 }
 
 .step-progress li .step-label {
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   font-weight: 500;
   transition: all 0.3s ease;
+  white-space: nowrap;
 }
 
 /* Active step - highlighted with ring and pulse */
@@ -92,15 +96,16 @@
 
 /* Connector lines */
 .step-progress .step-connector {
-  width: 40px;
-  height: 3px;
-  background: var(--bs-secondary-bg);
-  margin: 0 0.75rem;
+  width: 60px;
+  height: 2px;
+  background: var(--bs-border-color);
+  margin: 0 0.5rem;
+  margin-bottom: 1.5rem;
   border-radius: 2px;
   transition: all 0.3s ease;
+  flex-shrink: 0;
 }
 
-.step-progress li.completed + .step-connector,
 .step-progress .step-connector.completed {
   background: var(--bs-success);
 }
