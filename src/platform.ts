@@ -126,6 +126,18 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
 
         // Update the accessory context with the latest device config
         existingAccessory.context.device = device;
+
+        // Update display name if it changed in config
+        if (existingAccessory.displayName !== displayName) {
+          this.log.info(`Updating accessory name from "${existingAccessory.displayName}" to "${displayName}"`);
+          existingAccessory.displayName = displayName;
+          // Also update the AccessoryInformation service name
+          const infoService = existingAccessory.getService(this.Service.AccessoryInformation);
+          if (infoService) {
+            infoService.setCharacteristic(this.Characteristic.Name, displayName);
+          }
+        }
+
         this.api.updatePlatformAccessories([existingAccessory]);
 
         // create the accessory handler for the restored accessory
