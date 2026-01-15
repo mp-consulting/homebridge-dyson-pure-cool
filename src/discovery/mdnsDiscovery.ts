@@ -188,8 +188,12 @@ export class MdnsDiscovery {
    */
   private extractSerial(serviceName: string): string | null {
     // Dyson serial numbers follow pattern: XXX-XX-XXXXXXXX
-    // Service name may be: "ABC-AB-12345678" or "ABC-AB-12345678_dyson_mqtt"
-    const match = serviceName.match(/^([A-Z0-9]{2,3}-[A-Z0-9]{2}-[A-Z0-9]{8})/i);
+    // Service name formats:
+    //   - "ABC-AB-12345678" (serial only)
+    //   - "ABC-AB-12345678_dyson_mqtt" (serial with suffix)
+    //   - "455_ABC-AB-12345678" (product type prefix + serial)
+    //   - "455_ABC-AB-12345678_dyson_mqtt" (product type + serial + suffix)
+    const match = serviceName.match(/(?:^\d+_)?([A-Z0-9]{2,3}-[A-Z0-9]{2}-[A-Z0-9]{8})/i);
     return match ? match[1].toUpperCase() : null;
   }
 
