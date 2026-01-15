@@ -91,10 +91,20 @@ export class DysonLinkDevice extends DysonDevice {
   /**
    * Set fan power on or off
    *
+   * Uses fmod command - OFF to turn off, FAN or AUTO to turn on.
+   * When turning on, preserves auto mode if it was enabled.
+   *
    * @param on - True to turn on, false to turn off
    */
   async setFanPower(on: boolean): Promise<void> {
-    await this.sendCommand({ fpwr: on ? PROTOCOL.ON : PROTOCOL.OFF });
+    if (on) {
+      // Turn on - use current auto mode setting or default to AUTO
+      const mode = this.state.autoMode ? PROTOCOL.AUTO : PROTOCOL.FAN;
+      await this.sendCommand({ fmod: mode });
+    } else {
+      // Turn off
+      await this.sendCommand({ fmod: PROTOCOL.OFF });
+    }
   }
 
   /**

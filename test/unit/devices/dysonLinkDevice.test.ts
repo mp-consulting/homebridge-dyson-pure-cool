@@ -112,11 +112,12 @@ describe('DysonLinkDevice', () => {
     it('should send ON command when turning on', async () => {
       await device.setFanPower(true);
 
+      // setFanPower uses fmod command - AUTO when autoMode is set, FAN otherwise
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           msg: 'STATE-SET',
           'mode-reason': 'LAPP',
-          data: { fpwr: 'ON' },
+          data: { fmod: 'FAN' },
         }),
       );
     });
@@ -126,7 +127,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fpwr: 'OFF' },
+          data: { fmod: 'OFF' },
         }),
       );
     });

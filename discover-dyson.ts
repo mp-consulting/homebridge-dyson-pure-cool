@@ -42,7 +42,7 @@ browser.on('up', (service) => {
       port: service.port,
     });
 
-    console.log(`Found device:`);
+    console.log('Found device:');
     console.log(`  Serial:   ${serial}`);
     console.log(`  IP:       ${ip}`);
     console.log(`  Hostname: ${service.host}`);

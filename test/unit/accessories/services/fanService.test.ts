@@ -261,9 +261,12 @@ describe('FanService', () => {
     it('should call setFanPower(true) when set to 1', async () => {
       await activeSetHandler(1);
 
+      // setFanPower uses fmod command - AUTO when autoMode is set, FAN otherwise
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fpwr: 'ON' },
+          msg: 'STATE-SET',
+          'mode-reason': 'LAPP',
+          data: { fmod: 'FAN' },
         }),
       );
     });
@@ -273,7 +276,7 @@ describe('FanService', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fpwr: 'OFF' },
+          data: { fmod: 'OFF' },
         }),
       );
     });
@@ -384,7 +387,7 @@ describe('FanService', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fpwr: 'OFF' },
+          data: { fmod: 'OFF' },
         }),
       );
     });

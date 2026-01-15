@@ -283,13 +283,19 @@ export class MessageCodec {
       state.autoMode = autoMode;
     }
 
-    // Fan mode (also indicates auto mode)
+    // Fan mode (also indicates power and auto mode)
+    // fmod: 'OFF' = device off, 'FAN' = manual mode on, 'AUTO' = auto mode on
     const fmod = this.extractValue(raw.fmod);
     if (fmod !== undefined) {
-      if (fmod === 'AUTO') {
-        state.autoMode = true;
-      } else if (fmod === 'OFF') {
+      if (fmod === 'OFF') {
         state.isOn = false;
+        state.autoMode = false;
+      } else if (fmod === 'AUTO') {
+        state.isOn = true;
+        state.autoMode = true;
+      } else if (fmod === 'FAN') {
+        state.isOn = true;
+        state.autoMode = false;
       }
     }
 
