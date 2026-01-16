@@ -37,7 +37,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: var(--bs-secondary);
+  color: var(--bs-secondary-color);
   transition: all 0.3s ease;
 }
 
@@ -46,7 +46,7 @@
   height: 36px;
   border-radius: 50%;
   background: var(--bs-secondary-bg);
-  color: var(--bs-secondary);
+  color: var(--bs-secondary-color);
   border: 2px solid var(--bs-border-color);
   display: flex;
   align-items: center;
@@ -137,7 +137,7 @@
 
 .device-card:hover {
   border-color: var(--bs-primary);
-  background: var(--bs-light);
+  background: var(--bs-tertiary-bg);
 }
 
 .device-card.selected {
@@ -162,17 +162,17 @@
 
 .device-card .device-name-input::placeholder {
   font-weight: 400;
-  color: var(--bs-secondary);
+  color: var(--bs-secondary-color);
 }
 
 .device-card .device-type {
   font-size: 0.85rem;
-  color: var(--bs-secondary);
+  color: var(--bs-secondary-color);
 }
 
 .device-card .device-serial {
   font-size: 0.75rem;
-  color: var(--bs-secondary);
+  color: var(--bs-secondary-color);
   font-family: monospace;
 }
 
@@ -220,7 +220,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--bs-body-bg);
+  opacity: 0.8;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,7 +230,7 @@
 
 /* Options form */
 .options-section {
-  background: var(--bs-light);
+  background: var(--bs-tertiary-bg);
   border-radius: 0.5rem;
   padding: 1.25rem;
   margin-bottom: 1rem;
@@ -237,7 +238,7 @@
 
 .options-section h6 {
   margin-bottom: 1rem;
-  color: var(--bs-secondary);
+  color: var(--bs-secondary-color);
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.5px;
