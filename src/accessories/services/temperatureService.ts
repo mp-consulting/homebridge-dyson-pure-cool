@@ -61,7 +61,7 @@ export class TemperatureService {
     // Set display name
     this.service.setCharacteristic(
       Characteristic.Name,
-      `${config.accessory.displayName} Temperature`,
+      'Temperature',
     );
 
     // Set up CurrentTemperature characteristic (required)

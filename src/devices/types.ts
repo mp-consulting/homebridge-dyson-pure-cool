@@ -69,6 +69,12 @@ export interface DeviceState {
   vocIndex?: number;
   /** Nitrogen dioxide index */
   no2Index?: number;
+  /** Formaldehyde (HCHO) level */
+  formaldehydeLevel?: number;
+
+  // Sleep timer
+  /** Sleep timer remaining in minutes (0 = off) */
+  sleepTimer?: number;
 
   // Filter status
   /** HEPA filter life remaining (hours) */
@@ -79,6 +85,8 @@ export interface DeviceState {
   // Heating (for Hot+Cool models)
   /** Heating enabled */
   heatingEnabled?: boolean;
+  /** Heater actively heating (reaching target temperature) */
+  heatingActive?: boolean;
   /** Target temperature in Kelvin (divide by 10) */
   targetTemperature?: number;
 
@@ -89,6 +97,18 @@ export interface DeviceState {
   targetHumidity?: number;
   /** Water tank empty */
   waterTankEmpty?: boolean;
+
+  // Device status (Link series)
+  /** Fan state - whether fan is actively running (Link series) */
+  fanState?: boolean;
+  /** Air quality target level for auto mode (Link series, 1-4) */
+  airQualityTarget?: number;
+  /** Device error code (NONE = no error) */
+  errorCode?: string;
+  /** Device warning code (NONE = no warning) */
+  warningCode?: string;
+  /** Tilt sensor status */
+  tiltStatus?: string;
 }
 
 /**

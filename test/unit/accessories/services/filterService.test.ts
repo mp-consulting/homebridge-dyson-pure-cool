@@ -173,7 +173,7 @@ describe('FilterService', () => {
 
       expect(mockApi._mockFilterService.setCharacteristic).toHaveBeenCalledWith(
         'Name',
-        'Test Dyson Filter',
+        'Filter',
       );
     });
 

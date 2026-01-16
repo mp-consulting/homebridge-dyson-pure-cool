@@ -172,7 +172,7 @@ describe('HumidityService', () => {
 
       expect(mockApi._mockHumidityService.setCharacteristic).toHaveBeenCalledWith(
         'Name',
-        'Test Dyson Humidity',
+        'Humidity',
       );
     });
 

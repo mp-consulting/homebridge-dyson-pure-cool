@@ -65,7 +65,7 @@ export class FilterService {
     // Set display name
     this.service.setCharacteristic(
       Characteristic.Name,
-      `${config.accessory.displayName} Filter`,
+      'Filter',
     );
 
     // Set up FilterLifeLevel characteristic (required)

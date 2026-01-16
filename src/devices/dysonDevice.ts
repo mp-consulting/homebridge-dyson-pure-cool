@@ -414,6 +414,29 @@ export abstract class DysonDevice extends EventEmitter {
       }
     }
 
+    // Formaldehyde (HCHO) level - only on formaldehyde models
+    if ('hchr' in sensorData) {
+      const hchr = sensorData.hchr;
+      if (typeof hchr === 'string' && hchr !== 'INIT' && hchr !== 'OFF') {
+        stateUpdate.formaldehydeLevel = parseInt(hchr, 10);
+      }
+    }
+
+    // Sleep timer
+    if ('sltm' in sensorData) {
+      const sltm = sensorData.sltm;
+      if (typeof sltm === 'string') {
+        if (sltm === 'OFF') {
+          stateUpdate.sleepTimer = 0;
+        } else {
+          const value = parseInt(sltm, 10);
+          if (!isNaN(value)) {
+            stateUpdate.sleepTimer = value;
+          }
+        }
+      }
+    }
+
     if (Object.keys(stateUpdate).length > 0) {
       this.updateState(stateUpdate);
     }

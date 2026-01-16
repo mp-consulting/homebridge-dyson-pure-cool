@@ -48,12 +48,12 @@ export class JetFocusService {
     // Create Switch service with unique subtype for Jet Focus
     const existingService = config.accessory.getServiceById(Service.Switch, 'jet-focus');
     this.service = existingService ||
-      config.accessory.addService(Service.Switch, `${config.accessory.displayName} Jet Focus`, 'jet-focus');
+      config.accessory.addService(Service.Switch, 'Jet Focus', 'jet-focus');
 
     // Set display name
     this.service.setCharacteristic(
       Characteristic.Name,
-      `${config.accessory.displayName} Jet Focus`,
+      'Jet Focus',
     );
 
     // Set up On characteristic

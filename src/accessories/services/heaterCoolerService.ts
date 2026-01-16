@@ -71,7 +71,7 @@ export class HeaterCoolerService {
     // Set display name
     this.service.setCharacteristic(
       Characteristic.Name,
-      `${config.accessory.displayName} Heater`,
+      'Heater',
     );
 
     // Set up Active characteristic (required)

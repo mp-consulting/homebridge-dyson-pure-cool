@@ -85,7 +85,7 @@ export class AirQualityService {
     // Set display name
     this.service.setCharacteristic(
       Characteristic.Name,
-      `${config.accessory.displayName} Air Quality`,
+      'Air Quality',
     );
 
     // Set up AirQuality characteristic (required)
