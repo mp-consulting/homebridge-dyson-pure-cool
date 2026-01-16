@@ -1,0 +1,428 @@
+{
+  "_description": "Reference payloads from Dyson devices via MQTT. These represent the actual JSON messages exchanged between the plugin and Dyson devices.",
+  "_note": "All values are strings. STATE-CHANGE messages use [oldValue, newValue] array format.",
+
+  "messages": {
+    "CURRENT-STATE": {
+      "_description": "Full device state response, sent when plugin requests state or on initial connection",
+      "_topic": "{productType}/{serial}/status/current",
+      "example_pure_cool_tp04": {
+        "msg": "CURRENT-STATE",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "fpwr": "ON",
+          "fmod": "FAN",
+          "auto": "OFF",
+          "fnsp": "0005",
+          "oson": "ON",
+          "oscs": "0045",
+          "osce": "0315",
+          "nmod": "OFF",
+          "rhtm": "ON",
+          "ffoc": "OFF",
+          "tact": "2951",
+          "hact": "0055",
+          "p25r": "0003",
+          "p10r": "0005",
+          "va10": "0002",
+          "filf": "2400",
+          "cflr": "0100"
+        }
+      },
+      "example_hot_cool_hp04": {
+        "msg": "CURRENT-STATE",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "fpwr": "ON",
+          "fmod": "FAN",
+          "auto": "OFF",
+          "fnsp": "0004",
+          "oson": "OFF",
+          "nmod": "OFF",
+          "rhtm": "ON",
+          "ffoc": "ON",
+          "hmod": "HEAT",
+          "hmax": "2951",
+          "tact": "2901",
+          "hact": "0045",
+          "p25r": "0002",
+          "p10r": "0003",
+          "va10": "0001",
+          "filf": "3600"
+        }
+      },
+      "example_humidify_cool_ph03": {
+        "msg": "CURRENT-STATE",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "fpwr": "ON",
+          "fmod": "AUTO",
+          "auto": "ON",
+          "fnsp": "0003",
+          "oson": "ON",
+          "nmod": "OFF",
+          "rhtm": "ON",
+          "ffoc": "OFF",
+          "hume": "ON",
+          "humt": "0050",
+          "tact": "2941",
+          "hact": "0040",
+          "p25r": "0001",
+          "p10r": "0002",
+          "va10": "0001",
+          "filf": "4800"
+        }
+      },
+      "example_formaldehyde_tp09": {
+        "msg": "CURRENT-STATE",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "fpwr": "ON",
+          "fmod": "FAN",
+          "auto": "OFF",
+          "fnsp": "0006",
+          "oson": "ON",
+          "oscs": "0000",
+          "osce": "0360",
+          "nmod": "OFF",
+          "rhtm": "ON",
+          "ffoc": "OFF",
+          "tact": "2961",
+          "hact": "0048",
+          "p25r": "0002",
+          "p10r": "0004",
+          "va10": "0001",
+          "noxl": "0001",
+          "hchr": "0005",
+          "filf": "1800",
+          "cflr": "0095"
+        }
+      }
+    },
+
+    "STATE-CHANGE": {
+      "_description": "Incremental state update, sent when device state changes. Uses [oldValue, newValue] arrays.",
+      "_topic": "{productType}/{serial}/status/current",
+      "example_fan_turned_on": {
+        "msg": "STATE-CHANGE",
+        "time": "2026-01-16T10:31:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "fpwr": ["OFF", "ON"],
+          "fmod": ["OFF", "FAN"],
+          "fnsp": ["0000", "0005"]
+        }
+      },
+      "example_auto_mode_enabled": {
+        "msg": "STATE-CHANGE",
+        "time": "2026-01-16T10:32:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "fmod": ["FAN", "AUTO"],
+          "auto": ["OFF", "ON"]
+        }
+      },
+      "example_speed_changed": {
+        "msg": "STATE-CHANGE",
+        "time": "2026-01-16T10:33:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "fnsp": ["0005", "0007"]
+        }
+      },
+      "example_heating_enabled": {
+        "msg": "STATE-CHANGE",
+        "time": "2026-01-16T10:34:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "hmod": ["OFF", "HEAT"],
+          "hmax": ["2931", "2951"]
+        }
+      },
+      "example_oscillation_toggled": {
+        "msg": "STATE-CHANGE",
+        "time": "2026-01-16T10:35:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "oson": ["OFF", "ON"],
+          "oscs": ["0000", "0045"],
+          "osce": ["0000", "0315"]
+        }
+      },
+      "example_night_mode_enabled": {
+        "msg": "STATE-CHANGE",
+        "time": "2026-01-16T10:36:00.000Z",
+        "mode-reason": "LAPP",
+        "product-state": {
+          "nmod": ["OFF", "ON"]
+        }
+      }
+    },
+
+    "ENVIRONMENTAL-CURRENT-SENSOR-DATA": {
+      "_description": "Environmental sensor data, sent periodically or when sensors update",
+      "_topic": "{productType}/{serial}/status/current",
+      "example": {
+        "msg": "ENVIRONMENTAL-CURRENT-SENSOR-DATA",
+        "time": "2026-01-16T10:30:00.000Z",
+        "data": {
+          "tact": "2951",
+          "hact": "0055",
+          "p25r": "0003",
+          "p10r": "0005",
+          "va10": "0002",
+          "noxl": "0001",
+          "pact": "0002",
+          "vact": "0001"
+        }
+      },
+      "example_sensors_initializing": {
+        "msg": "ENVIRONMENTAL-CURRENT-SENSOR-DATA",
+        "time": "2026-01-16T10:30:00.000Z",
+        "data": {
+          "tact": "OFF",
+          "hact": "OFF",
+          "p25r": "INIT",
+          "p10r": "INIT",
+          "va10": "INIT"
+        }
+      }
+    },
+
+    "REQUEST-CURRENT-STATE": {
+      "_description": "Request sent by plugin to get current device state",
+      "_topic": "{productType}/{serial}/command",
+      "example": {
+        "msg": "REQUEST-CURRENT-STATE",
+        "time": "2026-01-16T10:30:00.000Z"
+      }
+    },
+
+    "STATE-SET": {
+      "_description": "Command sent by plugin to change device state",
+      "_topic": "{productType}/{serial}/command",
+      "example_turn_on": {
+        "msg": "STATE-SET",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "data": {
+          "fpwr": "ON"
+        }
+      },
+      "example_set_auto_mode": {
+        "msg": "STATE-SET",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "data": {
+          "auto": "ON",
+          "fmod": "AUTO"
+        }
+      },
+      "example_set_manual_speed": {
+        "msg": "STATE-SET",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "data": {
+          "auto": "OFF",
+          "fmod": "FAN",
+          "fnsp": "0007"
+        }
+      },
+      "example_enable_heating": {
+        "msg": "STATE-SET",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "data": {
+          "hmod": "HEAT"
+        }
+      },
+      "example_set_target_temperature": {
+        "msg": "STATE-SET",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "data": {
+          "hmax": "2951"
+        }
+      },
+      "example_enable_oscillation": {
+        "msg": "STATE-SET",
+        "time": "2026-01-16T10:30:00.000Z",
+        "mode-reason": "LAPP",
+        "data": {
+          "oson": "ON"
+        }
+      }
+    }
+  },
+
+  "fields": {
+    "_description": "Reference for all known Dyson MQTT protocol fields",
+
+    "fan_control": {
+      "fpwr": {
+        "description": "Fan power state",
+        "values": ["ON", "OFF"]
+      },
+      "fmod": {
+        "description": "Fan mode - controls power and auto mode",
+        "values": ["OFF", "FAN", "AUTO"],
+        "notes": "OFF = device off, FAN = manual mode, AUTO = auto mode"
+      },
+      "auto": {
+        "description": "Auto mode toggle (some models use this instead of/alongside fmod)",
+        "values": ["ON", "OFF"]
+      },
+      "fnsp": {
+        "description": "Fan speed",
+        "values": ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "AUTO"],
+        "notes": "4-digit zero-padded string. In auto mode, contains actual current speed, not 'AUTO'"
+      },
+      "oson": {
+        "description": "Oscillation enabled",
+        "values": ["ON", "OFF"]
+      },
+      "oscs": {
+        "description": "Oscillation start angle in degrees",
+        "values": ["0000", "0045", "0090", "..."],
+        "notes": "4-digit zero-padded degrees (0-360)"
+      },
+      "osce": {
+        "description": "Oscillation end angle in degrees",
+        "values": ["0180", "0270", "0315", "0360", "..."],
+        "notes": "4-digit zero-padded degrees (0-360)"
+      },
+      "ffoc": {
+        "description": "Front airflow / Jet Focus mode",
+        "values": ["ON", "OFF"],
+        "notes": "ON = focused stream, OFF = diffused airflow"
+      },
+      "nmod": {
+        "description": "Night mode",
+        "values": ["ON", "OFF"],
+        "notes": "Quiet operation with dimmed display"
+      },
+      "rhtm": {
+        "description": "Continuous monitoring",
+        "values": ["ON", "OFF"],
+        "notes": "Keep sensors active when fan is off"
+      }
+    },
+
+    "heating": {
+      "hmod": {
+        "description": "Heating mode (HP models only)",
+        "values": ["HEAT", "OFF"]
+      },
+      "hmax": {
+        "description": "Target heating temperature",
+        "values": ["2741", "2831", "2951", "..."],
+        "notes": "Kelvin × 10. Example: 2951 = (295.1K - 273.15) = 21.95°C ≈ 22°C"
+      }
+    },
+
+    "humidifier": {
+      "hume": {
+        "description": "Humidifier enabled (PH models only)",
+        "values": ["ON", "OFF", "AUTO"]
+      },
+      "humt": {
+        "description": "Target humidity percentage",
+        "values": ["0030", "0040", "0050", "0060", "0070", "..."],
+        "notes": "4-digit zero-padded percentage (0-100)"
+      }
+    },
+
+    "sensors": {
+      "tact": {
+        "description": "Current temperature",
+        "values": ["2901", "2951", "3001", "OFF", "..."],
+        "notes": "Kelvin × 10. Example: 2951 = (295.1K - 273.15) = 21.95°C. 'OFF' when sensors disabled"
+      },
+      "hact": {
+        "description": "Current humidity percentage",
+        "values": ["0040", "0055", "0070", "OFF", "..."],
+        "notes": "4-digit zero-padded percentage. 'OFF' when sensors disabled"
+      },
+      "p25r": {
+        "description": "PM2.5 particulate matter (µg/m³)",
+        "values": ["0001", "0005", "0025", "INIT", "OFF", "..."],
+        "notes": "4-digit value. 'INIT' during sensor warmup"
+      },
+      "p10r": {
+        "description": "PM10 particulate matter (µg/m³)",
+        "values": ["0002", "0008", "0030", "INIT", "OFF", "..."],
+        "notes": "4-digit value. 'INIT' during sensor warmup"
+      },
+      "va10": {
+        "description": "VOC (Volatile Organic Compounds) index",
+        "values": ["0001", "0003", "0007", "INIT", "OFF", "..."],
+        "notes": "Index scale 0-10. 'INIT' during sensor warmup"
+      },
+      "noxl": {
+        "description": "NO2 (Nitrogen Dioxide) index (Formaldehyde models only)",
+        "values": ["0001", "0003", "0005", "INIT", "OFF", "..."],
+        "notes": "Index scale 0-10. Only on TP09, HP09, PH04, BP series"
+      },
+      "hchr": {
+        "description": "HCHO (Formaldehyde) level (Formaldehyde models only)",
+        "values": ["0005", "0010", "0025", "..."],
+        "notes": "Concentration value. Only on Formaldehyde models"
+      },
+      "pact": {
+        "description": "Particulate matter (older Pure Cool Link models)",
+        "values": ["0001", "0005", "0009", "..."],
+        "notes": "Index scale 0-10. Used by TP02, DP01, HP02"
+      },
+      "vact": {
+        "description": "VOC (older Pure Cool Link models)",
+        "values": ["0001", "0005", "0009", "..."],
+        "notes": "Index scale 0-10. Used by TP02, DP01, HP02"
+      }
+    },
+
+    "filter": {
+      "filf": {
+        "description": "Filter life remaining in hours",
+        "values": ["0100", "1200", "4300", "..."],
+        "notes": "Hours remaining. New filter ≈ 4300-8760 hours depending on model"
+      },
+      "fltf": {
+        "description": "Filter life remaining in hours (alternative field)",
+        "values": ["0100", "1200", "4300", "..."],
+        "notes": "Some models use this instead of filf"
+      },
+      "cflr": {
+        "description": "Carbon filter life remaining percentage",
+        "values": ["0100", "0075", "0050", "0025", "..."],
+        "notes": "Percentage 0-100. Used by models with separate carbon filter"
+      }
+    }
+  },
+
+  "mqtt_topics": {
+    "_description": "MQTT topic patterns used by Dyson devices",
+    "status": "{productType}/{serial}/status/current",
+    "command": "{productType}/{serial}/command",
+    "notes": [
+      "productType is the numeric model code (e.g., '438' for TP04)",
+      "serial is the device serial number (e.g., 'ABC-AB-12345678')"
+    ]
+  },
+
+  "product_types": {
+    "_description": "Common Dyson product type codes",
+    "438": "Pure Cool Tower (TP04)",
+    "455": "Pure Hot+Cool Link (HP02)",
+    "469": "Pure Cool Link Tower (TP02)",
+    "475": "Pure Cool Link Desk (DP01)",
+    "520": "Pure Cool Tower (TP06/TP07)",
+    "527": "Pure Hot+Cool (HP04)",
+    "358": "Pure Humidify+Cool (PH01)",
+    "358E": "Pure Humidify+Cool (PH03/PH04)",
+    "664": "Purifier Big+Quiet (BP02/BP03/BP04/BP06)"
+  }
+}
