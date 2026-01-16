@@ -24,6 +24,8 @@ export interface HeaterCoolerServiceConfig {
   device: DysonLinkDevice;
   api: API;
   log: Logging;
+  /** Primary service to link this service to */
+  primaryService?: Service;
 }
 
 /**
@@ -64,15 +66,13 @@ export class HeaterCoolerService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Get or create the HeaterCooler service
-    this.service = config.accessory.getService(Service.HeaterCooler) ||
-      config.accessory.addService(Service.HeaterCooler);
+    // Get or create the HeaterCooler service with name
+    this.service = config.accessory.getService('heater-cooler') ||
+      config.accessory.addService(Service.HeaterCooler, 'Heater', 'heater-cooler');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      'Heater',
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Heater');
 
     // Set up Active characteristic (required)
     this.service.getCharacteristic(Characteristic.Active)
@@ -115,6 +115,11 @@ export class HeaterCoolerService {
       })
       .onGet(this.handleHeatingThresholdGet.bind(this))
       .onSet(this.handleHeatingThresholdSet.bind(this));
+
+    // Link to primary service if provided
+    if (config.primaryService) {
+      this.service.addLinkedService(config.primaryService);
+    }
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));

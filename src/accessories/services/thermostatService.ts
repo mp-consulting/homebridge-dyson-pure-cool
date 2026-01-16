@@ -24,6 +24,8 @@ export interface ThermostatServiceConfig {
   device: DysonLinkDevice;
   api: API;
   log: Logging;
+  /** Primary service to link this service to */
+  primaryService?: Service;
 }
 
 /**
@@ -55,15 +57,13 @@ export class ThermostatService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Get or create the Thermostat service
-    this.service = config.accessory.getService(Service.Thermostat) ||
-      config.accessory.addService(Service.Thermostat);
+    // Get or create the Thermostat service with name
+    this.service = config.accessory.getService('thermostat') ||
+      config.accessory.addService(Service.Thermostat, 'Thermostat', 'thermostat');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      'Heater',
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Thermostat');
 
     // Set up CurrentHeatingCoolingState (read-only)
     // Values: OFF (0), HEAT (1), COOL (2), AUTO (3)
@@ -106,6 +106,11 @@ export class ThermostatService {
       Characteristic.TemperatureDisplayUnits,
       Characteristic.TemperatureDisplayUnits.CELSIUS,
     );
+
+    // Link to primary service if provided
+    if (config.primaryService) {
+      this.service.addLinkedService(config.primaryService);
+    }
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));
