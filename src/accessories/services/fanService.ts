@@ -78,7 +78,7 @@ export class FanService {
     // Set display name
     this.service.setCharacteristic(
       Characteristic.Name,
-      config.accessory.displayName,
+      'Air Purifier',
     );
 
     // Set up Active characteristic (required)

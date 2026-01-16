@@ -57,7 +57,7 @@ export class HumidityService {
     // Set display name
     this.service.setCharacteristic(
       Characteristic.Name,
-      `${config.accessory.displayName} Humidity`,
+      'Humidity',
     );
 
     // Set up CurrentRelativeHumidity characteristic (required)

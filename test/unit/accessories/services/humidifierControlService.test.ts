@@ -211,7 +211,7 @@ describe('HumidifierControlService', () => {
     it('should set display name', () => {
       expect(mockService.setCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.Name,
-        'Living Room Humidifier Humidifier',
+        'Humidifier',
       );
     });
 

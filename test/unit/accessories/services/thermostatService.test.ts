@@ -205,7 +205,7 @@ describe('ThermostatService', () => {
     it('should set display name', () => {
       expect(mockService.setCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.Name,
-        'Living Room Heater Heater',
+        'Heater',
       );
     });
 

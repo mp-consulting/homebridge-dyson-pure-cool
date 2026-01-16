@@ -83,7 +83,7 @@ export class HumidifierControlService {
     // Set display name
     this.service.setCharacteristic(
       Characteristic.Name,
-      `${config.accessory.displayName} Humidifier`,
+      'Humidifier',
     );
 
     // Set up Active characteristic

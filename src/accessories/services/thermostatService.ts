@@ -62,7 +62,7 @@ export class ThermostatService {
     // Set display name
     this.service.setCharacteristic(
       Characteristic.Name,
-      `${config.accessory.displayName} Heater`,
+      'Heater',
     );
 
     // Set up CurrentHeatingCoolingState (read-only)

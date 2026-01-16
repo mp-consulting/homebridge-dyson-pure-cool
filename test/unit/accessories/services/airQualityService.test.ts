@@ -176,7 +176,7 @@ describe('AirQualityService', () => {
 
       expect(mockApi._mockAirQualityService.setCharacteristic).toHaveBeenCalledWith(
         'Name',
-        'Test Dyson Air Quality',
+        'Air Quality',
       );
     });
 

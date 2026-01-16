@@ -172,7 +172,7 @@ describe('TemperatureService', () => {
 
       expect(mockApi._mockTempService.setCharacteristic).toHaveBeenCalledWith(
         'Name',
-        'Test Dyson Temperature',
+        'Temperature',
       );
     });
 

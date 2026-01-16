@@ -171,7 +171,7 @@ describe('JetFocusService', () => {
       );
       expect(mockAccessory.addService).toHaveBeenCalledWith(
         mockApi.hap.Service.Switch,
-        'Living Room Fan Jet Focus',
+        'Jet Focus',
         'jet-focus',
       );
     });
@@ -179,7 +179,7 @@ describe('JetFocusService', () => {
     it('should set display name', () => {
       expect(mockService.setCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.Name,
-        'Living Room Fan Jet Focus',
+        'Jet Focus',
       );
     });
 
