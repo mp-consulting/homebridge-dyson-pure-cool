@@ -84,16 +84,15 @@ export class HeaterCoolerService {
       .onGet(this.handleCurrentStateGet.bind(this));
 
     // Set up TargetHeaterCoolerState characteristic (required)
-    // Only support AUTO (off) and HEAT modes since Dyson HP devices don't have active cooling
-    // AUTO (0) = heating disabled, HEAT (1) = heating enabled
+    // Only support HEAT mode since Dyson HP devices don't have active cooling
+    // On/off is controlled via the Active characteristic, not TargetHeaterCoolerState
     this.service.getCharacteristic(Characteristic.TargetHeaterCoolerState)
       .setProps({
-        minValue: 0,
+        minValue: 1,
         maxValue: 1,
-        validValues: [this.TARGET_STATE.AUTO, this.TARGET_STATE.HEAT],
+        validValues: [this.TARGET_STATE.HEAT],
       })
-      .onGet(this.handleTargetStateGet.bind(this))
-      .onSet(this.handleTargetStateSet.bind(this));
+      .onGet(this.handleTargetStateGet.bind(this));
 
     // Set up CurrentTemperature characteristic (required)
     this.service.getCharacteristic(Characteristic.CurrentTemperature)
@@ -199,33 +198,12 @@ export class HeaterCoolerService {
 
   /**
    * Handle TargetHeaterCoolerState GET request
-   * Returns AUTO (0) when heating disabled, HEAT (1) when enabled
+   * Always returns HEAT since that's the only supported mode
+   * On/off is controlled via Active characteristic
    */
   private handleTargetStateGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const targetState = state.heatingEnabled ? this.TARGET_STATE.HEAT : this.TARGET_STATE.AUTO;
-    this.log.debug('Get TargetHeaterCoolerState ->', targetState === this.TARGET_STATE.HEAT ? 'HEAT' : 'AUTO');
-    return targetState;
-  }
-
-  /**
-   * Handle TargetHeaterCoolerState SET request
-   * @param value - Target state: AUTO (0) = off, HEAT (1) = on
-   */
-  private async handleTargetStateSet(value: CharacteristicValue): Promise<void> {
-    const targetState = value as number;
-    this.log.debug('Set TargetHeaterCoolerState ->', targetState === this.TARGET_STATE.HEAT ? 'HEAT' : 'AUTO');
-
-    try {
-      if (targetState === this.TARGET_STATE.HEAT) {
-        await this.device.setHeatingMode(true);
-      } else {
-        await this.device.setHeatingMode(false);
-      }
-    } catch (error) {
-      this.log.error('Failed to set heating mode:', error);
-      throw error;
-    }
+    this.log.debug('Get TargetHeaterCoolerState -> HEAT');
+    return this.TARGET_STATE.HEAT;
   }
 
   /**
@@ -304,13 +282,9 @@ export class HeaterCoolerService {
 
     const Characteristic = this.api.hap.Characteristic;
 
-    // Update Active
+    // Update Active (on/off is controlled here, not via TargetHeaterCoolerState)
     const active = state.isOn && state.heatingEnabled ? 1 : 0;
     this.service.updateCharacteristic(Characteristic.Active, active);
-
-    // Update TargetHeaterCoolerState (AUTO = off, HEAT = on)
-    const targetState = state.heatingEnabled ? this.TARGET_STATE.HEAT : this.TARGET_STATE.AUTO;
-    this.service.updateCharacteristic(Characteristic.TargetHeaterCoolerState, targetState);
 
     // Update CurrentHeaterCoolerState
     let currentState: number;

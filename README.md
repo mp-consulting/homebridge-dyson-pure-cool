@@ -122,12 +122,16 @@ If you prefer not to use your Dyson account, you can configure devices manually:
 
 ## HomeKit Controls
 
-### Fan (All Models)
+### Air Purifier (All Models)
+
+The fan appears as an Air Purifier accessory in HomeKit with the following controls:
 
 - **Power**: Turn the fan on/off
 - **Speed**: Adjust fan speed from 10% to 100% (maps to Dyson speeds 1-10)
 - **Oscillation**: Toggle left-right oscillation
-- **Auto Mode**: Let the fan automatically adjust based on air quality
+- **Mode** (Auto/Manual): In the Home app, tap the Air Purifier tile to open details, then select:
+  - **Auto**: The fan automatically adjusts speed based on air quality sensor readings
+  - **Manual**: You control the fan speed directly
 
 ### Sensors
 
@@ -150,11 +154,16 @@ If you prefer not to use your Dyson account, you can configure devices manually:
 - **Filter Life Level**: Percentage of filter life remaining (0-100%)
 - **Filter Change Indication**: Alert when filter needs replacement (≤10%)
 
-### Thermostat (HP Models)
+### Heater (HP Models)
 
-- **Heating Mode**: Turn heating on/off
-- **Target Temperature**: Set target temperature (10-38°C)
+Dyson Hot+Cool devices are heaters with a fan - they don't have active cooling (no AC/refrigeration). The "Cool" in Hot+Cool means the fan blows room-temperature air.
+
+- **Active**: Turn heating on/off (tap the power icon)
+- **Mode**: Always shows "Heat" since that's the only mode - there's no cooling option
+- **Target Temperature**: Set heating target temperature (10-38°C)
 - **Current Temperature**: Displays current room temperature
+
+To use the device as a fan without heating, simply turn off the heater and control the fan via the Air Purifier tile.
 
 ### Humidifier (PH Models)
 
