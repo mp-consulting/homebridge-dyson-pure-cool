@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix PM2.5 and PM10 sensor data retrieval using correct Dyson MQTT field names (`p25r`, `p10r`)
 - Fix HeaterCooler service to use proper HomeKit semantics (HEAT only mode, on/off via Active characteristic)
-- Fix auto mode toggle reverting to manual - auto mode now determined only by `fmod`/`auto` fields, not `fnsp`
+- Fix auto mode toggle reverting to manual - prevent `setFanPower` from overriding mode when device already on
 - Fix auto mode commands sending both `auto` and `fmod` fields for compatibility with all Dyson models
 - Handle INIT/OFF values in air quality sensor data parsing
 

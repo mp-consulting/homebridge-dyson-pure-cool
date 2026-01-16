@@ -92,12 +92,17 @@ export class DysonLinkDevice extends DysonDevice {
    * Set fan power on or off
    *
    * Uses fmod command - OFF to turn off, FAN or AUTO to turn on.
-   * When turning on, preserves auto mode if it was enabled.
+   * When turning on, if already on, do nothing to avoid overriding mode changes.
    *
    * @param on - True to turn on, false to turn off
    */
   async setFanPower(on: boolean): Promise<void> {
     if (on) {
+      // If already on, don't send anything to avoid overriding mode changes
+      // (HomeKit often sends Active=true along with mode changes)
+      if (this.state.isOn) {
+        return;
+      }
       // Turn on - use current auto mode setting
       if (this.state.autoMode) {
         await this.sendCommand({ auto: PROTOCOL.ON, fmod: PROTOCOL.AUTO });
@@ -168,7 +173,8 @@ export class DysonLinkDevice extends DysonDevice {
   async setAutoMode(on: boolean): Promise<void> {
     if (on) {
       // Send both 'auto' and 'fmod' fields for compatibility with all Dyson models
-      await this.sendCommand({ auto: PROTOCOL.ON, fmod: PROTOCOL.AUTO });
+      // Also ensure the fan is on when enabling auto mode
+      await this.sendCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fmod: PROTOCOL.AUTO });
     } else {
       // When disabling auto, set to manual fan mode with current or default speed
       const currentSpeed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
