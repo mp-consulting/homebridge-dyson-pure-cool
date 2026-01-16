@@ -497,9 +497,13 @@ export class MessageCodec {
    */
   speedToPercent(speed: number): number {
     if (speed < 0) {
-      return PERCENT.MAX; // AUTO shows as 100%
+      // When fnsp is 'AUTO', we don't know the actual speed
+      // Return 0% to indicate the device is managing the speed
+      return PERCENT.MIN;
     }
     // Map 1-10 to 10-100% (in steps of 10)
+    // This correctly shows the actual speed even in auto mode,
+    // since devices report the real speed in fnsp when actively running
     return Math.max(PERCENT.MIN, Math.min(PERCENT.MAX, speed * PERCENT.PER_SPEED_LEVEL));
   }
 

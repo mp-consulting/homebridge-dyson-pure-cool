@@ -507,8 +507,10 @@ describe('MessageCodec', () => {
       expect(codec.speedToPercent(10)).toBe(100);
     });
 
-    it('should convert AUTO (-1) to 100%', () => {
-      expect(codec.speedToPercent(-1)).toBe(100);
+    it('should convert AUTO (-1) to 0%', () => {
+      // When fnsp is 'AUTO', we don't know the actual speed
+      // so we show 0% to indicate the device is managing the speed
+      expect(codec.speedToPercent(-1)).toBe(0);
     });
 
     it('should handle 0 speed', () => {

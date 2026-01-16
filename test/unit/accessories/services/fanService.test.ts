@@ -371,8 +371,8 @@ describe('FanService', () => {
       expect(result).toBe(50);
     });
 
-    it('should return 100 for AUTO mode', async () => {
-      // Simulate auto mode
+    it('should return 0 for AUTO mode when actual speed unknown', async () => {
+      // Simulate auto mode where fnsp is 'AUTO' (actual speed unknown)
       mockMqttClient._emit('message', {
         topic: 'status',
         payload: Buffer.from('{}'),
@@ -380,7 +380,9 @@ describe('FanService', () => {
       });
 
       const result = speedGetHandler();
-      expect(result).toBe(100);
+      // When fnsp is 'AUTO', fanSpeed is -1 and we return 0% to indicate
+      // the device is managing the speed (we don't know the actual speed)
+      expect(result).toBe(0);
     });
 
     it('should call setFanPower(false) when set to 0', async () => {
