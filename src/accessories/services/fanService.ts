@@ -26,6 +26,8 @@ export interface FanServiceConfig {
   device: DysonLinkDevice;
   api: API;
   log: Logging;
+  /** Device name to display in HomeKit */
+  deviceName: string;
 }
 
 /**
@@ -55,12 +57,20 @@ const TargetAirPurifierState = {
  * - RotationSpeed (0-100%) ↔ fanSpeed (1-10)
  * - SwingMode (0/1) ↔ oscillation (boolean)
  */
+/** Debounce delay in milliseconds for slider inputs */
+const DEBOUNCE_DELAY_MS = 300;
+
 export class FanService {
   private readonly service: Service;
   private readonly device: DysonLinkDevice;
   private readonly log: Logging;
   private readonly api: API;
   private readonly codec: MessageCodec;
+
+  /** Timer for debouncing speed changes */
+  private speedDebounceTimer?: ReturnType<typeof setTimeout>;
+  /** Pending speed value to be set after debounce */
+  private pendingSpeed?: number;
 
   constructor(config: FanServiceConfig) {
     this.device = config.device;
@@ -71,15 +81,13 @@ export class FanService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Get or create the AirPurifier service (not Fanv2)
+    // Get or create the AirPurifier service with device name
     this.service = config.accessory.getService(Service.AirPurifier) ||
-      config.accessory.addService(Service.AirPurifier);
+      config.accessory.addService(Service.AirPurifier, config.deviceName, 'air-purifier');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      config.accessory.displayName,
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, config.deviceName);
 
     // Set up Active characteristic (required)
     this.service.getCharacteristic(Characteristic.Active)
@@ -212,11 +220,35 @@ export class FanService {
 
   /**
    * Handle RotationSpeed SET request
+   * Uses debouncing to prevent flooding the device when dragging the slider
    * @param value - 0-100 percentage
    */
-  private async handleSpeedSet(value: CharacteristicValue): Promise<void> {
+  private handleSpeedSet(value: CharacteristicValue): void {
     const percent = value as number;
+    this.pendingSpeed = percent;
+
+    // Clear any existing debounce timer
+    if (this.speedDebounceTimer) {
+      clearTimeout(this.speedDebounceTimer);
+    }
+
+    // Set new debounce timer
+    this.speedDebounceTimer = setTimeout(() => {
+      this.applyPendingSpeed();
+    }, DEBOUNCE_DELAY_MS);
+  }
+
+  /**
+   * Apply the pending speed value after debounce delay
+   */
+  private async applyPendingSpeed(): Promise<void> {
+    const percent = this.pendingSpeed;
+    if (percent === undefined) {
+      return;
+    }
+
     this.log.debug('Set RotationSpeed ->', percent);
+    this.pendingSpeed = undefined;
 
     try {
       if (percent === 0) {
@@ -235,7 +267,6 @@ export class FanService {
       }
     } catch (error) {
       this.log.error('Failed to set fan speed:', error);
-      throw error;
     }
   }
 

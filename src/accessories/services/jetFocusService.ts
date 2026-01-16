@@ -24,6 +24,8 @@ export interface JetFocusServiceConfig {
   device: DysonLinkDevice;
   api: API;
   log: Logging;
+  /** Primary service to link this service to */
+  primaryService?: Service;
 }
 
 /**
@@ -48,18 +50,21 @@ export class JetFocusService {
     // Create Switch service with unique subtype for Jet Focus
     const existingService = config.accessory.getServiceById(Service.Switch, 'jet-focus');
     this.service = existingService ||
-      config.accessory.addService(Service.Switch, `${config.accessory.displayName} Jet Focus`, 'jet-focus');
+      config.accessory.addService(Service.Switch, 'Jet Focus', 'jet-focus');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      `${config.accessory.displayName} Jet Focus`,
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Jet Focus');
 
     // Set up On characteristic
     this.service.getCharacteristic(Characteristic.On)
       .onGet(this.handleOnGet.bind(this))
       .onSet(this.handleOnSet.bind(this));
+
+    // Link to primary service if provided
+    if (config.primaryService) {
+      this.service.addLinkedService(config.primaryService);
+    }
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));

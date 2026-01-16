@@ -97,6 +97,8 @@ export interface RawStateData {
   fmod?: string | [string, string];
   auto?: string | [string, string];
   fnsp?: string | [string, string];
+  fnst?: string | [string, string];
+  qtar?: string | [string, string];
   oson?: string | [string, string];
   oscs?: string | [string, string];
   osce?: string | [string, string];
@@ -105,6 +107,7 @@ export interface RawStateData {
   ffoc?: string | [string, string];
   hmod?: string | [string, string];
   hmax?: string | [string, string];
+  hsta?: string | [string, string];
   hume?: string | [string, string];
   humt?: string | [string, string];
   tact?: string | [string, string];
@@ -116,6 +119,10 @@ export interface RawStateData {
   vact?: string | [string, string];
   noxl?: string | [string, string];
   hchr?: string | [string, string];
+  sltm?: string | [string, string];
+  ercd?: string | [string, string];
+  wacd?: string | [string, string];
+  tilt?: string | [string, string];
   filf?: string | [string, string];
   fltf?: string | [string, string];
   cflr?: string | [string, string];
@@ -402,6 +409,27 @@ export class MessageCodec {
         state.no2Index = value;
       }
     }
+    // Formaldehyde (HCHO) level
+    const hchr = this.extractValue(raw.hchr);
+    if (hchr !== undefined && hchr !== 'INIT' && hchr !== 'OFF') {
+      const value = parseInt(hchr, 10);
+      if (!isNaN(value)) {
+        state.formaldehydeLevel = value;
+      }
+    }
+
+    // Sleep timer
+    const sltm = this.extractValue(raw.sltm);
+    if (sltm !== undefined) {
+      if (sltm === 'OFF') {
+        state.sleepTimer = 0;
+      } else {
+        const value = parseInt(sltm, 10);
+        if (!isNaN(value)) {
+          state.sleepTimer = value;
+        }
+      }
+    }
 
     // Filter status
     const filf = this.extractValue(raw.filf);
@@ -431,6 +459,11 @@ export class MessageCodec {
     if (hmax !== undefined) {
       state.targetTemperature = parseInt(hmax, 10);
     }
+    // Heating status - whether heater is actively heating
+    const hsta = this.extractValue(raw.hsta);
+    if (hsta !== undefined) {
+      state.heatingActive = hsta === 'ON';
+    }
 
     // Humidifier (PH models)
     const hume = this.extractValue(raw.hume);
@@ -440,6 +473,36 @@ export class MessageCodec {
     const humt = this.extractValue(raw.humt);
     if (humt !== undefined) {
       state.targetHumidity = parseInt(humt, 10);
+    }
+
+    // Link series specific fields
+    // Fan state - whether fan is actively running (Link series uses this instead of fpwr)
+    const fnst = this.extractValue(raw.fnst);
+    if (fnst !== undefined) {
+      state.fanState = fnst === 'ON';
+    }
+    // Air quality target (1-4, for auto mode sensitivity)
+    const qtar = this.extractValue(raw.qtar);
+    if (qtar !== undefined) {
+      const value = parseInt(qtar, 10);
+      if (!isNaN(value)) {
+        state.airQualityTarget = value;
+      }
+    }
+    // Error code
+    const ercd = this.extractValue(raw.ercd);
+    if (ercd !== undefined) {
+      state.errorCode = ercd;
+    }
+    // Warning code
+    const wacd = this.extractValue(raw.wacd);
+    if (wacd !== undefined) {
+      state.warningCode = wacd;
+    }
+    // Tilt status
+    const tilt = this.extractValue(raw.tilt);
+    if (tilt !== undefined) {
+      state.tiltStatus = tilt;
     }
 
     return state;

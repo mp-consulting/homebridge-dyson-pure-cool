@@ -63,6 +63,8 @@ function createMockService() {
       return characteristics.get(key)!;
     }),
     updateCharacteristic: jest.fn().mockReturnThis(),
+    addOptionalCharacteristic: jest.fn().mockReturnThis(),
+    addLinkedService: jest.fn().mockReturnThis(),
     _getCharacteristics: () => characteristics,
   };
 
@@ -84,6 +86,7 @@ function createMockApi() {
         Name: 'Name',
         FilterLifeLevel: 'FilterLifeLevel',
         FilterChangeIndication: 'FilterChangeIndication',
+        ConfiguredName: 'ConfiguredName',
       },
     },
     _mockFilterService: mockFilterService,
@@ -98,7 +101,7 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
     displayName: 'Test Dyson',
     UUID: 'test-uuid',
     getService: jest.fn((serviceType: unknown) => {
-      if (serviceType === 'FilterMaintenance') {
+      if (serviceType === 'filter-maintenance') {
         return api._mockFilterService;
       }
       return undefined;
@@ -160,10 +163,10 @@ describe('FilterService', () => {
         log: mockLog,
       });
 
-      expect(mockAccessory.getService).toHaveBeenCalledWith('FilterMaintenance');
+      expect(mockAccessory.getService).toHaveBeenCalledWith('filter-maintenance');
     });
 
-    it('should set display name', () => {
+    it('should set configured name', () => {
       service = new FilterService({
         accessory: mockAccessory,
         device,
@@ -171,9 +174,12 @@ describe('FilterService', () => {
         log: mockLog,
       });
 
-      expect(mockApi._mockFilterService.setCharacteristic).toHaveBeenCalledWith(
-        'Name',
-        'Test Dyson Filter',
+      expect(mockApi._mockFilterService.addOptionalCharacteristic).toHaveBeenCalledWith(
+        'ConfiguredName',
+      );
+      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith(
+        'ConfiguredName',
+        'Filter',
       );
     });
 

@@ -65,6 +65,8 @@ function createMockService() {
       return characteristics.get(uuid);
     }),
     updateCharacteristic: jest.fn(),
+    addOptionalCharacteristic: jest.fn().mockReturnThis(),
+    addLinkedService: jest.fn().mockReturnThis(),
   };
 
   return mockService as unknown as jest.Mocked<Service>;
@@ -87,6 +89,7 @@ function createMockApi() {
   const Characteristic = {
     On: { UUID: 'on-uuid' },
     Name: { UUID: 'name-uuid' },
+    ConfiguredName: { UUID: 'configured-name-uuid' },
   };
 
   const Service = {
@@ -171,15 +174,18 @@ describe('JetFocusService', () => {
       );
       expect(mockAccessory.addService).toHaveBeenCalledWith(
         mockApi.hap.Service.Switch,
-        'Living Room Fan Jet Focus',
+        'Jet Focus',
         'jet-focus',
       );
     });
 
-    it('should set display name', () => {
-      expect(mockService.setCharacteristic).toHaveBeenCalledWith(
-        mockApi.hap.Characteristic.Name,
-        'Living Room Fan Jet Focus',
+    it('should set configured name', () => {
+      expect(mockService.addOptionalCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+        'Jet Focus',
       );
     });
 

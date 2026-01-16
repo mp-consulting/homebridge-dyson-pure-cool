@@ -65,6 +65,8 @@ function createMockService() {
       return characteristics.get(uuid);
     }),
     updateCharacteristic: jest.fn(),
+    addOptionalCharacteristic: jest.fn().mockReturnThis(),
+    addLinkedService: jest.fn().mockReturnThis(),
   };
 
   return mockService as unknown as jest.Mocked<Service>;
@@ -91,6 +93,7 @@ function createMockApi() {
     RotationSpeed: { UUID: 'rotation-speed-uuid' },
     SwingMode: { UUID: 'swing-mode-uuid' },
     Name: { UUID: 'name-uuid' },
+    ConfiguredName: { UUID: 'configured-name-uuid' },
   };
 
   const Service = {
@@ -158,6 +161,7 @@ describe('FanService', () => {
       device,
       api: mockApi,
       log: mockLog,
+      deviceName: 'Living Room',
     };
 
     fanService = new FanService(config);
@@ -194,9 +198,12 @@ describe('FanService', () => {
       expect(mockAccessory.getService).toHaveBeenCalled();
     });
 
-    it('should set display name', () => {
-      expect(mockService.setCharacteristic).toHaveBeenCalledWith(
-        mockApi.hap.Characteristic.Name,
+    it('should set configured name', () => {
+      expect(mockService.addOptionalCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
         'Living Room',
       );
     });
@@ -386,28 +393,42 @@ describe('FanService', () => {
     });
 
     it('should call setFanPower(false) when set to 0', async () => {
-      await speedSetHandler(0);
+      jest.useFakeTimers();
+      speedSetHandler(0);
+      // Fast-forward debounce timer
+      jest.advanceTimersByTime(300);
+      await Promise.resolve(); // Allow async operations to complete
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { fmod: 'OFF' },
         }),
       );
+      jest.useRealTimers();
     });
 
     it('should call setFanSpeed with converted value', async () => {
-      await speedSetHandler(50);
+      jest.useFakeTimers();
+      speedSetHandler(50);
+      // Fast-forward debounce timer
+      jest.advanceTimersByTime(300);
+      await Promise.resolve(); // Allow async operations to complete
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ fnsp: '0005' }),
         }),
       );
+      jest.useRealTimers();
     });
 
     it('should turn fan on if off when setting speed', async () => {
+      jest.useFakeTimers();
       // Fan is off by default
-      await speedSetHandler(50);
+      speedSetHandler(50);
+      // Fast-forward debounce timer
+      jest.advanceTimersByTime(300);
+      await Promise.resolve(); // Allow async operations to complete
 
       // Should have both speed and power commands
       const calls = mockMqttClient.publishCommand.mock.calls;
@@ -415,6 +436,7 @@ describe('FanService', () => {
 
       // Check that we have a speed command
       expect(dataValues.some((d) => d.fnsp === '0005')).toBe(true);
+      jest.useRealTimers();
     });
   });
 
@@ -577,11 +599,19 @@ describe('FanService', () => {
       expect(mockLog.error).toHaveBeenCalled();
     });
 
-    it('should throw and log error when setFanSpeed fails', async () => {
+    it('should log error when setFanSpeed fails', async () => {
+      jest.useFakeTimers();
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      await expect(speedSetHandler(50)).rejects.toThrow('MQTT error');
+      speedSetHandler(50);
+      // Fast-forward debounce timer
+      jest.advanceTimersByTime(300);
+      // Allow async operations to complete
+      await Promise.resolve();
+      await jest.runAllTimersAsync();
+
       expect(mockLog.error).toHaveBeenCalled();
+      jest.useRealTimers();
     });
 
     it('should throw and log error when setOscillation fails', async () => {

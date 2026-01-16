@@ -63,6 +63,8 @@ function createMockService() {
       return characteristics.get(key)!;
     }),
     updateCharacteristic: jest.fn().mockReturnThis(),
+    addOptionalCharacteristic: jest.fn().mockReturnThis(),
+    addLinkedService: jest.fn().mockReturnThis(),
     _getCharacteristics: () => characteristics,
   };
 
@@ -83,6 +85,7 @@ function createMockApi() {
       Characteristic: {
         Name: 'Name',
         CurrentRelativeHumidity: 'CurrentRelativeHumidity',
+        ConfiguredName: 'ConfiguredName',
       },
     },
     _mockHumidityService: mockHumidityService,
@@ -97,7 +100,7 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
     displayName: 'Test Dyson',
     UUID: 'test-uuid',
     getService: jest.fn((serviceType: unknown) => {
-      if (serviceType === 'HumiditySensor') {
+      if (serviceType === 'humidity-sensor') {
         return api._mockHumidityService;
       }
       return undefined;
@@ -159,10 +162,10 @@ describe('HumidityService', () => {
         log: mockLog,
       });
 
-      expect(mockAccessory.getService).toHaveBeenCalledWith('HumiditySensor');
+      expect(mockAccessory.getService).toHaveBeenCalledWith('humidity-sensor');
     });
 
-    it('should set display name', () => {
+    it('should set configured name', () => {
       service = new HumidityService({
         accessory: mockAccessory,
         device,
@@ -170,9 +173,12 @@ describe('HumidityService', () => {
         log: mockLog,
       });
 
-      expect(mockApi._mockHumidityService.setCharacteristic).toHaveBeenCalledWith(
-        'Name',
-        'Test Dyson Humidity',
+      expect(mockApi._mockHumidityService.addOptionalCharacteristic).toHaveBeenCalledWith(
+        'ConfiguredName',
+      );
+      expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
+        'ConfiguredName',
+        'Humidity',
       );
     });
 

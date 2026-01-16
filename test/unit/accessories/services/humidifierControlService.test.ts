@@ -65,6 +65,8 @@ function createMockService() {
       return characteristics.get(uuid);
     }),
     updateCharacteristic: jest.fn(),
+    addOptionalCharacteristic: jest.fn().mockReturnThis(),
+    addLinkedService: jest.fn().mockReturnThis(),
   };
 
   return mockService as unknown as jest.Mocked<Service>;
@@ -103,6 +105,7 @@ function createMockApi() {
     RelativeHumidityHumidifierThreshold: { UUID: 'relative-humidity-humidifier-threshold-uuid' },
     WaterLevel: { UUID: 'water-level-uuid' },
     Name: { UUID: 'name-uuid' },
+    ConfiguredName: { UUID: 'configured-name-uuid' },
   };
 
   const Service = {
@@ -208,10 +211,13 @@ describe('HumidifierControlService', () => {
       expect(mockAccessory.getService).toHaveBeenCalled();
     });
 
-    it('should set display name', () => {
-      expect(mockService.setCharacteristic).toHaveBeenCalledWith(
-        mockApi.hap.Characteristic.Name,
-        'Living Room Humidifier Humidifier',
+    it('should set configured name', () => {
+      expect(mockService.addOptionalCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+        'Humidifier',
       );
     });
 

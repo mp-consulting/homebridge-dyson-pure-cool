@@ -24,6 +24,8 @@ export interface NightModeServiceConfig {
   device: DysonLinkDevice;
   api: API;
   log: Logging;
+  /** Primary service to link this service to */
+  primaryService?: Service;
 }
 
 /**
@@ -51,16 +53,19 @@ export class NightModeService {
     this.service = existingService ||
       config.accessory.addService(Service.Switch, 'Night Mode', 'night-mode');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      'Night Mode',
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Night Mode');
 
     // Set up On characteristic
     this.service.getCharacteristic(Characteristic.On)
       .onGet(this.handleOnGet.bind(this))
       .onSet(this.handleOnSet.bind(this));
+
+    // Link to primary service if provided
+    if (config.primaryService) {
+      this.service.addLinkedService(config.primaryService);
+    }
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));

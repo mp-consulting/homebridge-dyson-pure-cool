@@ -160,14 +160,19 @@ export class DysonLinkAccessory extends DysonAccessory {
     const linkDevice = this.device as DysonLinkDevice;
     const features = linkDevice.getFeatures();
     const opts = this.options ?? {};
+    const deviceName = this.accessory.displayName;
 
-    // Create FanService for fan control (all devices)
+    // Create FanService for fan control (all devices) - this is the primary service
     this.fanService = new FanService({
       accessory: this.accessory,
       device: linkDevice,
       api: this.api,
       log: this.log,
+      deviceName,
     });
+
+    // Get the primary service for linking secondary services
+    const primaryService = this.fanService.getService();
 
     // Create TemperatureService if device supports it and not ignored
     if (features.temperatureSensor && !opts.isTemperatureIgnored) {
@@ -178,6 +183,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         log: this.log,
         temperatureOffset: opts.temperatureOffset,
         useFahrenheit: opts.useFahrenheit,
+        primaryService,
       });
     }
 
@@ -189,6 +195,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         api: this.api,
         log: this.log,
         humidityOffset: opts.humidityOffset,
+        primaryService,
       });
     }
 
@@ -200,6 +207,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         device: linkDevice,
         api: this.api,
         log: this.log,
+        primaryService,
       });
     }
 
@@ -211,6 +219,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         device: linkDevice,
         api: this.api,
         log: this.log,
+        primaryService,
       });
     }
 
@@ -223,6 +232,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         log: this.log,
         hasNo2Sensor: features.no2Sensor,
         basicAirQualitySensor: features.basicAirQualitySensor,
+        primaryService,
       });
     }
 
@@ -233,6 +243,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         device: linkDevice,
         api: this.api,
         log: this.log,
+        primaryService,
       });
     }
 
@@ -248,6 +259,7 @@ export class DysonLinkAccessory extends DysonAccessory {
           device: linkDevice,
           api: this.api,
           log: this.log,
+          primaryService,
         });
       }
 
@@ -258,6 +270,7 @@ export class DysonLinkAccessory extends DysonAccessory {
           device: linkDevice,
           api: this.api,
           log: this.log,
+          primaryService,
         });
       }
     }
@@ -270,6 +283,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         api: this.api,
         log: this.log,
         fullRangeHumidity: opts.fullRangeHumidity,
+        primaryService,
       });
     }
 
@@ -281,6 +295,7 @@ export class DysonLinkAccessory extends DysonAccessory {
         device: linkDevice,
         api: this.api,
         log: this.log,
+        primaryService,
       });
     }
 

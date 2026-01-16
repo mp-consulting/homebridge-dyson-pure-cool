@@ -24,6 +24,8 @@ export interface FilterServiceConfig {
   device: DysonLinkDevice;
   api: API;
   log: Logging;
+  /** Primary service to link this service to */
+  primaryService?: Service;
 }
 
 /**
@@ -58,15 +60,13 @@ export class FilterService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Get or create the FilterMaintenance service
-    this.service = config.accessory.getService(Service.FilterMaintenance) ||
-      config.accessory.addService(Service.FilterMaintenance);
+    // Get or create the FilterMaintenance service with name
+    this.service = config.accessory.getService('filter-maintenance') ||
+      config.accessory.addService(Service.FilterMaintenance, 'Filter', 'filter-maintenance');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      `${config.accessory.displayName} Filter`,
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Filter');
 
     // Set up FilterLifeLevel characteristic (required)
     this.service.getCharacteristic(Characteristic.FilterLifeLevel)
@@ -75,6 +75,11 @@ export class FilterService {
     // Set up FilterChangeIndication characteristic (required)
     this.service.getCharacteristic(Characteristic.FilterChangeIndication)
       .onGet(this.handleFilterChangeIndicationGet.bind(this));
+
+    // Link to primary service if provided
+    if (config.primaryService) {
+      this.service.addLinkedService(config.primaryService);
+    }
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));

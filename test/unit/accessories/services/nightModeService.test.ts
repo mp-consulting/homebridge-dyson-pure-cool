@@ -65,6 +65,8 @@ function createMockService() {
       return characteristics.get(uuid);
     }),
     updateCharacteristic: jest.fn(),
+    addOptionalCharacteristic: jest.fn().mockReturnThis(),
+    addLinkedService: jest.fn().mockReturnThis(),
   };
 
   return mockService as unknown as jest.Mocked<Service>;
@@ -87,6 +89,7 @@ function createMockApi() {
   const Characteristic = {
     On: { UUID: 'on-uuid' },
     Name: { UUID: 'name-uuid' },
+    ConfiguredName: { UUID: 'configured-name-uuid' },
   };
 
   const Service = {
@@ -170,9 +173,12 @@ describe('NightModeService', () => {
       expect(mockAccessory.addService).toHaveBeenCalled();
     });
 
-    it('should set display name to Night Mode', () => {
-      expect(mockService.setCharacteristic).toHaveBeenCalledWith(
-        mockApi.hap.Characteristic.Name,
+    it('should set configured name to Night Mode', () => {
+      expect(mockService.addOptionalCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+      );
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
         'Night Mode',
       );
     });

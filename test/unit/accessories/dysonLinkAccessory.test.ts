@@ -63,6 +63,8 @@ function createMockService() {
       return characteristics.get(key)!;
     }),
     updateCharacteristic: jest.fn().mockReturnThis(),
+    addOptionalCharacteristic: jest.fn().mockReturnThis(),
+    addLinkedService: jest.fn().mockReturnThis(),
     _getCharacteristics: () => characteristics,
   };
 

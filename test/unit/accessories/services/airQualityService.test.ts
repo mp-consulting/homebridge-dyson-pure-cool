@@ -63,6 +63,8 @@ function createMockService() {
       return characteristics.get(key)!;
     }),
     updateCharacteristic: jest.fn().mockReturnThis(),
+    addOptionalCharacteristic: jest.fn().mockReturnThis(),
+    addLinkedService: jest.fn().mockReturnThis(),
     _getCharacteristics: () => characteristics,
   };
 
@@ -87,6 +89,7 @@ function createMockApi() {
         PM10Density: 'PM10Density',
         VOCDensity: 'VOCDensity',
         NitrogenDioxideDensity: 'NitrogenDioxideDensity',
+        ConfiguredName: 'ConfiguredName',
       },
     },
     _mockAirQualityService: mockAirQualityService,
@@ -101,7 +104,7 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
     displayName: 'Test Dyson',
     UUID: 'test-uuid',
     getService: jest.fn((serviceType: unknown) => {
-      if (serviceType === 'AirQualitySensor') {
+      if (serviceType === 'air-quality-sensor') {
         return api._mockAirQualityService;
       }
       return undefined;
@@ -163,10 +166,10 @@ describe('AirQualityService', () => {
         log: mockLog,
       });
 
-      expect(mockAccessory.getService).toHaveBeenCalledWith('AirQualitySensor');
+      expect(mockAccessory.getService).toHaveBeenCalledWith('air-quality-sensor');
     });
 
-    it('should set display name', () => {
+    it('should set configured name', () => {
       service = new AirQualityService({
         accessory: mockAccessory,
         device,
@@ -174,9 +177,12 @@ describe('AirQualityService', () => {
         log: mockLog,
       });
 
-      expect(mockApi._mockAirQualityService.setCharacteristic).toHaveBeenCalledWith(
-        'Name',
-        'Test Dyson Air Quality',
+      expect(mockApi._mockAirQualityService.addOptionalCharacteristic).toHaveBeenCalledWith(
+        'ConfiguredName',
+      );
+      expect(mockApi._mockAirQualityService.updateCharacteristic).toHaveBeenCalledWith(
+        'ConfiguredName',
+        'Air Quality',
       );
     });
 

@@ -30,7 +30,30 @@
           "cflr": "0100"
         }
       },
+      "example_hot_cool_link_hp02": {
+        "_note": "HP02 (455) - older Link series with basic sensors (pact/vact index, no p25r/p10r)",
+        "msg": "CURRENT-STATE",
+        "time": "2026-01-16T10:30:00.000Z",
+        "product-state": {
+          "fmod": "OFF",
+          "fnst": "OFF",
+          "fnsp": "AUTO",
+          "qtar": "0004",
+          "oson": "OFF",
+          "rhtm": "ON",
+          "filf": "4119",
+          "ercd": "NONE",
+          "nmod": "OFF",
+          "wacd": "NONE",
+          "hmod": "HEAT",
+          "hmax": "2950",
+          "hsta": "OFF",
+          "ffoc": "ON",
+          "tilt": "OK"
+        }
+      },
       "example_hot_cool_hp04": {
+        "_note": "HP04 (527) - newer model with advanced sensors (p25r/p10r in µg/m³)",
         "msg": "CURRENT-STATE",
         "time": "2026-01-16T10:30:00.000Z",
         "mode-reason": "LAPP",
@@ -166,7 +189,32 @@
     "ENVIRONMENTAL-CURRENT-SENSOR-DATA": {
       "_description": "Environmental sensor data, sent periodically or when sensors update",
       "_topic": "{productType}/{serial}/status/current",
-      "example": {
+      "example_link_hp02": {
+        "_note": "HP02 (455) - older Link series uses pact/vact (0-9 index scale), no p25r/p10r",
+        "msg": "ENVIRONMENTAL-CURRENT-SENSOR-DATA",
+        "time": "2026-01-16T10:30:00.000Z",
+        "data": {
+          "tact": "2903",
+          "hact": "0083",
+          "pact": "0000",
+          "vact": "0002",
+          "sltm": "OFF"
+        }
+      },
+      "example_newer_tp04": {
+        "_note": "TP04 (438) and newer models use p25r/p10r (µg/m³) and va10 (index)",
+        "msg": "ENVIRONMENTAL-CURRENT-SENSOR-DATA",
+        "time": "2026-01-16T10:30:00.000Z",
+        "data": {
+          "tact": "2951",
+          "hact": "0055",
+          "p25r": "0003",
+          "p10r": "0005",
+          "va10": "0002"
+        }
+      },
+      "example_formaldehyde_tp09": {
+        "_note": "Formaldehyde models (TP09, HP09) also include noxl (NO2 index)",
         "msg": "ENVIRONMENTAL-CURRENT-SENSOR-DATA",
         "time": "2026-01-16T10:30:00.000Z",
         "data": {
@@ -175,12 +223,11 @@
           "p25r": "0003",
           "p10r": "0005",
           "va10": "0002",
-          "noxl": "0001",
-          "pact": "0002",
-          "vact": "0001"
+          "noxl": "0001"
         }
       },
       "example_sensors_initializing": {
+        "_note": "Values during sensor warmup period",
         "msg": "ENVIRONMENTAL-CURRENT-SENSOR-DATA",
         "time": "2026-01-16T10:30:00.000Z",
         "data": {
@@ -279,7 +326,32 @@
       "fnsp": {
         "description": "Fan speed",
         "values": ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "AUTO"],
-        "notes": "4-digit zero-padded string. In auto mode, contains actual current speed, not 'AUTO'"
+        "notes": "4-digit zero-padded string. Newer models report actual speed even in auto mode. Link series (HP02, TP02) may report 'AUTO' when in auto mode."
+      },
+      "fnst": {
+        "description": "Fan state (Link series)",
+        "values": ["ON", "OFF"],
+        "notes": "Used by older Link series (HP02, TP02) to indicate if fan is actively running"
+      },
+      "qtar": {
+        "description": "Air quality target (Link series)",
+        "values": ["0001", "0002", "0003", "0004"],
+        "notes": "Target air quality level for auto mode. Used by older Link series"
+      },
+      "ercd": {
+        "description": "Error code",
+        "values": ["NONE", "..."],
+        "notes": "Device error code. NONE indicates no error"
+      },
+      "wacd": {
+        "description": "Warning code",
+        "values": ["NONE", "..."],
+        "notes": "Device warning code. NONE indicates no warning"
+      },
+      "tilt": {
+        "description": "Tilt status",
+        "values": ["OK", "..."],
+        "notes": "Device tilt sensor status"
       },
       "oson": {
         "description": "Oscillation enabled",
@@ -321,6 +393,11 @@
         "description": "Target heating temperature",
         "values": ["2741", "2831", "2951", "..."],
         "notes": "Kelvin × 10. Example: 2951 = (295.1K - 273.15) = 21.95°C ≈ 22°C"
+      },
+      "hsta": {
+        "description": "Heating status - indicates if heater is actively heating",
+        "values": ["ON", "OFF"],
+        "notes": "OFF when not heating, ON when actively heating to reach target temperature"
       }
     },
 
@@ -373,14 +450,37 @@
         "notes": "Concentration value. Only on Formaldehyde models"
       },
       "pact": {
-        "description": "Particulate matter (older Pure Cool Link models)",
-        "values": ["0001", "0005", "0009", "..."],
-        "notes": "Index scale 0-10. Used by TP02, DP01, HP02"
+        "description": "Particulate matter index (older Pure Cool Link models)",
+        "values": ["0000", "0001", "0005", "0009", "..."],
+        "notes": "Index scale 0-9. NOT µg/m³. Used by TP02, DP01, HP02. 0=excellent, 9=poor"
       },
       "vact": {
-        "description": "VOC (older Pure Cool Link models)",
-        "values": ["0001", "0005", "0009", "..."],
-        "notes": "Index scale 0-10. Used by TP02, DP01, HP02"
+        "description": "VOC index (older Pure Cool Link models)",
+        "values": ["0000", "0001", "0005", "0009", "..."],
+        "notes": "Index scale 0-9. Used by TP02, DP01, HP02. 0=excellent, 9=poor"
+      },
+      "sltm": {
+        "description": "Sleep timer",
+        "values": ["OFF", "0015", "0030", "0045", "..."],
+        "notes": "Sleep timer in minutes. OFF when disabled"
+      }
+    },
+
+    "scheduler": {
+      "srsc": {
+        "description": "Scheduler source/sync counter",
+        "values": ["6578", "..."],
+        "notes": "Synchronization value for scheduling features"
+      },
+      "dstv": {
+        "description": "Daylight Saving Time value",
+        "values": ["0000", "0001"],
+        "notes": "0000 = DST disabled, 0001 = DST enabled"
+      },
+      "tzid": {
+        "description": "Time Zone ID",
+        "values": ["0001", "0002", "..."],
+        "notes": "Numeric time zone identifier used by Dyson for scheduling"
       }
     },
 

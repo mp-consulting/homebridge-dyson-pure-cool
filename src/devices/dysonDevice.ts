@@ -370,9 +370,9 @@ export abstract class DysonDevice extends EventEmitter {
       }
     }
 
-    // PM2.5 - newer models use pm25, older Link models use pact
-    if ('pm25' in sensorData) {
-      const pm25 = sensorData.pm25;
+    // PM2.5 - newer models use p25r, older Link models use pact
+    if ('p25r' in sensorData) {
+      const pm25 = sensorData.p25r;
       if (typeof pm25 === 'string' && pm25 !== 'INIT' && pm25 !== 'OFF') {
         stateUpdate.pm25 = parseInt(pm25, 10);
       }
@@ -384,9 +384,9 @@ export abstract class DysonDevice extends EventEmitter {
       }
     }
 
-    // PM10 - only on newer models
-    if ('pm10' in sensorData) {
-      const pm10 = sensorData.pm10;
+    // PM10 - only on newer models (p10r field)
+    if ('p10r' in sensorData) {
+      const pm10 = sensorData.p10r;
       if (typeof pm10 === 'string' && pm10 !== 'INIT' && pm10 !== 'OFF') {
         stateUpdate.pm10 = parseInt(pm10, 10);
       }
@@ -411,6 +411,29 @@ export abstract class DysonDevice extends EventEmitter {
       const no2 = sensorData.noxl;
       if (typeof no2 === 'string' && no2 !== 'INIT' && no2 !== 'OFF') {
         stateUpdate.no2Index = parseInt(no2, 10);
+      }
+    }
+
+    // Formaldehyde (HCHO) level - only on formaldehyde models
+    if ('hchr' in sensorData) {
+      const hchr = sensorData.hchr;
+      if (typeof hchr === 'string' && hchr !== 'INIT' && hchr !== 'OFF') {
+        stateUpdate.formaldehydeLevel = parseInt(hchr, 10);
+      }
+    }
+
+    // Sleep timer
+    if ('sltm' in sensorData) {
+      const sltm = sensorData.sltm;
+      if (typeof sltm === 'string') {
+        if (sltm === 'OFF') {
+          stateUpdate.sleepTimer = 0;
+        } else {
+          const value = parseInt(sltm, 10);
+          if (!isNaN(value)) {
+            stateUpdate.sleepTimer = value;
+          }
+        }
       }
     }
 

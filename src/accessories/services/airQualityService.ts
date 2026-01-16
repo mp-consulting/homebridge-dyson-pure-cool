@@ -31,6 +31,8 @@ export interface AirQualityServiceConfig {
    * Basic sensors use pact/vact index (0-9 scale) instead of PM2.5 µg/m³
    */
   basicAirQualitySensor?: boolean;
+  /** Primary service to link this service to */
+  primaryService?: Service;
 }
 
 /**
@@ -78,15 +80,13 @@ export class AirQualityService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Get or create the AirQualitySensor service
-    this.service = config.accessory.getService(Service.AirQualitySensor) ||
-      config.accessory.addService(Service.AirQualitySensor);
+    // Get or create the AirQualitySensor service with name
+    this.service = config.accessory.getService('air-quality-sensor') ||
+      config.accessory.addService(Service.AirQualitySensor, 'Air Quality', 'air-quality-sensor');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      `${config.accessory.displayName} Air Quality`,
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Air Quality');
 
     // Set up AirQuality characteristic (required)
     this.service.getCharacteristic(Characteristic.AirQuality)
@@ -109,6 +109,11 @@ export class AirQualityService {
     if (this.hasNo2Sensor) {
       this.service.getCharacteristic(Characteristic.NitrogenDioxideDensity)
         .onGet(this.handleNO2Get.bind(this));
+    }
+
+    // Link to primary service if provided
+    if (config.primaryService) {
+      this.service.addLinkedService(config.primaryService);
     }
 
     // Subscribe to device state changes
