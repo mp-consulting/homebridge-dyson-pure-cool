@@ -28,6 +28,8 @@ export interface TemperatureServiceConfig {
   temperatureOffset?: number;
   /** Use Fahrenheit for logging (HomeKit always uses Celsius internally) */
   useFahrenheit?: boolean;
+  /** Primary service to link this service to */
+  primaryService?: Service;
 }
 
 /**
@@ -54,15 +56,13 @@ export class TemperatureService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Get or create the TemperatureSensor service
-    this.service = config.accessory.getService(Service.TemperatureSensor) ||
-      config.accessory.addService(Service.TemperatureSensor);
+    // Get or create the TemperatureSensor service with name
+    this.service = config.accessory.getService('temperature-sensor') ||
+      config.accessory.addService(Service.TemperatureSensor, 'Temperature', 'temperature-sensor');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      'Temperature',
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Temperature');
 
     // Set up CurrentTemperature characteristic (required)
     this.service.getCharacteristic(Characteristic.CurrentTemperature)
@@ -72,6 +72,11 @@ export class TemperatureService {
         maxValue: 100,
         minStep: 0.1,
       });
+
+    // Link to primary service if provided
+    if (config.primaryService) {
+      this.service.addLinkedService(config.primaryService);
+    }
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));

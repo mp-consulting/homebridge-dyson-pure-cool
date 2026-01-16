@@ -63,6 +63,8 @@ function createMockService() {
       return characteristics.get(key)!;
     }),
     updateCharacteristic: jest.fn().mockReturnThis(),
+    addOptionalCharacteristic: jest.fn().mockReturnThis(),
+    addLinkedService: jest.fn().mockReturnThis(),
     _getCharacteristics: () => characteristics,
   };
 
@@ -83,6 +85,7 @@ function createMockApi() {
       Characteristic: {
         Name: 'Name',
         CurrentTemperature: 'CurrentTemperature',
+        ConfiguredName: 'ConfiguredName',
       },
     },
     _mockTempService: mockTempService,
@@ -97,7 +100,7 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
     displayName: 'Test Dyson',
     UUID: 'test-uuid',
     getService: jest.fn((serviceType: unknown) => {
-      if (serviceType === 'TemperatureSensor') {
+      if (serviceType === 'temperature-sensor') {
         return api._mockTempService;
       }
       return undefined;
@@ -159,10 +162,10 @@ describe('TemperatureService', () => {
         log: mockLog,
       });
 
-      expect(mockAccessory.getService).toHaveBeenCalledWith('TemperatureSensor');
+      expect(mockAccessory.getService).toHaveBeenCalledWith('temperature-sensor');
     });
 
-    it('should set display name', () => {
+    it('should set configured name', () => {
       service = new TemperatureService({
         accessory: mockAccessory,
         device,
@@ -170,8 +173,11 @@ describe('TemperatureService', () => {
         log: mockLog,
       });
 
-      expect(mockApi._mockTempService.setCharacteristic).toHaveBeenCalledWith(
-        'Name',
+      expect(mockApi._mockTempService.addOptionalCharacteristic).toHaveBeenCalledWith(
+        'ConfiguredName',
+      );
+      expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
+        'ConfiguredName',
         'Temperature',
       );
     });

@@ -26,6 +26,8 @@ export interface HumidityServiceConfig {
   log: Logging;
   /** Humidity offset (can be positive or negative) */
   humidityOffset?: number;
+  /** Primary service to link this service to */
+  primaryService?: Service;
 }
 
 /**
@@ -50,15 +52,13 @@ export class HumidityService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Get or create the HumiditySensor service
-    this.service = config.accessory.getService(Service.HumiditySensor) ||
-      config.accessory.addService(Service.HumiditySensor);
+    // Get or create the HumiditySensor service with name
+    this.service = config.accessory.getService('humidity-sensor') ||
+      config.accessory.addService(Service.HumiditySensor, 'Humidity', 'humidity-sensor');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      'Humidity',
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Humidity');
 
     // Set up CurrentRelativeHumidity characteristic (required)
     this.service.getCharacteristic(Characteristic.CurrentRelativeHumidity)
@@ -68,6 +68,11 @@ export class HumidityService {
         maxValue: 100,
         minStep: 1,
       });
+
+    // Link to primary service if provided
+    if (config.primaryService) {
+      this.service.addLinkedService(config.primaryService);
+    }
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));

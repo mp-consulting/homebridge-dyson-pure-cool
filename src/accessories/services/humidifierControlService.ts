@@ -26,6 +26,8 @@ export interface HumidifierControlServiceConfig {
   log: Logging;
   /** Enable full humidity range (0-100%) instead of Dyson default (30-70%) */
   fullRangeHumidity?: boolean;
+  /** Primary service to link this service to */
+  primaryService?: Service;
 }
 
 /**
@@ -76,15 +78,13 @@ export class HumidifierControlService {
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
 
-    // Get or create the HumidifierDehumidifier service
-    this.service = config.accessory.getService(Service.HumidifierDehumidifier) ||
-      config.accessory.addService(Service.HumidifierDehumidifier);
+    // Get or create the HumidifierDehumidifier service with name
+    this.service = config.accessory.getService('humidifier') ||
+      config.accessory.addService(Service.HumidifierDehumidifier, 'Humidifier', 'humidifier');
 
-    // Set display name
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      'Humidifier',
-    );
+    // Set ConfiguredName for better HomeKit display
+    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Humidifier');
 
     // Set up Active characteristic
     this.service.getCharacteristic(Characteristic.Active)
@@ -126,6 +126,11 @@ export class HumidifierControlService {
     // Set up WaterLevel characteristic (read-only)
     this.service.getCharacteristic(Characteristic.WaterLevel)
       .onGet(this.handleWaterLevelGet.bind(this));
+
+    // Link to primary service if provided
+    if (config.primaryService) {
+      this.service.addLinkedService(config.primaryService);
+    }
 
     // Subscribe to device state changes
     this.device.on('stateChange', this.handleStateChange.bind(this));
