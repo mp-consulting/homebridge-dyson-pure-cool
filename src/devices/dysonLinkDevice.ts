@@ -98,9 +98,12 @@ export class DysonLinkDevice extends DysonDevice {
    */
   async setFanPower(on: boolean): Promise<void> {
     if (on) {
-      // Turn on - use current auto mode setting or default to AUTO
-      const mode = this.state.autoMode ? PROTOCOL.AUTO : PROTOCOL.FAN;
-      await this.sendCommand({ fmod: mode });
+      // Turn on - use current auto mode setting
+      if (this.state.autoMode) {
+        await this.sendCommand({ auto: PROTOCOL.ON, fmod: PROTOCOL.AUTO });
+      } else {
+        await this.sendCommand({ auto: PROTOCOL.OFF, fmod: PROTOCOL.FAN });
+      }
     } else {
       // Turn off
       await this.sendCommand({ fmod: PROTOCOL.OFF });
@@ -114,13 +117,14 @@ export class DysonLinkDevice extends DysonDevice {
    */
   async setFanSpeed(speed: number): Promise<void> {
     if (speed < 0) {
-      // Auto mode
-      await this.sendCommand({ fmod: PROTOCOL.AUTO });
+      // Auto mode - send both 'auto' and 'fmod' for compatibility
+      await this.sendCommand({ auto: PROTOCOL.ON, fmod: PROTOCOL.AUTO });
     } else {
       // Manual speed (1-10)
       const clampedSpeed = Math.max(FAN_SPEED.MIN, Math.min(FAN_SPEED.MAX, speed));
       const encodedSpeed = String(clampedSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
       await this.sendCommand({
+        auto: PROTOCOL.OFF,
         fnsp: encodedSpeed,
         fmod: PROTOCOL.FAN,
       });
@@ -163,12 +167,14 @@ export class DysonLinkDevice extends DysonDevice {
    */
   async setAutoMode(on: boolean): Promise<void> {
     if (on) {
-      await this.sendCommand({ fmod: PROTOCOL.AUTO });
+      // Send both 'auto' and 'fmod' fields for compatibility with all Dyson models
+      await this.sendCommand({ auto: PROTOCOL.ON, fmod: PROTOCOL.AUTO });
     } else {
       // When disabling auto, set to manual fan mode with current or default speed
       const currentSpeed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
       const encodedSpeed = String(currentSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
       await this.sendCommand({
+        auto: PROTOCOL.OFF,
         fmod: PROTOCOL.FAN,
         fnsp: encodedSpeed,
       });

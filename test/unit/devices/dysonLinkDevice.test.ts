@@ -113,11 +113,12 @@ describe('DysonLinkDevice', () => {
       await device.setFanPower(true);
 
       // setFanPower uses fmod command - AUTO when autoMode is set, FAN otherwise
+      // Also sends auto field for compatibility with all Dyson models
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           msg: 'STATE-SET',
           'mode-reason': 'LAPP',
-          data: { fmod: 'FAN' },
+          data: { auto: 'OFF', fmod: 'FAN' },
         }),
       );
     });
@@ -143,7 +144,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fnsp: '0005', fmod: 'FAN' },
+          data: { auto: 'OFF', fnsp: '0005', fmod: 'FAN' },
         }),
       );
     });
@@ -153,7 +154,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fnsp: '0001', fmod: 'FAN' },
+          data: { auto: 'OFF', fnsp: '0001', fmod: 'FAN' },
         }),
       );
     });
@@ -163,7 +164,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fnsp: '0010', fmod: 'FAN' },
+          data: { auto: 'OFF', fnsp: '0010', fmod: 'FAN' },
         }),
       );
     });
@@ -173,7 +174,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'AUTO' },
+          data: { auto: 'ON', fmod: 'AUTO' },
         }),
       );
     });
@@ -241,7 +242,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'AUTO' },
+          data: { auto: 'ON', fmod: 'AUTO' },
         }),
       );
     });
@@ -251,7 +252,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ fmod: 'FAN' }),
+          data: expect.objectContaining({ auto: 'OFF', fmod: 'FAN' }),
         }),
       );
     });

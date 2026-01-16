@@ -262,11 +262,12 @@ describe('FanService', () => {
       await activeSetHandler(1);
 
       // setFanPower uses fmod command - AUTO when autoMode is set, FAN otherwise
+      // Also sends auto field for compatibility with all Dyson models
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           msg: 'STATE-SET',
           'mode-reason': 'LAPP',
-          data: { fmod: 'FAN' },
+          data: { auto: 'OFF', fmod: 'FAN' },
         }),
       );
     });
@@ -336,7 +337,7 @@ describe('FanService', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'AUTO' },
+          data: { auto: 'ON', fmod: 'AUTO' },
         }),
       );
     });
@@ -346,7 +347,7 @@ describe('FanService', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ fmod: 'FAN' }),
+          data: expect.objectContaining({ auto: 'OFF', fmod: 'FAN' }),
         }),
       );
     });
