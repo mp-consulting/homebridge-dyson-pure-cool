@@ -84,12 +84,13 @@ export class HeaterCoolerService {
       .onGet(this.handleCurrentStateGet.bind(this));
 
     // Set up TargetHeaterCoolerState characteristic (required)
-    // Only support HEAT mode since Dyson HP devices don't have active cooling
-    // Set value to HEAT first, then restrict valid values to avoid warning
+    // Only support AUTO (off) and HEAT modes since Dyson HP devices don't have active cooling
+    // AUTO (0) = heating disabled, HEAT (1) = heating enabled
     this.service.getCharacteristic(Characteristic.TargetHeaterCoolerState)
-      .updateValue(this.TARGET_STATE.HEAT)
       .setProps({
-        validValues: [this.TARGET_STATE.HEAT],
+        minValue: 0,
+        maxValue: 1,
+        validValues: [this.TARGET_STATE.AUTO, this.TARGET_STATE.HEAT],
       })
       .onGet(this.handleTargetStateGet.bind(this))
       .onSet(this.handleTargetStateSet.bind(this));
@@ -198,22 +199,33 @@ export class HeaterCoolerService {
 
   /**
    * Handle TargetHeaterCoolerState GET request
-   * Returns target mode (HEAT only for Dyson)
+   * Returns AUTO (0) when heating disabled, HEAT (1) when enabled
    */
   private handleTargetStateGet(): CharacteristicValue {
-    // Dyson HP devices only support HEAT mode
-    this.log.debug('Get TargetHeaterCoolerState -> HEAT');
-    return this.TARGET_STATE.HEAT;
+    const state = this.device.getState();
+    const targetState = state.heatingEnabled ? this.TARGET_STATE.HEAT : this.TARGET_STATE.AUTO;
+    this.log.debug('Get TargetHeaterCoolerState ->', targetState === this.TARGET_STATE.HEAT ? 'HEAT' : 'AUTO');
+    return targetState;
   }
 
   /**
    * Handle TargetHeaterCoolerState SET request
-   * @param value - Target state (only HEAT is supported)
+   * @param value - Target state: AUTO (0) = off, HEAT (1) = on
    */
   private async handleTargetStateSet(value: CharacteristicValue): Promise<void> {
-    this.log.debug('Set TargetHeaterCoolerState ->', value);
-    // Only HEAT is supported, so this is a no-op
-    // The actual heating control happens through Active characteristic
+    const targetState = value as number;
+    this.log.debug('Set TargetHeaterCoolerState ->', targetState === this.TARGET_STATE.HEAT ? 'HEAT' : 'AUTO');
+
+    try {
+      if (targetState === this.TARGET_STATE.HEAT) {
+        await this.device.setHeatingMode(true);
+      } else {
+        await this.device.setHeatingMode(false);
+      }
+    } catch (error) {
+      this.log.error('Failed to set heating mode:', error);
+      throw error;
+    }
   }
 
   /**
@@ -295,6 +307,10 @@ export class HeaterCoolerService {
     // Update Active
     const active = state.isOn && state.heatingEnabled ? 1 : 0;
     this.service.updateCharacteristic(Characteristic.Active, active);
+
+    // Update TargetHeaterCoolerState (AUTO = off, HEAT = on)
+    const targetState = state.heatingEnabled ? this.TARGET_STATE.HEAT : this.TARGET_STATE.AUTO;
+    this.service.updateCharacteristic(Characteristic.TargetHeaterCoolerState, targetState);
 
     // Update CurrentHeaterCoolerState
     let currentState: number;

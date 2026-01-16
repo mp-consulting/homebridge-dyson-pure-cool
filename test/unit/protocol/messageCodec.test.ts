@@ -228,8 +228,8 @@ describe('MessageCodec', () => {
       const message: DysonMessage = {
         msg: 'CURRENT-STATE',
         'product-state': {
-          pm25: '0012',
-          pm10: '0008',
+          p25r: '0012',
+          p10r: '0008',
           va10: '0003',
           noxl: '0002',
         },

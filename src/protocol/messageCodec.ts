@@ -108,12 +108,13 @@ export interface RawStateData {
   humt?: string | [string, string];
   tact?: string | [string, string];
   hact?: string | [string, string];
-  pm25?: string | [string, string];
-  pm10?: string | [string, string];
+  p25r?: string | [string, string];
+  p10r?: string | [string, string];
   pact?: string | [string, string];
   va10?: string | [string, string];
   vact?: string | [string, string];
   noxl?: string | [string, string];
+  hchr?: string | [string, string];
   filf?: string | [string, string];
   fltf?: string | [string, string];
   cflr?: string | [string, string];
@@ -345,32 +346,51 @@ export class MessageCodec {
       state.humidity = parseInt(hact, 10);
     }
 
-    // Air quality sensors
-    const pm25 = this.extractValue(raw.pm25);
-    if (pm25 !== undefined) {
-      state.pm25 = parseInt(pm25, 10);
+    // Air quality sensors - advanced models use p25r/p10r, basic use pact
+    const p25r = this.extractValue(raw.p25r);
+    if (p25r !== undefined && p25r !== 'INIT' && p25r !== 'OFF') {
+      const value = parseInt(p25r, 10);
+      if (!isNaN(value)) {
+        state.pm25 = value;
+      }
     }
-    const pm10 = this.extractValue(raw.pm10);
-    if (pm10 !== undefined) {
-      state.pm10 = parseInt(pm10, 10);
+    const p10r = this.extractValue(raw.p10r);
+    if (p10r !== undefined && p10r !== 'INIT' && p10r !== 'OFF') {
+      const value = parseInt(p10r, 10);
+      if (!isNaN(value)) {
+        state.pm10 = value;
+      }
     }
+    // Basic sensors use pact for particulate index (not µg/m³)
     const pact = this.extractValue(raw.pact);
-    if (pact !== undefined) {
-      // Some models use pact for PM2.5
-      state.pm25 = parseInt(pact, 10);
+    if (pact !== undefined && pact !== 'INIT' && pact !== 'OFF') {
+      const value = parseInt(pact, 10);
+      if (!isNaN(value)) {
+        state.pm25 = value;
+      }
     }
+    // VOC - va10 for advanced, vact for basic
     const va10 = this.extractValue(raw.va10);
-    if (va10 !== undefined) {
-      state.vocIndex = parseInt(va10, 10);
+    if (va10 !== undefined && va10 !== 'INIT' && va10 !== 'OFF') {
+      const value = parseInt(va10, 10);
+      if (!isNaN(value)) {
+        state.vocIndex = value;
+      }
     }
     const vact = this.extractValue(raw.vact);
-    if (vact !== undefined) {
-      // Some models use vact
-      state.vocIndex = parseInt(vact, 10);
+    if (vact !== undefined && vact !== 'INIT' && vact !== 'OFF') {
+      const value = parseInt(vact, 10);
+      if (!isNaN(value)) {
+        state.vocIndex = value;
+      }
     }
+    // NO2 index
     const noxl = this.extractValue(raw.noxl);
-    if (noxl !== undefined) {
-      state.no2Index = parseInt(noxl, 10);
+    if (noxl !== undefined && noxl !== 'INIT' && noxl !== 'OFF') {
+      const value = parseInt(noxl, 10);
+      if (!isNaN(value)) {
+        state.no2Index = value;
+      }
     }
 
     // Filter status
