@@ -10,8 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fix PM2.5 and PM10 sensor data retrieval using correct Dyson MQTT field names (`p25r`, `p10r`)
-- Fix HeaterCooler service to allow turning heating off (added AUTO mode to validValues)
+- Fix HeaterCooler service to use proper HomeKit semantics (HEAT only mode, on/off via Active characteristic)
 - Handle INIT/OFF values in air quality sensor data parsing
+
+### Changed
+
+- HeaterCooler now shows only "Heat" mode since Dyson HP devices don't have active cooling
+- Improved README documentation for Air Purifier auto mode and heater controls
 
 ## [1.0.1] - 2026-01-15
 

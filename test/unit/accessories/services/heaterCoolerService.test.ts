@@ -122,7 +122,6 @@ describe('HeaterCoolerService', () => {
   let activeSetHandler: (value: unknown) => Promise<void>;
   let currentStateGetHandler: () => unknown;
   let targetStateGetHandler: () => unknown;
-  let targetStateSetHandler: (value: unknown) => Promise<void>;
   let currentTempGetHandler: () => unknown;
   let heatingThresholdGetHandler: () => unknown;
   let heatingThresholdSetHandler: (value: unknown) => Promise<void>;
@@ -176,7 +175,6 @@ describe('HeaterCoolerService', () => {
 
     const targetStateChar = mockService.getCharacteristic(Characteristic.TargetHeaterCoolerState);
     targetStateGetHandler = (targetStateChar!.onGet as jest.Mock).mock.calls[0][0];
-    targetStateSetHandler = (targetStateChar!.onSet as jest.Mock).mock.calls[0][0];
 
     const currentTempChar = mockService.getCharacteristic(Characteristic.CurrentTemperature);
     currentTempGetHandler = (currentTempChar!.onGet as jest.Mock).mock.calls[0][0];
@@ -214,7 +212,7 @@ describe('HeaterCoolerService', () => {
 
       const targetStateChar = mockService.getCharacteristic(Characteristic.TargetHeaterCoolerState);
       expect(targetStateChar!.onGet).toHaveBeenCalled();
-      expect(targetStateChar!.onSet).toHaveBeenCalled();
+      // No onSet - on/off is controlled via Active characteristic
       expect(targetStateChar!.setProps).toHaveBeenCalled();
 
       const currentTempChar = mockService.getCharacteristic(Characteristic.CurrentTemperature);
@@ -340,41 +338,24 @@ describe('HeaterCoolerService', () => {
   });
 
   describe('TargetHeaterCoolerState characteristic', () => {
-    it('should return AUTO (0) when heating disabled', () => {
-      const result = targetStateGetHandler();
-      expect(result).toBe(0); // AUTO (heating off by default)
-    });
-
-    it('should return HEAT (1) when heating enabled', async () => {
-      // Enable heating
-      mockMqttClient._emit('message', {
-        topic: 'status',
-        payload: Buffer.from('{}'),
-        data: { msg: 'STATE-CHANGE', 'product-state': { hmod: 'HEAT' } },
-      });
-
+    it('should always return HEAT (1) since that is the only supported mode', () => {
+      // TargetHeaterCoolerState is always HEAT
+      // On/off is controlled via the Active characteristic
       const result = targetStateGetHandler();
       expect(result).toBe(1); // HEAT
     });
 
-    it('should enable heating when set to HEAT (1)', async () => {
-      await targetStateSetHandler(1);
+    it('should return HEAT (1) even when heating is disabled', async () => {
+      // Heating disabled via device state
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { hmod: 'OFF' } },
+      });
 
-      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: { hmod: 'HEAT' },
-        }),
-      );
-    });
-
-    it('should disable heating when set to AUTO (0)', async () => {
-      await targetStateSetHandler(0);
-
-      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: { hmod: 'OFF' },
-        }),
-      );
+      // TargetHeaterCoolerState still returns HEAT (on/off is via Active)
+      const result = targetStateGetHandler();
+      expect(result).toBe(1); // HEAT
     });
   });
 
