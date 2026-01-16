@@ -340,15 +340,41 @@ describe('HeaterCoolerService', () => {
   });
 
   describe('TargetHeaterCoolerState characteristic', () => {
-    it('should return HEAT (1) as only mode', () => {
+    it('should return AUTO (0) when heating disabled', () => {
+      const result = targetStateGetHandler();
+      expect(result).toBe(0); // AUTO (heating off by default)
+    });
+
+    it('should return HEAT (1) when heating enabled', async () => {
+      // Enable heating
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { hmod: 'HEAT' } },
+      });
+
       const result = targetStateGetHandler();
       expect(result).toBe(1); // HEAT
     });
 
-    it('should handle set (no-op for Dyson)', async () => {
-      // This is a no-op since Dyson only supports HEAT mode
+    it('should enable heating when set to HEAT (1)', async () => {
       await targetStateSetHandler(1);
-      // No error should be thrown
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { hmod: 'HEAT' },
+        }),
+      );
+    });
+
+    it('should disable heating when set to AUTO (0)', async () => {
+      await targetStateSetHandler(0);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { hmod: 'OFF' },
+        }),
+      );
     });
   });
 
