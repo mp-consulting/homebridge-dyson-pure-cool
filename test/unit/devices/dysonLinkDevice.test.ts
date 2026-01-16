@@ -242,7 +242,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { auto: 'ON', fmod: 'AUTO' },
+          data: { fpwr: 'ON', auto: 'ON', fmod: 'AUTO' },
         }),
       );
     });
