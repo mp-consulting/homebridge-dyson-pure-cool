@@ -125,6 +125,7 @@ describe('MessageCodec', () => {
         'product-state': {
           fpwr: 'ON',
           fnsp: '0005',
+          fmod: 'FAN', // Manual mode
           oson: 'ON',
           nmod: 'OFF',
         },
@@ -143,14 +144,14 @@ describe('MessageCodec', () => {
       const message: DysonMessage = {
         msg: 'STATE-CHANGE',
         'product-state': {
-          fpwr: 'OFF',
           fnsp: 'AUTO',
+          fmod: 'AUTO', // Auto mode is determined by fmod, not fnsp
         },
       };
 
       const state = codec.decodeState(message);
 
-      expect(state.isOn).toBe(false);
+      expect(state.isOn).toBe(true); // fmod: 'AUTO' sets isOn: true
       expect(state.fanSpeed).toBe(-1);
       expect(state.autoMode).toBe(true);
     });

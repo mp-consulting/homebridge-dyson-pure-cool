@@ -278,11 +278,13 @@ export class MessageCodec {
     }
 
     // Fan speed
+    // Note: fnsp only reports the current speed, NOT the mode.
+    // Even in auto mode, fnsp contains the actual speed (e.g., '0004'), not 'AUTO'.
+    // autoMode should only be determined by fmod or auto fields, not fnsp.
     const fnsp = this.extractValue(raw.fnsp);
     if (fnsp !== undefined) {
-      const { speed, autoMode } = this.decodeFanSpeed(fnsp);
+      const { speed } = this.decodeFanSpeed(fnsp);
       state.fanSpeed = speed;
-      state.autoMode = autoMode;
     }
 
     // Fan mode (also indicates power and auto mode)
