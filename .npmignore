@@ -8,6 +8,9 @@ src
 _bmad
 _bmad-output
 
+# Temporary files
+tmp/
+
 # ------------- Defaults ------------- #
 
 # gitHub actions
