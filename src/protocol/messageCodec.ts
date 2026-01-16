@@ -95,6 +95,7 @@ export interface CommandData {
 export interface RawStateData {
   fpwr?: string | [string, string];
   fmod?: string | [string, string];
+  auto?: string | [string, string];
   fnsp?: string | [string, string];
   oson?: string | [string, string];
   oscs?: string | [string, string];
@@ -298,6 +299,13 @@ export class MessageCodec {
         state.isOn = true;
         state.autoMode = false;
       }
+    }
+
+    // Auto mode field (some devices send this separately from fmod)
+    // auto: 'ON' = auto mode, 'OFF' = manual mode
+    const auto = this.extractValue(raw.auto);
+    if (auto !== undefined) {
+      state.autoMode = auto === 'ON';
     }
 
     // Oscillation
