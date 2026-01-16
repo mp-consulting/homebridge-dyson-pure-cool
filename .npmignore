@@ -1,6 +1,13 @@
 # Ignore source code
 src
 
+# Claude Code
+.claude
+
+# BMad agent files
+_bmad
+_bmad-output
+
 # ------------- Defaults ------------- #
 
 # gitHub actions
