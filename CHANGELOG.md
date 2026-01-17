@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2026-01-17
+
+### Fixed
+
+- Improved dark mode detection - run on DOMContentLoaded, apply to both html and body elements
+- Simplified CSS selectors to use `.dark-mode` instead of `body.dark-mode`
+
 ## [1.0.7] - 2026-01-17
 
 ### Fixed

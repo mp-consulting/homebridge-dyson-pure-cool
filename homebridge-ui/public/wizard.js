@@ -9,26 +9,39 @@
 
   // Detect dark mode from Homebridge parent window or system preference
   function detectDarkMode() {
+    let isDarkMode = false;
+
+    // Method 1: Check parent window's body class
     try {
-      // Check if parent window has dark-mode class on body
-      if (window.parent && window.parent.document) {
-        const parentBody = window.parent.document.body;
-        if (parentBody.classList.contains('dark-mode')) {
-          document.body.classList.add('dark-mode');
-          return;
-        }
+      if (window.parent && window.parent.document && window.parent.document.body) {
+        isDarkMode = window.parent.document.body.classList.contains('dark-mode');
       }
     } catch (e) {
-      // Cross-origin access blocked - fall back to system preference
+      // Cross-origin access blocked
     }
 
-    // Fall back to system preference
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      document.body.classList.add('dark-mode');
+    // Method 2: Check URL parameter (Homebridge may pass theme info)
+    if (!isDarkMode) {
+      const urlParams = new URLSearchParams(window.location.search);
+      isDarkMode = urlParams.get('theme') === 'dark';
+    }
+
+    // Method 3: Fall back to system preference
+    if (!isDarkMode && window.matchMedia) {
+      isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark-mode');
+      document.body?.classList.add('dark-mode');
     }
   }
 
+  // Run immediately and also when DOM is ready
   detectDarkMode();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', detectDarkMode);
+  }
 
   // =============================================================================
   // Homebridge API Wrapper

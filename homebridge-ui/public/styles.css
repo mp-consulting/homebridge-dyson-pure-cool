@@ -177,50 +177,50 @@
 }
 
 /* Dark mode support - detected via JS from parent window or system preference */
-body.dark-mode .step-progress li {
+.dark-mode .step-progress li {
   color: rgba(255, 255, 255, 0.7);
 }
 
-body.dark-mode .step-progress li .step-number {
+.dark-mode .step-progress li .step-number {
   background: #343a40;
   color: rgba(255, 255, 255, 0.7);
   border-color: #495057;
 }
 
-body.dark-mode .step-progress .step-connector {
+.dark-mode .step-progress .step-connector {
   background: #495057;
 }
 
-body.dark-mode .device-card {
+.dark-mode .device-card {
   border-color: #495057;
 }
 
-body.dark-mode .device-card:hover {
+.dark-mode .device-card:hover {
   background: #343a40;
 }
 
-body.dark-mode .device-card.selected {
+.dark-mode .device-card.selected {
   background: rgba(13, 110, 253, 0.2);
 }
 
-body.dark-mode .device-card .device-type,
-body.dark-mode .device-card .device-serial {
+.dark-mode .device-card .device-type,
+.dark-mode .device-card .device-serial {
   color: rgba(255, 255, 255, 0.7);
 }
 
-body.dark-mode .device-card .device-name-input::placeholder {
+.dark-mode .device-card .device-name-input::placeholder {
   color: rgba(255, 255, 255, 0.5);
 }
 
-body.dark-mode .options-section {
+.dark-mode .options-section {
   background: #343a40;
 }
 
-body.dark-mode .options-section h6 {
+.dark-mode .options-section h6 {
   color: rgba(255, 255, 255, 0.7);
 }
 
-body.dark-mode .loading-overlay {
+.dark-mode .loading-overlay {
   background: rgba(33, 37, 41, 0.9);
 }
 
