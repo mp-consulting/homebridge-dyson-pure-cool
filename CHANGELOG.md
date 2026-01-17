@@ -5,12 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-01-17
+
+### Fixed
+
+- Fix dark mode UI contrast in Homebridge Config UI X - text was unreadable (dark on dark)
+- Use `prefers-color-scheme: dark` media query for reliable dark mode detection in iframe context
+- Replace Bootstrap CSS variables with explicit colors for consistent cross-theme support
+
 ## [1.0.5] - 2026-01-16
 
 ### Fixed
 
-- Fix dark mode UI contrast - text was unreadable (dark on dark) in Homebridge Config UI X dark theme
-- Replace hardcoded colors with Bootstrap semantic color variables (`--bs-secondary-color`, `--bs-tertiary-bg`) that adapt to light/dark mode
+- Initial dark mode fix attempt (incomplete - Bootstrap variables don't work in iframe context)
 
 ## [1.0.4] - 2026-01-16
 

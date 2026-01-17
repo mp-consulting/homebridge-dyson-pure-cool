@@ -37,7 +37,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: var(--bs-secondary-color);
+  color: #6c757d;
   transition: all 0.3s ease;
 }
 
@@ -45,9 +45,9 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--bs-secondary-bg);
-  color: var(--bs-secondary-color);
-  border: 2px solid var(--bs-border-color);
+  background: #e9ecef;
+  color: #6c757d;
+  border: 2px solid #dee2e6;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,7 +98,7 @@
 .step-progress .step-connector {
   width: 60px;
   height: 2px;
-  background: var(--bs-border-color);
+  background: #dee2e6;
   margin: 0 0.5rem;
   margin-bottom: 1.5rem;
   border-radius: 2px;
@@ -127,7 +127,7 @@
 
 /* Device Cards */
 .device-card {
-  border: 2px solid var(--bs-border-color);
+  border: 2px solid #dee2e6;
   border-radius: 0.5rem;
   padding: 1rem;
   margin-bottom: 0.75rem;
@@ -136,13 +136,13 @@
 }
 
 .device-card:hover {
-  border-color: var(--bs-primary);
-  background: var(--bs-tertiary-bg);
+  border-color: #0d6efd;
+  background: #f8f9fa;
 }
 
 .device-card.selected {
-  border-color: var(--bs-primary);
-  background: rgba(var(--bs-primary-rgb), 0.1);
+  border-color: #0d6efd;
+  background: rgba(13, 110, 253, 0.1);
 }
 
 .device-card .device-icon {
@@ -162,18 +162,66 @@
 
 .device-card .device-name-input::placeholder {
   font-weight: 400;
-  color: var(--bs-secondary-color);
+  color: #6c757d;
 }
 
 .device-card .device-type {
   font-size: 0.85rem;
-  color: var(--bs-secondary-color);
+  color: #6c757d;
 }
 
 .device-card .device-serial {
   font-size: 0.75rem;
-  color: var(--bs-secondary-color);
+  color: #6c757d;
   font-family: monospace;
+}
+
+/* Dark mode support - detected via JS from parent window or system preference */
+body.dark-mode .step-progress li {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+body.dark-mode .step-progress li .step-number {
+  background: #343a40;
+  color: rgba(255, 255, 255, 0.7);
+  border-color: #495057;
+}
+
+body.dark-mode .step-progress .step-connector {
+  background: #495057;
+}
+
+body.dark-mode .device-card {
+  border-color: #495057;
+}
+
+body.dark-mode .device-card:hover {
+  background: #343a40;
+}
+
+body.dark-mode .device-card.selected {
+  background: rgba(13, 110, 253, 0.2);
+}
+
+body.dark-mode .device-card .device-type,
+body.dark-mode .device-card .device-serial {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+body.dark-mode .device-card .device-name-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+body.dark-mode .options-section {
+  background: #343a40;
+}
+
+body.dark-mode .options-section h6 {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+body.dark-mode .loading-overlay {
+  background: rgba(33, 37, 41, 0.9);
 }
 
 /* Selection checkbox positioned at right */
@@ -220,8 +268,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bs-body-bg);
-  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -230,7 +277,7 @@
 
 /* Options form */
 .options-section {
-  background: var(--bs-tertiary-bg);
+  background: #f8f9fa;
   border-radius: 0.5rem;
   padding: 1.25rem;
   margin-bottom: 1rem;
@@ -238,7 +285,7 @@
 
 .options-section h6 {
   margin-bottom: 1rem;
-  color: var(--bs-secondary-color);
+  color: #6c757d;
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.5px;

@@ -4,6 +4,33 @@
 
 (async () => {
   // =============================================================================
+  // Dark Mode Detection
+  // =============================================================================
+
+  // Detect dark mode from Homebridge parent window or system preference
+  function detectDarkMode() {
+    try {
+      // Check if parent window has dark-mode class on body
+      if (window.parent && window.parent.document) {
+        const parentBody = window.parent.document.body;
+        if (parentBody.classList.contains('dark-mode')) {
+          document.body.classList.add('dark-mode');
+          return;
+        }
+      }
+    } catch (e) {
+      // Cross-origin access blocked - fall back to system preference
+    }
+
+    // Fall back to system preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.body.classList.add('dark-mode');
+    }
+  }
+
+  detectDarkMode();
+
+  // =============================================================================
   // Homebridge API Wrapper
   // =============================================================================
 
