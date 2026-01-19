@@ -185,7 +185,13 @@ export class DysonPlatformAccessory {
       await this.device.connect();
       this.log.info(`Connected to ${this.device.getSerial()}`);
     } catch (error) {
-      this.log.warn(`Failed to connect to device ${this.device.getSerial()}:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.warn(`Failed to connect to device ${this.device.getSerial()}: ${errorMessage}`);
+
+      // Provide helpful troubleshooting guidance
+      if (errorMessage.includes('timeout') || errorMessage.includes('connack')) {
+        this.log.warn('  → Device may be offline or unreachable. Try power cycling the device.');
+      }
 
       // If we had a cached IP, try to rediscover
       if (config.ipAddress) {

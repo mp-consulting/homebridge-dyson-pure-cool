@@ -177,7 +177,20 @@ export class DeviceManager {
         result.connected++;
         this.log.info(`Connected to ${deviceInfo.name} (${deviceInfo.serial})`);
       } catch (error) {
-        this.log.error(`Failed to connect to ${deviceInfo.name}:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.log.error(`Failed to connect to ${deviceInfo.name}: ${errorMessage}`);
+
+        // Provide helpful troubleshooting guidance
+        if (errorMessage.includes('timeout') || errorMessage.includes('connack')) {
+          this.log.error('  → Device may be offline or unreachable. Try:');
+          this.log.error('    • Power cycle the device (unplug for 10 seconds)');
+          this.log.error('    • Ensure device is on the same network as Homebridge');
+          this.log.error(`    • Check if IP address ${ipAddress} is correct`);
+        } else if (errorMessage.includes('ECONNREFUSED')) {
+          this.log.error(`  → Connection refused at ${ipAddress}. Device may have a different IP.`);
+        } else if (errorMessage.includes('credentials') || errorMessage.includes('auth')) {
+          this.log.error('  → Authentication failed. Re-authenticate via the plugin settings.');
+        }
         result.failed++;
       }
     }
