@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.11] - 2026-01-19
+
+### Added
+
+- Jet Focus switch (diffuse/focused airflow) now configurable via Homebridge UI
+- Per-device toggle options for Night Mode, Jet Focus, and Continuous Monitoring switches
+- Global config options now properly apply to all devices (with per-device override support)
+
+### Fixed
+
+- Fix HP02 (Hot+Cool Link) to enable Jet Focus support - device has this feature via `ffoc` protocol
+- Fix tests to match updated protocol implementation (newer models use `fmod` only, no `auto` field)
+- Fix error handling test for setFanPower with internal delay
+
 ## [1.0.10] - 2026-01-19
 
 ### Improved

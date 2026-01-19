@@ -110,6 +110,30 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
         device.ipAddress = discoveredIPs.get(device.serial);
         this.log.info(`Using discovered IP ${device.ipAddress} for device ${device.serial}`);
       }
+
+      // Merge global options with per-device options (per-device takes precedence)
+      // Map global config names to per-device option names
+      if (device.isNightModeEnabled === undefined && this.config.enableNightMode !== undefined) {
+        device.isNightModeEnabled = this.config.enableNightMode;
+      }
+      if (device.isJetFocusEnabled === undefined && this.config.enableJetFocus !== undefined) {
+        device.isJetFocusEnabled = this.config.enableJetFocus;
+      }
+      if (device.isContinuousMonitoringEnabled === undefined && this.config.enableContinuousMonitoring !== undefined) {
+        device.isContinuousMonitoringEnabled = this.config.enableContinuousMonitoring;
+      }
+      if (device.isTemperatureIgnored === undefined && this.config.enableTemperature !== undefined) {
+        device.isTemperatureIgnored = !this.config.enableTemperature;
+      }
+      if (device.isHumidityIgnored === undefined && this.config.enableHumidity !== undefined) {
+        device.isHumidityIgnored = !this.config.enableHumidity;
+      }
+      if (device.isAirQualityIgnored === undefined && this.config.enableAirQuality !== undefined) {
+        device.isAirQualityIgnored = !this.config.enableAirQuality;
+      }
+      if (device.isHeatingDisabled === undefined && this.config.enableHeater !== undefined) {
+        device.isHeatingDisabled = !this.config.enableHeater;
+      }
       // generate a unique id for the accessory using the device serial number
       const uuid = this.api.hap.uuid.generate(device.serial);
 

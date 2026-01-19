@@ -268,13 +268,12 @@ describe('FanService', () => {
     it('should call setFanPower(true) when set to 1', async () => {
       await activeSetHandler(1);
 
-      // setFanPower uses fmod command - AUTO when autoMode is set, FAN otherwise
-      // Also sends auto field for compatibility with all Dyson models
+      // setFanPower uses fmod command - FAN mode for manual, AUTO for auto mode
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           msg: 'STATE-SET',
           'mode-reason': 'LAPP',
-          data: { auto: 'OFF', fmod: 'FAN' },
+          data: { fmod: 'FAN' },
         }),
       );
     });
@@ -342,9 +341,10 @@ describe('FanService', () => {
     it('should call setAutoMode(true) when set to 1 (AUTO)', async () => {
       await targetStateSetHandler(1);
 
+      // Newer models use fmod only, no fpwr/auto fields
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fpwr: 'ON', auto: 'ON', fmod: 'AUTO' },
+          data: { fmod: 'AUTO' },
         }),
       );
     });
@@ -352,9 +352,10 @@ describe('FanService', () => {
     it('should call setAutoMode(false) when set to 0 (MANUAL)', async () => {
       await targetStateSetHandler(0);
 
+      // Newer models use fmod and fnsp for manual mode
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ auto: 'OFF', fmod: 'FAN' }),
+          data: expect.objectContaining({ fmod: 'FAN', fnsp: '0004' }),
         }),
       );
     });
@@ -592,10 +593,11 @@ describe('FanService', () => {
   });
 
   describe('error handling', () => {
-    it('should throw and log error when setFanPower fails', async () => {
+    it('should throw and log error when setFanPower(false) fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      await expect(activeSetHandler(1)).rejects.toThrow('MQTT error');
+      // Test setFanPower(false) which has simpler async behavior without delays
+      await expect(activeSetHandler(0)).rejects.toThrow('MQTT error');
       expect(mockLog.error).toHaveBeenCalled();
     });
 

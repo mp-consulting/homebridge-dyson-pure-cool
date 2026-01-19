@@ -25,7 +25,7 @@
 | **Pure Cool Link** | TP02, DP01 | Fan, Air Quality, Temp, Humidity |
 | **Pure Cool** | TP04, TP06, TP07, DP04 | Fan, Air Quality, Temp, Humidity, Jet Focus |
 | **Pure Cool Formaldehyde** | TP09 | Fan, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
-| **Pure Hot+Cool Link** | HP02 | Fan, Heating, Air Quality, Temp, Humidity |
+| **Pure Hot+Cool Link** | HP02 | Fan, Heating, Air Quality, Temp, Humidity, Jet Focus |
 | **Pure Hot+Cool** | HP04, HP06, HP07 | Fan, Heating, Air Quality, Temp, Humidity, Jet Focus |
 | **Pure Hot+Cool Formaldehyde** | HP09 | Fan, Heating, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
 | **Purifier Humidify+Cool** | PH01, PH02, PH03 | Fan, Humidifier, Air Quality, Temp, Humidity, Jet Focus |

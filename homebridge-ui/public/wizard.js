@@ -129,6 +129,7 @@
       humidity: $('opt-humidity'),
       airQuality: $('opt-air-quality'),
       nightMode: $('opt-night-mode'),
+      jetFocus: $('opt-jet-focus'),
       autoMode: $('opt-auto-mode'),
       filterStatus: $('opt-filter-status'),
       polling: $('opt-polling'),
@@ -459,6 +460,7 @@
     if (config.enableHumidity !== undefined) opts.humidity.checked = config.enableHumidity;
     if (config.enableAirQuality !== undefined) opts.airQuality.checked = config.enableAirQuality;
     if (config.enableNightMode !== undefined) opts.nightMode.checked = config.enableNightMode;
+    if (config.enableJetFocus !== undefined) opts.jetFocus.checked = config.enableJetFocus;
     if (config.enableAutoMode !== undefined) opts.autoMode.checked = config.enableAutoMode;
     if (config.enableFilterStatus !== undefined) opts.filterStatus.checked = config.enableFilterStatus;
     if (config.pollingInterval) opts.polling.value = config.pollingInterval;
@@ -508,6 +510,7 @@
       enableHumidity: opts.humidity.checked,
       enableAirQuality: opts.airQuality.checked,
       enableNightMode: opts.nightMode.checked,
+      enableJetFocus: opts.jetFocus.checked,
       enableAutoMode: opts.autoMode.checked,
       enableFilterStatus: opts.filterStatus.checked,
       pollingInterval: parseInt(opts.polling.value, 10) || 60,

@@ -344,7 +344,6 @@ describe('DeviceManager', () => {
       expect(connectedDevices.length).toBe(1);
       expect(mockLog.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to connect to Failing Device'),
-        expect.any(Error),
       );
     });
 

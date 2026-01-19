@@ -95,10 +95,11 @@ const FEATURES_PURE_COOL_FORMALDEHYDE: DeviceFeatures = {
 /**
  * Hot+Cool Link (older models)
  * Uses basic air quality sensors (pact/vact index 0-9)
+ * Has jet focus (diffuse/focused airflow) control
  */
 const FEATURES_HOT_COOL_LINK: DeviceFeatures = {
   ...PURE_COOL_BASE,
-  frontAirflow: false,
+  frontAirflow: true,
   heating: true,
   basicAirQualitySensor: true,
 };

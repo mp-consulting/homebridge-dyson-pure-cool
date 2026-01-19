@@ -190,10 +190,22 @@
               "description": "Automatically enable night mode when turning device on"
             },
             "isContinuousMonitoringEnabled": {
-              "title": "Enable Continuous Monitoring",
+              "title": "Enable Continuous Monitoring Switch",
               "type": "boolean",
               "default": false,
               "description": "Show continuous monitoring switch to keep sensors active when device is off"
+            },
+            "isNightModeEnabled": {
+              "title": "Enable Night Mode Switch",
+              "type": "boolean",
+              "default": true,
+              "description": "Show night mode switch in HomeKit"
+            },
+            "isJetFocusEnabled": {
+              "title": "Enable Jet Focus Switch",
+              "type": "boolean",
+              "default": true,
+              "description": "Show jet focus (diffuse/focused airflow) switch in HomeKit"
             }
           },
           "required": ["serial", "productType", "localCredentials"]
@@ -332,14 +344,24 @@
             },
             {
               "type": "fieldset",
+              "title": "Switch Toggles",
+              "expandable": true,
+              "expanded": true,
+              "items": [
+                "devices[].isNightModeEnabled",
+                "devices[].isJetFocusEnabled",
+                "devices[].isContinuousMonitoringEnabled"
+              ]
+            },
+            {
+              "type": "fieldset",
               "title": "Activation Behaviors",
               "expandable": true,
               "items": [
                 "devices[].enableAutoModeWhenActivating",
                 "devices[].enableOscillationWhenActivating",
                 "devices[].enableNightModeWhenActivating",
-                "devices[].fullRangeHumidity",
-                "devices[].isContinuousMonitoringEnabled"
+                "devices[].fullRangeHumidity"
               ]
             }
           ]

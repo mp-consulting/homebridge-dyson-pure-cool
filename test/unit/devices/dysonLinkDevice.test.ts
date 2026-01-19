@@ -112,13 +112,12 @@ describe('DysonLinkDevice', () => {
     it('should send ON command when turning on', async () => {
       await device.setFanPower(true);
 
-      // setFanPower uses fmod command - AUTO when autoMode is set, FAN otherwise
-      // Also sends auto field for compatibility with all Dyson models
+      // Newer models use fmod only (no auto field)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           msg: 'STATE-SET',
           'mode-reason': 'LAPP',
-          data: { auto: 'OFF', fmod: 'FAN' },
+          data: { fmod: 'FAN' },
         }),
       );
     });
@@ -142,9 +141,10 @@ describe('DysonLinkDevice', () => {
     it('should send speed command for valid speed', async () => {
       await device.setFanSpeed(5);
 
+      // Newer models use fnsp and fmod only (no auto field)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { auto: 'OFF', fnsp: '0005', fmod: 'FAN' },
+          data: { fnsp: '0005', fmod: 'FAN' },
         }),
       );
     });
@@ -154,7 +154,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { auto: 'OFF', fnsp: '0001', fmod: 'FAN' },
+          data: { fnsp: '0001', fmod: 'FAN' },
         }),
       );
     });
@@ -164,7 +164,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { auto: 'OFF', fnsp: '0010', fmod: 'FAN' },
+          data: { fnsp: '0010', fmod: 'FAN' },
         }),
       );
     });
@@ -172,9 +172,10 @@ describe('DysonLinkDevice', () => {
     it('should send AUTO command for negative speed', async () => {
       await device.setFanSpeed(-1);
 
+      // Newer models use fmod only (no auto field)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { auto: 'ON', fmod: 'AUTO' },
+          data: { fmod: 'AUTO' },
         }),
       );
     });
@@ -240,9 +241,10 @@ describe('DysonLinkDevice', () => {
     it('should send AUTO command when enabling', async () => {
       await device.setAutoMode(true);
 
+      // Newer models use fmod only (no fpwr/auto fields)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fpwr: 'ON', auto: 'ON', fmod: 'AUTO' },
+          data: { fmod: 'AUTO' },
         }),
       );
     });
@@ -250,9 +252,10 @@ describe('DysonLinkDevice', () => {
     it('should send FAN command with speed when disabling', async () => {
       await device.setAutoMode(false);
 
+      // Newer models use fmod and fnsp for manual mode
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ auto: 'OFF', fmod: 'FAN' }),
+          data: expect.objectContaining({ fmod: 'FAN', fnsp: '0004' }),
         }),
       );
     });
