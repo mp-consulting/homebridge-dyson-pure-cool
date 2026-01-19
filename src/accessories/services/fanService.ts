@@ -47,6 +47,20 @@ const TargetAirPurifierState = {
   AUTO: 1,
 } as const;
 
+/** Debounce delay in milliseconds for slider inputs */
+const DEBOUNCE_DELAY_MS = 300;
+
+/**
+ * Rotation speed characteristic properties
+ * Maps to Dyson fan speed 1-10 (10% per level)
+ */
+const ROTATION_SPEED = {
+  MIN: 0,
+  MAX: 100,
+  /** Each step represents one Dyson fan speed level */
+  STEP: 10,
+} as const;
+
 /**
  * FanService handles the AirPurifier HomeKit service
  *
@@ -57,8 +71,6 @@ const TargetAirPurifierState = {
  * - RotationSpeed (0-100%) ↔ fanSpeed (1-10)
  * - SwingMode (0/1) ↔ oscillation (boolean)
  */
-/** Debounce delay in milliseconds for slider inputs */
-const DEBOUNCE_DELAY_MS = 300;
 
 export class FanService {
   private readonly service: Service;
@@ -109,9 +121,9 @@ export class FanService {
       .onGet(this.handleSpeedGet.bind(this))
       .onSet(this.handleSpeedSet.bind(this))
       .setProps({
-        minValue: 0,
-        maxValue: 100,
-        minStep: 10,
+        minValue: ROTATION_SPEED.MIN,
+        maxValue: ROTATION_SPEED.MAX,
+        minStep: ROTATION_SPEED.STEP,
       });
 
     // Set up SwingMode characteristic (optional but we want it)

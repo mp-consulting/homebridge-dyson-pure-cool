@@ -358,7 +358,10 @@ export abstract class DysonDevice extends EventEmitter {
     if ('tact' in sensorData) {
       const temp = sensorData.tact;
       if (typeof temp === 'string' && temp !== 'OFF') {
-        stateUpdate.temperature = parseInt(temp, 10);
+        const value = parseInt(temp, 10);
+        if (!isNaN(value)) {
+          stateUpdate.temperature = value;
+        }
       }
     }
 
@@ -366,7 +369,10 @@ export abstract class DysonDevice extends EventEmitter {
     if ('hact' in sensorData) {
       const humidity = sensorData.hact;
       if (typeof humidity === 'string' && humidity !== 'OFF') {
-        stateUpdate.humidity = parseInt(humidity, 10);
+        const value = parseInt(humidity, 10);
+        if (!isNaN(value)) {
+          stateUpdate.humidity = value;
+        }
       }
     }
 
@@ -374,13 +380,19 @@ export abstract class DysonDevice extends EventEmitter {
     if ('p25r' in sensorData) {
       const pm25 = sensorData.p25r;
       if (typeof pm25 === 'string' && pm25 !== 'INIT' && pm25 !== 'OFF') {
-        stateUpdate.pm25 = parseInt(pm25, 10);
+        const value = parseInt(pm25, 10);
+        if (!isNaN(value)) {
+          stateUpdate.pm25 = value;
+        }
       }
     } else if ('pact' in sensorData) {
       // Older Link series (HP02, TP02) use pact for particulate matter
       const pact = sensorData.pact;
       if (typeof pact === 'string' && pact !== 'INIT' && pact !== 'OFF') {
-        stateUpdate.pm25 = parseInt(pact, 10);
+        const value = parseInt(pact, 10);
+        if (!isNaN(value)) {
+          stateUpdate.pm25 = value;
+        }
       }
     }
 
@@ -388,7 +400,10 @@ export abstract class DysonDevice extends EventEmitter {
     if ('p10r' in sensorData) {
       const pm10 = sensorData.p10r;
       if (typeof pm10 === 'string' && pm10 !== 'INIT' && pm10 !== 'OFF') {
-        stateUpdate.pm10 = parseInt(pm10, 10);
+        const value = parseInt(pm10, 10);
+        if (!isNaN(value)) {
+          stateUpdate.pm10 = value;
+        }
       }
     }
 
@@ -396,13 +411,19 @@ export abstract class DysonDevice extends EventEmitter {
     if ('va10' in sensorData) {
       const voc = sensorData.va10;
       if (typeof voc === 'string' && voc !== 'INIT' && voc !== 'OFF') {
-        stateUpdate.vocIndex = parseInt(voc, 10);
+        const value = parseInt(voc, 10);
+        if (!isNaN(value)) {
+          stateUpdate.vocIndex = value;
+        }
       }
     } else if ('vact' in sensorData) {
       // Older Link series (HP02, TP02) use vact for VOC
       const vact = sensorData.vact;
       if (typeof vact === 'string' && vact !== 'INIT' && vact !== 'OFF') {
-        stateUpdate.vocIndex = parseInt(vact, 10);
+        const value = parseInt(vact, 10);
+        if (!isNaN(value)) {
+          stateUpdate.vocIndex = value;
+        }
       }
     }
 
@@ -410,7 +431,10 @@ export abstract class DysonDevice extends EventEmitter {
     if ('noxl' in sensorData) {
       const no2 = sensorData.noxl;
       if (typeof no2 === 'string' && no2 !== 'INIT' && no2 !== 'OFF') {
-        stateUpdate.no2Index = parseInt(no2, 10);
+        const value = parseInt(no2, 10);
+        if (!isNaN(value)) {
+          stateUpdate.no2Index = value;
+        }
       }
     }
 
@@ -418,7 +442,10 @@ export abstract class DysonDevice extends EventEmitter {
     if ('hchr' in sensorData) {
       const hchr = sensorData.hchr;
       if (typeof hchr === 'string' && hchr !== 'INIT' && hchr !== 'OFF') {
-        stateUpdate.formaldehydeLevel = parseInt(hchr, 10);
+        const value = parseInt(hchr, 10);
+        if (!isNaN(value)) {
+          stateUpdate.formaldehydeLevel = value;
+        }
       }
     }
 

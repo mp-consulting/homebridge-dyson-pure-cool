@@ -17,6 +17,43 @@ import type { DysonLinkDevice } from '../../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../../devices/types.js';
 
 /**
+ * Temperature conversion constants
+ */
+const TEMPERATURE = {
+  /** Kelvin to Celsius offset */
+  KELVIN_OFFSET: 273.15,
+  /** Dyson reports temperature multiplied by this factor */
+  MULTIPLIER: 10,
+  /** Default temperature when reading fails (°C) */
+  DEFAULT_CELSIUS: 20,
+};
+
+/**
+ * Heating threshold temperature range (°C)
+ * HomeKit standard range to avoid Home app issues
+ */
+const HEATING_TEMP_RANGE = {
+  MIN: 10,
+  MAX: 38,
+  STEP: 1,
+};
+
+/**
+ * Current temperature sensor range (°C)
+ */
+const CURRENT_TEMP_RANGE = {
+  MIN: -40,
+  MAX: 100,
+  STEP: 0.1,
+};
+
+/**
+ * Tolerance for determining heating state (°C)
+ * If current temp is below target by this amount, device is actively heating
+ */
+const HEATING_TOLERANCE_CELSIUS = 0.5;
+
+/**
  * Configuration for HeaterCoolerService
  */
 export interface HeaterCoolerServiceConfig {
@@ -98,20 +135,20 @@ export class HeaterCoolerService {
     this.service.getCharacteristic(Characteristic.CurrentTemperature)
       .onGet(this.handleCurrentTemperatureGet.bind(this))
       .setProps({
-        minValue: -40,
-        maxValue: 100,
-        minStep: 0.1,
+        minValue: CURRENT_TEMP_RANGE.MIN,
+        maxValue: CURRENT_TEMP_RANGE.MAX,
+        minStep: CURRENT_TEMP_RANGE.STEP,
       });
 
     // Set up HeatingThresholdTemperature characteristic
     // HomeKit standard range is 10-38°C to avoid Home app issues
     // Set initial value within range before setting props to avoid warning
     this.service.getCharacteristic(Characteristic.HeatingThresholdTemperature)
-      .updateValue(20) // Default to 20°C
+      .updateValue(TEMPERATURE.DEFAULT_CELSIUS)
       .setProps({
-        minValue: 10,
-        maxValue: 38,
-        minStep: 1,
+        minValue: HEATING_TEMP_RANGE.MIN,
+        maxValue: HEATING_TEMP_RANGE.MAX,
+        minStep: HEATING_TEMP_RANGE.STEP,
       })
       .onGet(this.handleHeatingThresholdGet.bind(this))
       .onSet(this.handleHeatingThresholdSet.bind(this));
@@ -190,7 +227,7 @@ export class HeaterCoolerService {
       const currentTemp = this.convertTemperature(state.temperature);
       const targetTemp = this.convertTargetTemperature(state.targetTemperature);
 
-      if (currentTemp < targetTemp - 0.5) {
+      if (currentTemp < targetTemp - HEATING_TOLERANCE_CELSIUS) {
         currentState = this.CURRENT_STATE.HEATING;
       } else {
         currentState = this.CURRENT_STATE.IDLE;
@@ -253,27 +290,27 @@ export class HeaterCoolerService {
    * Convert Dyson temperature (Kelvin × 10) to Celsius
    *
    * @param kelvinTimes10 - Temperature in Kelvin × 10
-   * @returns Temperature in Celsius, or 20 if invalid
+   * @returns Temperature in Celsius, or default if invalid
    */
   private convertTemperature(kelvinTimes10: number | undefined): number {
     if (kelvinTimes10 === undefined || kelvinTimes10 <= 0) {
-      return 20; // Sensible default
+      return TEMPERATURE.DEFAULT_CELSIUS;
     }
-    const celsius = (kelvinTimes10 / 10) - 273.15;
-    return Math.round(celsius * 10) / 10;
+    const celsius = (kelvinTimes10 / TEMPERATURE.MULTIPLIER) - TEMPERATURE.KELVIN_OFFSET;
+    return Math.round(celsius * TEMPERATURE.MULTIPLIER) / TEMPERATURE.MULTIPLIER;
   }
 
   /**
    * Convert Dyson target temperature (Kelvin × 10) to Celsius
    *
    * @param kelvinTimes10 - Target temperature in Kelvin × 10
-   * @returns Temperature in Celsius, or 20 if invalid
+   * @returns Temperature in Celsius, or default if invalid
    */
   private convertTargetTemperature(kelvinTimes10: number | undefined): number {
     if (kelvinTimes10 === undefined || kelvinTimes10 <= 0) {
-      return 20; // Default target
+      return TEMPERATURE.DEFAULT_CELSIUS;
     }
-    const celsius = (kelvinTimes10 / 10) - 273.15;
+    const celsius = (kelvinTimes10 / TEMPERATURE.MULTIPLIER) - TEMPERATURE.KELVIN_OFFSET;
     // Round to nearest integer (Dyson uses integer temps)
     return Math.round(celsius);
   }

@@ -17,6 +17,17 @@ import type { DysonDevice } from '../../devices/dysonDevice.js';
 import type { DeviceState } from '../../devices/types.js';
 
 /**
+ * Humidity characteristic range and defaults
+ */
+const HUMIDITY = {
+  MIN: 0,
+  MAX: 100,
+  STEP: 1,
+  /** Default value when sensor data is unavailable */
+  DEFAULT_FALLBACK: 50,
+} as const;
+
+/**
  * Configuration for HumidityService
  */
 export interface HumidityServiceConfig {
@@ -64,9 +75,9 @@ export class HumidityService {
     this.service.getCharacteristic(Characteristic.CurrentRelativeHumidity)
       .onGet(this.handleHumidityGet.bind(this))
       .setProps({
-        minValue: 0,
-        maxValue: 100,
-        minStep: 1,
+        minValue: HUMIDITY.MIN,
+        maxValue: HUMIDITY.MAX,
+        minStep: HUMIDITY.STEP,
       });
 
     // Link to primary service if provided
@@ -102,15 +113,15 @@ export class HumidityService {
    * Get humidity value with offset and default fallback
    *
    * @param humidity - Humidity percentage from device
-   * @returns Humidity percentage (0-100) with offset applied, or 50 if unavailable
+   * @returns Humidity percentage (0-100) with offset applied, or default if unavailable
    */
   private getHumidity(humidity: number | undefined): number {
-    if (humidity === undefined || humidity < 0 || humidity > 100) {
+    if (humidity === undefined || humidity < HUMIDITY.MIN || humidity > HUMIDITY.MAX) {
       // Return a sensible default when sensor data unavailable
-      return Math.max(0, Math.min(100, 50 + this.humidityOffset));
+      return Math.max(HUMIDITY.MIN, Math.min(HUMIDITY.MAX, HUMIDITY.DEFAULT_FALLBACK + this.humidityOffset));
     }
-    // Apply offset and clamp to 0-100 range
-    return Math.max(0, Math.min(100, humidity + this.humidityOffset));
+    // Apply offset and clamp to valid range
+    return Math.max(HUMIDITY.MIN, Math.min(HUMIDITY.MAX, humidity + this.humidityOffset));
   }
 
   /**

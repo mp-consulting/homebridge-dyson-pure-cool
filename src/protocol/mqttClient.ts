@@ -79,6 +79,12 @@ const DEFAULT_TIMEOUT = 10000;
 const DEFAULT_KEEPALIVE = 30;
 
 /**
+ * MQTT protocol version (4 = MQTT 3.1.1)
+ * @see https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html
+ */
+const MQTT_PROTOCOL_VERSION = 4;
+
+/**
  * MQTT Client wrapper for Dyson device communication
  *
  * Provides event-driven MQTT communication with Dyson devices.
@@ -144,7 +150,7 @@ export class DysonMqttClient extends EventEmitter {
         connectTimeout: this.options.timeout,
         reconnectPeriod: 0, // We handle reconnection manually
         clean: true,
-        protocolVersion: 4, // MQTT 3.1.1
+        protocolVersion: MQTT_PROTOCOL_VERSION,
       };
 
       this.client = this.mqttConnect(brokerUrl, mqttOptions);

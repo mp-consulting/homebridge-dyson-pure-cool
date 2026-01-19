@@ -53,6 +53,34 @@ const PM25_THRESHOLDS = {
 };
 
 /**
+ * Thresholds for basic sensor pact (particulate) index (0-9 scale)
+ * Used by older Link series devices (HP02, TP02)
+ */
+const PACT_THRESHOLDS = {
+  EXCELLENT: 2,
+  GOOD: 4,
+  FAIR: 7,
+  INFERIOR: 9,
+};
+
+/**
+ * Thresholds for basic sensor vact (VOC) index after scaling
+ * Raw vact value is multiplied by VOC_SCALING_FACTOR before comparison
+ */
+const VACT_THRESHOLDS = {
+  EXCELLENT: 3,
+  GOOD: 6,
+  FAIR: 8,
+  INFERIOR: 9,
+};
+
+/**
+ * Scaling factor to convert raw vact index to comparable scale
+ * Raw vact (0-72) * 0.125 = scaled value (0-9)
+ */
+const VOC_SCALING_FACTOR = 0.125;
+
+/**
  * AirQualityService handles the HomeKit AirQualitySensor service
  *
  * Maps Dyson air quality data to HomeKit characteristics:
@@ -174,16 +202,16 @@ export class AirQualityService {
    * Based on reference implementation thresholds
    */
   private calculateBasicPactQuality(pact: number): number {
-    if (pact <= 2) {
+    if (pact <= PACT_THRESHOLDS.EXCELLENT) {
       return 1; // EXCELLENT
     }
-    if (pact <= 4) {
+    if (pact <= PACT_THRESHOLDS.GOOD) {
       return 2; // GOOD
     }
-    if (pact <= 7) {
+    if (pact <= PACT_THRESHOLDS.FAIR) {
       return 3; // FAIR
     }
-    if (pact <= 9) {
+    if (pact <= PACT_THRESHOLDS.INFERIOR) {
       return 4; // INFERIOR
     }
     return 5; // POOR
@@ -194,17 +222,17 @@ export class AirQualityService {
    * Based on reference implementation thresholds
    */
   private calculateBasicVactQuality(vact: number): number {
-    const scaled = vact * 0.125;
-    if (scaled <= 3) {
+    const scaled = vact * VOC_SCALING_FACTOR;
+    if (scaled <= VACT_THRESHOLDS.EXCELLENT) {
       return 1; // EXCELLENT
     }
-    if (scaled <= 6) {
+    if (scaled <= VACT_THRESHOLDS.GOOD) {
       return 2; // GOOD
     }
-    if (scaled <= 8) {
+    if (scaled <= VACT_THRESHOLDS.FAIR) {
       return 3; // FAIR
     }
-    if (scaled <= 9) {
+    if (scaled <= VACT_THRESHOLDS.INFERIOR) {
       return 4; // INFERIOR
     }
     return 5; // POOR
@@ -253,9 +281,10 @@ export class AirQualityService {
    */
   private handleVOCGet(): CharacteristicValue {
     const state = this.device.getState();
-    const voc = state.vocIndex ?? 0;
-    this.log.debug('Get VOC Index ->', voc);
-    return voc;
+    const voc = state.vocIndex;
+    const validVoc = (voc !== undefined && !isNaN(voc)) ? voc : 0;
+    this.log.debug('Get VOC Index ->', validVoc);
+    return validVoc;
   }
 
   /**
@@ -292,10 +321,11 @@ export class AirQualityService {
       state.pm10 ?? 0,
     );
 
-    // Update VOC
+    // Update VOC (ensure valid number - NaN ?? 0 still returns NaN)
+    const vocValue = state.vocIndex;
     this.service.updateCharacteristic(
       Characteristic.VOCDensity,
-      state.vocIndex ?? 0,
+      (vocValue !== undefined && !isNaN(vocValue)) ? vocValue : 0,
     );
 
     // Update NO2 (if sensor present)
