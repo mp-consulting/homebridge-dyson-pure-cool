@@ -290,6 +290,9 @@ export abstract class DysonDevice extends EventEmitter {
       data,
     };
 
+    // Debug: log the command being sent
+    this.emit('debug', `Sending command: ${JSON.stringify(command)}`);
+
     await this.mqttClient.publishCommand(command);
   }
 

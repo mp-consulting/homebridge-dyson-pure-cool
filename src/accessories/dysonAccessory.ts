@@ -58,6 +58,7 @@ export abstract class DysonAccessory {
     this.device.on('stateChange', this.handleStateChange.bind(this));
     this.device.on('connect', this.handleConnect.bind(this));
     this.device.on('disconnect', this.handleDisconnect.bind(this));
+    this.device.on('debug', (message: string) => this.log.debug(message));
 
     // Set up device-specific services
     this.setupServices();

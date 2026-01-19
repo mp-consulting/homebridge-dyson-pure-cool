@@ -10,7 +10,7 @@ import type { DeviceFeatures, DeviceInfo } from './types.js';
 import { MessageCodec } from '../protocol/messageCodec.js';
 import type { MqttClientFactory } from './dysonDevice.js';
 import type { MqttConnectFn } from '../protocol/mqttClient.js';
-import { getDeviceFeatures } from '../config/index.js';
+import { getDeviceFeatures, getDeviceByProductType } from '../config/index.js';
 
 // ============================================================================
 // Constants - No Magic Numbers
@@ -54,6 +54,9 @@ const PROTOCOL = {
 // DysonLinkDevice
 // ============================================================================
 
+/** Delay in ms to wait for mode changes before sending power-on command */
+const POWER_ON_DELAY_MS = 50;
+
 /**
  * Dyson Link Device implementation
  *
@@ -67,8 +70,17 @@ export class DysonLinkDevice extends DysonDevice {
   /** Features supported by this device */
   readonly supportedFeatures: DeviceFeatures;
 
+  /** Whether this is a Link series device (uses different protocol) */
+  private readonly isLinkSeries: boolean;
+
   /** Message codec for encoding/decoding */
   private readonly codec: MessageCodec;
+
+  /** Pending power-on timer to allow mode changes to arrive first */
+  private pendingPowerOnTimer?: ReturnType<typeof setTimeout>;
+
+  /** Flag to track if a mode change is pending */
+  private pendingModeChange = false;
 
   /**
    * Create a new DysonLinkDevice
@@ -86,13 +98,17 @@ export class DysonLinkDevice extends DysonDevice {
     this.productType = deviceInfo.productType;
     this.supportedFeatures = getDeviceFeatures(deviceInfo.productType);
     this.codec = new MessageCodec();
+
+    // Check if this is a Link series device (HP02, TP02, DP01) - uses different protocol
+    const deviceInfo2 = getDeviceByProductType(deviceInfo.productType);
+    this.isLinkSeries = deviceInfo2?.series?.includes('link') ?? false;
   }
 
   /**
    * Set fan power on or off
    *
-   * Uses fmod command - OFF to turn off, FAN or AUTO to turn on.
-   * When turning on, if already on, do nothing to avoid overriding mode changes.
+   * Uses fmod command for newer models, fmod/fnsp for Link series.
+   * When turning on, delays briefly to allow concurrent mode changes to arrive first.
    *
    * @param on - True to turn on, false to turn off
    */
@@ -103,15 +119,59 @@ export class DysonLinkDevice extends DysonDevice {
       if (this.state.isOn) {
         return;
       }
-      // Turn on - use current auto mode setting
-      if (this.state.autoMode) {
-        await this.sendCommand({ auto: PROTOCOL.ON, fmod: PROTOCOL.AUTO });
-      } else {
-        await this.sendCommand({ auto: PROTOCOL.OFF, fmod: PROTOCOL.FAN });
+
+      // Clear any pending power-on timer
+      if (this.pendingPowerOnTimer) {
+        clearTimeout(this.pendingPowerOnTimer);
       }
+
+      // Mark that we have a pending power-on, and delay briefly
+      // This allows setAutoMode to be called first if HomeKit sends both together
+      this.pendingModeChange = false;
+
+      await new Promise<void>((resolve) => {
+        this.pendingPowerOnTimer = setTimeout(async () => {
+          this.pendingPowerOnTimer = undefined;
+
+          // If a mode change happened during the delay, it already turned on the device
+          if (this.pendingModeChange || this.state.isOn) {
+            resolve();
+            return;
+          }
+
+          // No mode change came, turn on with current auto mode setting
+          if (this.isLinkSeries) {
+            // Link series uses 'auto' and 'fnsp'
+            if (this.state.autoMode) {
+              await this.sendCommand({ auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
+            } else {
+              const speed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
+              const encodedSpeed = String(speed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
+              await this.sendCommand({ auto: PROTOCOL.OFF, fnsp: encodedSpeed });
+            }
+          } else {
+            // Newer models use 'fmod'
+            if (this.state.autoMode) {
+              await this.sendCommand({ fmod: PROTOCOL.AUTO });
+            } else {
+              await this.sendCommand({ fmod: PROTOCOL.FAN });
+            }
+          }
+          resolve();
+        }, POWER_ON_DELAY_MS);
+      });
     } else {
-      // Turn off
-      await this.sendCommand({ fmod: PROTOCOL.OFF });
+      // Turn off - cancel any pending power-on
+      if (this.pendingPowerOnTimer) {
+        clearTimeout(this.pendingPowerOnTimer);
+        this.pendingPowerOnTimer = undefined;
+      }
+      if (this.isLinkSeries) {
+        // Link series: set speed to 0000 to turn off
+        await this.sendCommand({ fnsp: '0000' });
+      } else {
+        await this.sendCommand({ fmod: PROTOCOL.OFF });
+      }
     }
   }
 
@@ -121,18 +181,24 @@ export class DysonLinkDevice extends DysonDevice {
    * @param speed - Fan speed (1-10) or -1 for auto mode
    */
   async setFanSpeed(speed: number): Promise<void> {
-    if (speed < 0) {
-      // Auto mode - send both 'auto' and 'fmod' for compatibility
-      await this.sendCommand({ auto: PROTOCOL.ON, fmod: PROTOCOL.AUTO });
+    if (this.isLinkSeries) {
+      // Link series uses 'auto' and 'fnsp'
+      if (speed < 0) {
+        await this.sendCommand({ auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
+      } else {
+        const clampedSpeed = Math.max(FAN_SPEED.MIN, Math.min(FAN_SPEED.MAX, speed));
+        const encodedSpeed = String(clampedSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
+        await this.sendCommand({ auto: PROTOCOL.OFF, fnsp: encodedSpeed });
+      }
     } else {
-      // Manual speed (1-10)
-      const clampedSpeed = Math.max(FAN_SPEED.MIN, Math.min(FAN_SPEED.MAX, speed));
-      const encodedSpeed = String(clampedSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
-      await this.sendCommand({
-        auto: PROTOCOL.OFF,
-        fnsp: encodedSpeed,
-        fmod: PROTOCOL.FAN,
-      });
+      // Newer models use 'fmod'
+      if (speed < 0) {
+        await this.sendCommand({ fmod: PROTOCOL.AUTO });
+      } else {
+        const clampedSpeed = Math.max(FAN_SPEED.MIN, Math.min(FAN_SPEED.MAX, speed));
+        const encodedSpeed = String(clampedSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
+        await this.sendCommand({ fnsp: encodedSpeed, fmod: PROTOCOL.FAN });
+      }
     }
   }
 
@@ -171,19 +237,31 @@ export class DysonLinkDevice extends DysonDevice {
    * @param on - True to enable auto mode, false to disable
    */
   async setAutoMode(on: boolean): Promise<void> {
-    if (on) {
-      // Send both 'auto' and 'fmod' fields for compatibility with all Dyson models
-      // Also ensure the fan is on when enabling auto mode
-      await this.sendCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fmod: PROTOCOL.AUTO });
+    // Cancel any pending power-on since we'll handle power state here
+    if (this.pendingPowerOnTimer) {
+      clearTimeout(this.pendingPowerOnTimer);
+      this.pendingPowerOnTimer = undefined;
+    }
+    this.pendingModeChange = true;
+
+    if (this.isLinkSeries) {
+      // Link series (HP02, TP02, DP01) uses 'auto' field and 'fnsp' for speed
+      if (on) {
+        await this.sendCommand({ auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
+      } else {
+        const currentSpeed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
+        const encodedSpeed = String(currentSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
+        await this.sendCommand({ auto: PROTOCOL.OFF, fnsp: encodedSpeed });
+      }
     } else {
-      // When disabling auto, set to manual fan mode with current or default speed
-      const currentSpeed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
-      const encodedSpeed = String(currentSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
-      await this.sendCommand({
-        auto: PROTOCOL.OFF,
-        fmod: PROTOCOL.FAN,
-        fnsp: encodedSpeed,
-      });
+      // Newer models (TP04, HP04, etc.) use 'fmod' field
+      if (on) {
+        await this.sendCommand({ fmod: PROTOCOL.AUTO });
+      } else {
+        const currentSpeed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
+        const encodedSpeed = String(currentSpeed).padStart(PROTOCOL.SPEED_PAD_LENGTH, '0');
+        await this.sendCommand({ fmod: PROTOCOL.FAN, fnsp: encodedSpeed });
+      }
     }
   }
 
@@ -296,6 +374,9 @@ export class DysonLinkDevice extends DysonDevice {
     if (!productState) {
       return;
     }
+
+    // Debug: log the raw state received from device
+    this.emit('debug', `Received state: fmod=${productState.fmod}, auto=${productState.auto}, fnsp=${productState.fnsp}`);
 
     const parsedState = this.codec.parseRawState(productState);
 
