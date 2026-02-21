@@ -244,6 +244,7 @@ export class DysonCloudApi {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    timeoutId.unref();
 
     try {
       const response = await fetch(url, {

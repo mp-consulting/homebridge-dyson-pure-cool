@@ -274,6 +274,16 @@ export class DysonLinkDevice extends DysonDevice {
   }
 
   /**
+   * Disconnect from the device, clearing any pending commands
+   */
+  override async disconnect(): Promise<void> {
+    // Clear pending commands to prevent stale fields from being sent on reconnect
+    this.pendingCommandFields = {};
+    this.commandFlushScheduled = false;
+    await super.disconnect();
+  }
+
+  /**
    * Get the device features
    */
   getFeatures(): DeviceFeatures {

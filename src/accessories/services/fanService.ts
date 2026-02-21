@@ -84,6 +84,8 @@ export class FanService {
   private speedDebounceTimer?: ReturnType<typeof setTimeout>;
   /** Pending speed value to be set after debounce */
   private pendingSpeed?: number;
+  /** Whether this service has been destroyed */
+  private destroyed = false;
 
   constructor(config: FanServiceConfig) {
     this.device = config.device;
@@ -149,6 +151,7 @@ export class FanService {
    * Clean up event listeners and timers
    */
   destroy(): void {
+    this.destroyed = true;
     this.device.off('stateChange', this.boundHandleStateChange);
     if (this.speedDebounceTimer) {
       clearTimeout(this.speedDebounceTimer);
@@ -265,6 +268,10 @@ export class FanService {
    * Apply the pending speed value after debounce delay
    */
   private async applyPendingSpeed(): Promise<void> {
+    if (this.destroyed) {
+      return;
+    }
+
     const percent = this.pendingSpeed;
     if (percent === undefined) {
       return;

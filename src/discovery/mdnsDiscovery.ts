@@ -99,11 +99,12 @@ export class MdnsDiscovery {
         }
       });
 
-      // Set timeout to stop discovery
-      setTimeout(() => {
+      // Set timeout to stop discovery (unref to avoid keeping the process alive)
+      const discoveryTimeout = setTimeout(() => {
         this.cleanup();
         resolve(devices);
       }, timeout);
+      discoveryTimeout.unref();
     });
   }
 
@@ -142,11 +143,12 @@ export class MdnsDiscovery {
         }
       });
 
-      // Set timeout to stop discovery
-      setTimeout(() => {
+      // Set timeout to stop discovery (unref to avoid keeping the process alive)
+      const detailedTimeout = setTimeout(() => {
         this.cleanup();
         resolve(devices);
       }, timeout);
+      detailedTimeout.unref();
     });
   }
 

@@ -96,6 +96,11 @@
               "type": "string",
               "description": "MQTT password for local device connection (obtained from Dyson cloud)"
             },
+            "credentials": {
+              "title": "Credentials (Legacy)",
+              "type": "string",
+              "description": "Legacy credentials field. Use 'localCredentials' for new configurations."
+            },
             "ipAddress": {
               "title": "IP Address (Optional)",
               "type": "string",
@@ -208,7 +213,7 @@
               "description": "Show jet focus (diffuse/focused airflow) switch in HomeKit"
             }
           },
-          "required": ["serial", "productType", "localCredentials"]
+          "required": ["serial", "productType"]
         }
       },
       "isSingleAccessoryModeEnabled": {

@@ -139,16 +139,20 @@ export class DysonLinkAccessory extends DysonAccessory {
    * @param config - Accessory configuration
    */
   constructor(config: DysonLinkAccessoryConfig) {
-    // Initialize options before super() call since setupServices() needs them
-    // The field initializer runs before super(), making options available
-    if (config.options) {
-      // Note: We need to set this before super() but after field initialization
-      // TypeScript doesn't allow this, so we use a default empty object above
-    }
+    // Store options BEFORE calling super(), because super() calls setupServices()
+    // which needs access to options. Field initializers run before super() in the
+    // JS runtime, so we can use Object.defineProperty to set it before super() runs.
+    // However, the simplest correct approach: store on the accessory context.
+    //
+    // We store options in the accessory context so setupServices() can access them,
+    // since TypeScript prevents assigning to `this` before `super()`.
+    config.accessory.context._deviceOptions = config.options ?? {};
+
     // Pass to parent - the base class will call setupServices()
     super(config as DysonAccessoryConfig);
-    // Update options after super (for any additional processing)
-    this.options = config.options ?? {};
+
+    // Also store as instance field for other methods
+    this.options = config.accessory.context._deviceOptions as DeviceOptions;
   }
 
   /**
@@ -159,7 +163,9 @@ export class DysonLinkAccessory extends DysonAccessory {
   protected setupServices(): void {
     const linkDevice = this.device as DysonLinkDevice;
     const features = linkDevice.getFeatures();
-    const opts = this.options ?? {};
+    // Read options from accessory context (set before super() call) to ensure
+    // they're available even though setupServices() is called during construction
+    const opts: DeviceOptions = (this.accessory.context._deviceOptions as DeviceOptions) ?? this.options ?? {};
     const deviceName = this.accessory.displayName;
 
     // Create FanService for fan control (all devices) - this is the primary service

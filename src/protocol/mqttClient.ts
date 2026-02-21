@@ -113,6 +113,7 @@ export class DysonMqttClient extends EventEmitter {
   private reconnectAttempts = 0;
   private isReconnecting = false;
   private intentionalDisconnect = false;
+  private reconnectAbortController?: AbortController;
 
   constructor(options: MqttClientOptions, mqttConnect: MqttConnectFn = defaultMqttConnect) {
     super();
@@ -212,7 +213,9 @@ export class DysonMqttClient extends EventEmitter {
         this.connected = false;
         this.emit('close');
 
-        if (wasConnected && !this.intentionalDisconnect) {
+        // Only emit disconnect/offline and trigger reconnection once.
+        // Both 'close' and 'offline' events may fire; we use the first one.
+        if (wasConnected && !this.intentionalDisconnect && !this.isReconnecting) {
           this.emit('disconnect');
           this.emit('offline');
           this.handleReconnection();
@@ -227,7 +230,8 @@ export class DysonMqttClient extends EventEmitter {
         const wasConnected = this.connected;
         this.connected = false;
 
-        if (wasConnected && !this.intentionalDisconnect) {
+        // Only emit disconnect/offline if 'close' handler hasn't already handled it
+        if (wasConnected && !this.intentionalDisconnect && !this.isReconnecting) {
           this.emit('disconnect');
           this.emit('offline');
           this.handleReconnection();
@@ -248,6 +252,8 @@ export class DysonMqttClient extends EventEmitter {
 
     if (intentional) {
       this.intentionalDisconnect = true;
+      // Cancel any pending reconnection sleep
+      this.reconnectAbortController?.abort();
     }
 
     return new Promise((resolve) => {
@@ -455,10 +461,14 @@ export class DysonMqttClient extends EventEmitter {
 
     this.emit('reconnect', attempt + 1);
 
+    // Create abort controller to cancel reconnection on intentional disconnect
+    this.reconnectAbortController = new AbortController();
+    const { signal } = this.reconnectAbortController;
+
     // Schedule reconnection attempt
     sleep(delay).then(() => {
       // Abort if intentionally disconnected while waiting
-      if (this.intentionalDisconnect) {
+      if (this.intentionalDisconnect || signal.aborted) {
         this.isReconnecting = false;
         return;
       }
@@ -496,17 +506,29 @@ export class DysonMqttClient extends EventEmitter {
    */
   private async resubscribeToTopics(): Promise<void> {
     const topics = Array.from(this.subscribedTopics);
+    const errors: Error[] = [];
 
     for (const topic of topics) {
-      await new Promise<void>((resolve, reject) => {
-        this.client!.subscribe(topic, { qos: 0 }, (error) => {
-          if (error) {
-            reject(new Error(`Failed to resubscribe to ${topic}: ${error.message}`));
-          } else {
-            resolve();
-          }
+      try {
+        await new Promise<void>((resolve, reject) => {
+          this.client!.subscribe(topic, { qos: 0 }, (error) => {
+            if (error) {
+              reject(new Error(`Failed to resubscribe to ${topic}: ${error.message}`));
+            } else {
+              resolve();
+            }
+          });
         });
-      });
+      } catch (error) {
+        errors.push(error instanceof Error ? error : new Error(String(error)));
+        // Continue resubscribing remaining topics
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new Error(
+        `Failed to resubscribe to ${errors.length} topic(s): ${errors.map((e) => e.message).join('; ')}`,
+      );
     }
   }
 
