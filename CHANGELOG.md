@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.14] - 2026-02-21
+
+### Fixed
+
+- Fix stale accessory handler leak when device IP is rediscovered - old handler is now destroyed before recreating
+- Fix linked service direction in HomeKit - secondary services (sensors, switches) are now correctly linked to the primary Air Purifier service
+- Fix duplicate connect event emission causing double state sync on reconnection
+- Fix double resolve in mDNS discovery when timeout and early stop fire simultaneously
+- Fix unhandled promise rejection when `commandError` event has no listeners
+- Fix NightModeService returning `undefined` when device state is not yet set
+- Fix infinite MQTT retry recursion in UI server when `_retried` flag was set but never checked
+- Fix stale cached accessories not removed from internal map after unregistration
+- Fix `pollingInterval` config option not being applied to device polling
+- Fix global `enableFilterStatus` and `enableHumidifier` config options not propagated to devices
+- Fix silent credential decryption failures - now logs a warning instead of silently returning empty string
+- Fix raw device state leaked to frontend in UI server device state response
+- Fix README config option names (`pollInterval` -> `pollingInterval`, `enableFilter` -> `enableFilterStatus`)
+
+### Added
+
+- Support for TP11 (Purifier Cool) and HP11 (Purifier Hot+Cool) models in supported devices table
+- Support for both v2 and v3 Dyson Cloud API field name formats in UI server for forward compatibility
+- Pending auth timeout (10 minutes) in UI server to clear stored credentials from memory
+- `HEATING_TOLERANCE_CELSIUS` constant replacing magic number in HeaterCooler temperature comparison
+
+### Changed
+
+- Model name in HomeKit AccessoryInformation now uses the device catalog (e.g., "Dyson Pure Cool Tower (TP04)") instead of a hardcoded map
+- Timer handles (sleep, rate limit, mDNS) now use `.unref()` for clean Node.js shutdown
+- Removed unused `EveHomeKitTypes` import and related properties from platform
+- Removed unused device options from `DeviceOptions` interface (`enableAutoModeWhenActivating`, `enableOscillationWhenActivating`, `enableNightModeWhenActivating`, etc.)
+- Added PH03 product type `358J` to config schema (was missing alongside existing `358H`)
+
 ## [1.0.13] - 2026-01-19
 
 ### Fixed
