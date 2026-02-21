@@ -164,6 +164,9 @@ export abstract class DysonDevice extends EventEmitter {
         });
       }
     }, this.pollingIntervalMs);
+
+    // Don't keep the Node.js process alive just for polling
+    this.pollingIntervalHandle.unref();
   }
 
   /**

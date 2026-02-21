@@ -2,13 +2,10 @@ import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAcces
 
 import { DysonPlatformAccessory } from './platformAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './config/index.js';
-import { MdnsDiscovery } from './discovery/index.js';
+import { MdnsDiscovery, DEFAULT_DISCOVERY_TIMEOUT } from './discovery/index.js';
 
 // This is only required when using Custom Services and Characteristics not support by HomeKit
 import { EveHomeKitTypes } from 'homebridge-lib/EveHomeKitTypes';
-
-/** Default mDNS discovery timeout in milliseconds */
-const DEFAULT_DISCOVERY_TIMEOUT = 10000;
 
 /**
  * DysonPureCoolPlatform

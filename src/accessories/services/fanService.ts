@@ -78,6 +78,7 @@ export class FanService {
   private readonly device: DysonLinkDevice;
   private readonly log: Logging;
   private readonly api: API;
+  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   /** Timer for debouncing speed changes */
   private speedDebounceTimer?: ReturnType<typeof setTimeout>;
@@ -131,7 +132,8 @@ export class FanService {
       .onSet(this.handleSwingModeSet.bind(this));
 
     // Subscribe to device state changes
-    this.device.on('stateChange', this.handleStateChange.bind(this));
+    this.boundHandleStateChange = this.handleStateChange.bind(this);
+    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('FanService (AirPurifier) initialized for', config.accessory.displayName);
   }
@@ -141,6 +143,16 @@ export class FanService {
    */
   getService(): Service {
     return this.service;
+  }
+
+  /**
+   * Clean up event listeners and timers
+   */
+  destroy(): void {
+    this.device.off('stateChange', this.boundHandleStateChange);
+    if (this.speedDebounceTimer) {
+      clearTimeout(this.speedDebounceTimer);
+    }
   }
 
   /**

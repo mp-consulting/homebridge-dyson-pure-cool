@@ -8,7 +8,7 @@ import { Bonjour, type Browser, type Service } from 'bonjour-service';
 import { DYSON_MDNS_SERVICE } from '../config/index.js';
 
 /** Default discovery timeout in milliseconds */
-const DEFAULT_TIMEOUT = 10000;
+export const DEFAULT_DISCOVERY_TIMEOUT = 10000;
 
 /** Minimum timeout allowed */
 const MIN_TIMEOUT = 1000;
@@ -73,7 +73,7 @@ export class MdnsDiscovery {
    * @returns Map of device serial numbers to IP addresses
    */
   async discover(options: DiscoveryOptions = {}): Promise<Map<string, string>> {
-    const timeout = this.validateTimeout(options.timeout ?? DEFAULT_TIMEOUT);
+    const timeout = this.validateTimeout(options.timeout ?? DEFAULT_DISCOVERY_TIMEOUT);
     const maxDevices = options.maxDevices ?? 0;
 
     const devices = new Map<string, string>();
@@ -114,7 +114,7 @@ export class MdnsDiscovery {
    * @returns Array of discovered device details
    */
   async discoverDetailed(options: DiscoveryOptions = {}): Promise<DiscoveredDevice[]> {
-    const timeout = this.validateTimeout(options.timeout ?? DEFAULT_TIMEOUT);
+    const timeout = this.validateTimeout(options.timeout ?? DEFAULT_DISCOVERY_TIMEOUT);
     const maxDevices = options.maxDevices ?? 0;
 
     const devices: DiscoveredDevice[] = [];

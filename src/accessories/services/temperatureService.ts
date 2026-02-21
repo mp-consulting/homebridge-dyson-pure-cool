@@ -45,6 +45,7 @@ export class TemperatureService {
   private readonly api: API;
   private readonly temperatureOffset: number;
   private readonly useFahrenheit: boolean;
+  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   constructor(config: TemperatureServiceConfig) {
     this.device = config.device;
@@ -79,7 +80,8 @@ export class TemperatureService {
     }
 
     // Subscribe to device state changes
-    this.device.on('stateChange', this.handleStateChange.bind(this));
+    this.boundHandleStateChange = this.handleStateChange.bind(this);
+    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('TemperatureService initialized for', config.accessory.displayName);
   }
@@ -89,6 +91,13 @@ export class TemperatureService {
    */
   getService(): Service {
     return this.service;
+  }
+
+  /**
+   * Clean up event listeners
+   */
+  destroy(): void {
+    this.device.off('stateChange', this.boundHandleStateChange);
   }
 
   /**

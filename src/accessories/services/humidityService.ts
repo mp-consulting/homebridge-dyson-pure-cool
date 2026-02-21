@@ -53,6 +53,7 @@ export class HumidityService {
   private readonly log: Logging;
   private readonly api: API;
   private readonly humidityOffset: number;
+  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   constructor(config: HumidityServiceConfig) {
     this.device = config.device;
@@ -86,7 +87,8 @@ export class HumidityService {
     }
 
     // Subscribe to device state changes
-    this.device.on('stateChange', this.handleStateChange.bind(this));
+    this.boundHandleStateChange = this.handleStateChange.bind(this);
+    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('HumidityService initialized for', config.accessory.displayName);
   }
@@ -96,6 +98,13 @@ export class HumidityService {
    */
   getService(): Service {
     return this.service;
+  }
+
+  /**
+   * Clean up event listeners
+   */
+  destroy(): void {
+    this.device.off('stateChange', this.boundHandleStateChange);
   }
 
   /**

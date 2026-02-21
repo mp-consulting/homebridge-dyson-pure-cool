@@ -348,6 +348,24 @@ export class DysonLinkAccessory extends DysonAccessory {
   }
 
   /**
+   * Clean up all service event listeners
+   */
+  override destroy(): void {
+    this.fanService?.destroy();
+    this.temperatureService?.destroy();
+    this.humidityService?.destroy();
+    this.nightModeService?.destroy();
+    this.continuousMonitoringService?.destroy();
+    this.airQualityService?.destroy();
+    this.filterService?.destroy();
+    this.thermostatService?.destroy();
+    this.humidifierControlService?.destroy();
+    this.jetFocusService?.destroy();
+    this.heaterCoolerService?.destroy();
+    super.destroy();
+  }
+
+  /**
    * Get the FanService instance
    */
   getFanService(): FanService {

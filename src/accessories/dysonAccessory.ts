@@ -40,6 +40,12 @@ export abstract class DysonAccessory {
   protected readonly api: API;
   protected readonly log: Logging;
 
+  /** Bound event handlers for cleanup */
+  private readonly boundHandleStateChange: (state: DeviceState) => void;
+  private readonly boundHandleConnect: () => void;
+  private readonly boundHandleDisconnect: () => void;
+  private readonly boundHandleDebug: (message: string) => void;
+
   /**
    * Create a new DysonAccessory
    *
@@ -54,11 +60,16 @@ export abstract class DysonAccessory {
     // Set up AccessoryInformation service
     this.setupAccessoryInformation();
 
-    // Subscribe to device state changes
-    this.device.on('stateChange', this.handleStateChange.bind(this));
-    this.device.on('connect', this.handleConnect.bind(this));
-    this.device.on('disconnect', this.handleDisconnect.bind(this));
-    this.device.on('debug', (message: string) => this.log.debug(message));
+    // Subscribe to device state changes (store bound refs for cleanup)
+    this.boundHandleStateChange = this.handleStateChange.bind(this);
+    this.boundHandleConnect = this.handleConnect.bind(this);
+    this.boundHandleDisconnect = this.handleDisconnect.bind(this);
+    this.boundHandleDebug = (message: string) => this.log.debug(message);
+
+    this.device.on('stateChange', this.boundHandleStateChange);
+    this.device.on('connect', this.boundHandleConnect);
+    this.device.on('disconnect', this.boundHandleDisconnect);
+    this.device.on('debug', this.boundHandleDebug);
 
     // Set up device-specific services
     this.setupServices();
@@ -103,6 +114,19 @@ export abstract class DysonAccessory {
    */
   protected handleDisconnect(): void {
     this.log.warn('Device disconnected:', this.accessory.displayName);
+  }
+
+  /**
+   * Clean up event listeners
+   *
+   * Call this when the accessory is being removed to prevent
+   * EventEmitter listener leaks.
+   */
+  destroy(): void {
+    this.device.off('stateChange', this.boundHandleStateChange);
+    this.device.off('connect', this.boundHandleConnect);
+    this.device.off('disconnect', this.boundHandleDisconnect);
+    this.device.off('debug', this.boundHandleDebug);
   }
 
   /**

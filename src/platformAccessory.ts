@@ -14,7 +14,7 @@ import { DysonLinkAccessory } from './accessories/dysonLinkAccessory.js';
 import type { DeviceOptions } from './accessories/dysonLinkAccessory.js';
 import type { DysonLinkDevice } from './devices/dysonLinkDevice.js';
 import { getDeviceModelName, isProductTypeSupported } from './config/index.js';
-import { MdnsDiscovery } from './discovery/index.js';
+import { MdnsDiscovery, DEFAULT_DISCOVERY_TIMEOUT } from './discovery/index.js';
 
 /**
  * Device configuration from plugin settings
@@ -167,7 +167,7 @@ export class DysonPlatformAccessory {
   }
 
   /** mDNS discovery timeout for IP refresh */
-  private static readonly MDNS_TIMEOUT = 10000;
+  private static readonly MDNS_TIMEOUT = DEFAULT_DISCOVERY_TIMEOUT;
 
   /**
    * Connect to the Dyson device

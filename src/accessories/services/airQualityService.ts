@@ -97,6 +97,7 @@ export class AirQualityService {
   private readonly api: API;
   private readonly hasNo2Sensor: boolean;
   private readonly basicAirQualitySensor: boolean;
+  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   constructor(config: AirQualityServiceConfig) {
     this.device = config.device;
@@ -145,7 +146,8 @@ export class AirQualityService {
     }
 
     // Subscribe to device state changes
-    this.device.on('stateChange', this.handleStateChange.bind(this));
+    this.boundHandleStateChange = this.handleStateChange.bind(this);
+    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('AirQualityService initialized for', config.accessory.displayName);
   }
@@ -155,6 +157,13 @@ export class AirQualityService {
    */
   getService(): Service {
     return this.service;
+  }
+
+  /**
+   * Clean up event listeners
+   */
+  destroy(): void {
+    this.device.off('stateChange', this.boundHandleStateChange);
   }
 
   /**

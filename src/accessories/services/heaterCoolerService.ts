@@ -80,6 +80,7 @@ export class HeaterCoolerService {
   private readonly device: DysonLinkDevice;
   private readonly log: Logging;
   private readonly api: API;
+  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   // HomeKit HeaterCooler state constants
   private readonly CURRENT_STATE = {
@@ -159,7 +160,8 @@ export class HeaterCoolerService {
     }
 
     // Subscribe to device state changes
-    this.device.on('stateChange', this.handleStateChange.bind(this));
+    this.boundHandleStateChange = this.handleStateChange.bind(this);
+    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('HeaterCoolerService initialized for', config.accessory.displayName);
   }
@@ -169,6 +171,13 @@ export class HeaterCoolerService {
    */
   getService(): Service {
     return this.service;
+  }
+
+  /**
+   * Clean up event listeners
+   */
+  destroy(): void {
+    this.device.off('stateChange', this.boundHandleStateChange);
   }
 
   /**
