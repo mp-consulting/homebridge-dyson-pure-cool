@@ -3,37 +3,53 @@
  *
  * Encodes commands and decodes state messages for Dyson devices.
  * Handles conversions between HomeKit values and Dyson protocol format.
+ * All methods are static - no instance state needed.
  */
 
 import type { DeviceState } from '../devices/types.js';
 
 // ============================================================================
-// Constants - No Magic Numbers
+// Constants - Exported for shared use across modules
 // ============================================================================
 
 /** Fan speed limits */
-const FAN_SPEED = {
+export const FAN_SPEED = {
   MIN: 1,
   MAX: 10,
+  DEFAULT: 4,
   AUTO: -1,
 } as const;
 
 /** Oscillation angle limits */
-const OSCILLATION_ANGLE = {
+export const OSCILLATION_ANGLE = {
   MIN: 45,
   MAX: 355,
 } as const;
 
 /** Temperature conversion constants */
-const TEMPERATURE = {
+export const TEMPERATURE = {
   /** Kelvin to Celsius offset */
   KELVIN_OFFSET: 273.15,
   /** Dyson uses Kelvin * 10 for precision */
   KELVIN_MULTIPLIER: 10,
 } as const;
 
+/** Heating temperature limits (Celsius) */
+export const HEATING_TEMP = {
+  MIN_CELSIUS: 1,
+  MAX_CELSIUS: 37,
+} as const;
+
+/** Humidity limits for humidifier */
+export const HUMIDITY = {
+  MIN_PERCENT: 0,
+  MAX_PERCENT: 100,
+  DEFAULT_MIN: 30,
+  DEFAULT_MAX: 70,
+} as const;
+
 /** Filter life constants */
-const FILTER = {
+export const FILTER = {
   /** Maximum filter life in hours */
   MAX_HOURS: 4300,
   /** Percentage divisor for conversion */
@@ -41,15 +57,24 @@ const FILTER = {
 } as const;
 
 /** Protocol string formatting */
-const FORMAT = {
+export const FORMAT = {
   /** Padding length for numeric values */
   PAD_LENGTH: 4,
   /** Padding character */
   PAD_CHAR: '0',
 } as const;
 
+/** Dyson protocol values */
+export const PROTOCOL = {
+  ON: 'ON',
+  OFF: 'OFF',
+  AUTO: 'AUTO',
+  FAN: 'FAN',
+  HEAT: 'HEAT',
+} as const;
+
 /** HomeKit percentage range */
-const PERCENT = {
+export const PERCENT = {
   MIN: 0,
   MAX: 100,
   /** Conversion factor for speed (10% per speed level) */
@@ -141,17 +166,15 @@ export interface DysonMessage {
 }
 
 /**
- * Message codec for encoding commands and decoding state
+ * Message codec for encoding commands and decoding state.
+ * All methods are static since the codec is stateless.
  */
 export class MessageCodec {
   /**
    * Extract value from raw state field
    * Handles both direct values ("ON") and change arrays (["OFF", "ON"])
-   *
-   * @param value - Raw value from state data
-   * @returns The actual string value (newest for arrays)
    */
-  private extractValue(value: string | [string, string] | undefined): string | undefined {
+  static extractValue(value: string | [string, string] | undefined): string | undefined {
     if (value === undefined) {
       return undefined;
     }
@@ -161,74 +184,63 @@ export class MessageCodec {
     }
     return value;
   }
+
   /**
    * Encode a command to send to the device
    *
    * @param data - Command data to encode
    * @returns JSON string to publish to command topic
    */
-  encodeCommand(data: Partial<CommandData>): string {
+  static encodeCommand(data: Partial<CommandData>): string {
     const encodedData: Record<string, string> = {};
 
-    // Fan power
     if (data.fanPower !== undefined) {
-      encodedData.fpwr = data.fanPower ? 'ON' : 'OFF';
+      encodedData.fpwr = data.fanPower ? PROTOCOL.ON : PROTOCOL.OFF;
     }
 
-    // Fan speed
     if (data.fanSpeed !== undefined) {
-      encodedData.fnsp = this.encodeFanSpeed(data.fanSpeed);
+      encodedData.fnsp = MessageCodec.encodeFanSpeed(data.fanSpeed);
     }
 
-    // Fan mode
     if (data.fanMode !== undefined) {
       encodedData.fmod = data.fanMode;
     }
 
-    // Oscillation
     if (data.oscillation !== undefined) {
-      encodedData.oson = data.oscillation ? 'ON' : 'OFF';
+      encodedData.oson = data.oscillation ? PROTOCOL.ON : PROTOCOL.OFF;
     }
 
-    // Oscillation angles
     if (data.oscillationAngleStart !== undefined) {
-      encodedData.oscs = this.encodeAngle(data.oscillationAngleStart);
+      encodedData.oscs = MessageCodec.encodeAngle(data.oscillationAngleStart);
     }
     if (data.oscillationAngleEnd !== undefined) {
-      encodedData.osce = this.encodeAngle(data.oscillationAngleEnd);
+      encodedData.osce = MessageCodec.encodeAngle(data.oscillationAngleEnd);
     }
 
-    // Night mode
     if (data.nightMode !== undefined) {
-      encodedData.nmod = data.nightMode ? 'ON' : 'OFF';
+      encodedData.nmod = data.nightMode ? PROTOCOL.ON : PROTOCOL.OFF;
     }
 
-    // Continuous monitoring
     if (data.continuousMonitoring !== undefined) {
-      encodedData.rhtm = data.continuousMonitoring ? 'ON' : 'OFF';
+      encodedData.rhtm = data.continuousMonitoring ? PROTOCOL.ON : PROTOCOL.OFF;
     }
 
-    // Front airflow / jet focus
     if (data.frontAirflow !== undefined) {
-      encodedData.ffoc = data.frontAirflow ? 'ON' : 'OFF';
+      encodedData.ffoc = data.frontAirflow ? PROTOCOL.ON : PROTOCOL.OFF;
     }
 
-    // Heating mode (HP models)
     if (data.heatingMode !== undefined) {
-      encodedData.hmod = data.heatingMode ? 'HEAT' : 'OFF';
+      encodedData.hmod = data.heatingMode ? PROTOCOL.HEAT : PROTOCOL.OFF;
     }
 
-    // Target temperature (HP models) - convert Celsius to Kelvin * 10
     if (data.targetTemperature !== undefined) {
-      encodedData.hmax = this.encodeTemperature(data.targetTemperature);
+      encodedData.hmax = MessageCodec.encodeTemperature(data.targetTemperature);
     }
 
-    // Humidifier mode (PH models)
     if (data.humidifierMode !== undefined) {
-      encodedData.hume = data.humidifierMode ? 'ON' : 'OFF';
+      encodedData.hume = data.humidifierMode ? PROTOCOL.ON : PROTOCOL.OFF;
     }
 
-    // Target humidity (PH models)
     if (data.targetHumidity !== undefined) {
       encodedData.humt = String(data.targetHumidity).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
     }
@@ -249,7 +261,7 @@ export class MessageCodec {
    * @param payload - Raw message payload (Buffer or object)
    * @returns Partial device state
    */
-  decodeState(payload: Buffer | DysonMessage): Partial<DeviceState> {
+  static decodeState(payload: Buffer | DysonMessage): Partial<DeviceState> {
     let message: DysonMessage;
 
     if (Buffer.isBuffer(payload)) {
@@ -262,156 +274,177 @@ export class MessageCodec {
       message = payload;
     }
 
-    // Get state data from either 'data' or 'product-state' field
     const rawState = message['product-state'] || message.data;
     if (!rawState) {
       return {};
     }
 
-    return this.parseRawState(rawState);
+    return MessageCodec.parseRawState(rawState);
   }
 
   /**
    * Parse raw state data into DeviceState
    * Handles both CURRENT-STATE (direct values) and STATE-CHANGE ([old, new] arrays)
    */
-  parseRawState(raw: RawStateData): Partial<DeviceState> {
+  static parseRawState(raw: RawStateData): Partial<DeviceState> {
     const state: Partial<DeviceState> = {};
 
     // Fan power
-    const fpwr = this.extractValue(raw.fpwr);
+    const fpwr = MessageCodec.extractValue(raw.fpwr);
     if (fpwr !== undefined) {
-      state.isOn = fpwr === 'ON';
+      state.isOn = fpwr === PROTOCOL.ON;
     }
 
     // Fan speed
-    // Note: fnsp only reports the current speed, NOT the mode.
-    // Even in auto mode, fnsp contains the actual speed (e.g., '0004'), not 'AUTO'.
-    // autoMode should only be determined by fmod or auto fields, not fnsp.
-    const fnsp = this.extractValue(raw.fnsp);
+    const fnsp = MessageCodec.extractValue(raw.fnsp);
     if (fnsp !== undefined) {
-      const { speed } = this.decodeFanSpeed(fnsp);
+      const { speed } = MessageCodec.decodeFanSpeed(fnsp);
       state.fanSpeed = speed;
     }
 
     // Fan mode (also indicates power and auto mode)
-    // fmod: 'OFF' = device off, 'FAN' = manual mode on, 'AUTO' = auto mode on
-    const fmod = this.extractValue(raw.fmod);
+    const fmod = MessageCodec.extractValue(raw.fmod);
     if (fmod !== undefined) {
-      if (fmod === 'OFF') {
+      if (fmod === PROTOCOL.OFF) {
         state.isOn = false;
         state.autoMode = false;
-      } else if (fmod === 'AUTO') {
+      } else if (fmod === PROTOCOL.AUTO) {
         state.isOn = true;
         state.autoMode = true;
-      } else if (fmod === 'FAN') {
+      } else if (fmod === PROTOCOL.FAN) {
         state.isOn = true;
         state.autoMode = false;
       }
     }
 
     // Auto mode field (some devices send this separately from fmod)
-    // auto: 'ON' = auto mode, 'OFF' = manual mode
-    const auto = this.extractValue(raw.auto);
+    const auto = MessageCodec.extractValue(raw.auto);
     if (auto !== undefined) {
-      state.autoMode = auto === 'ON';
+      state.autoMode = auto === PROTOCOL.ON;
     }
 
     // Oscillation
-    const oson = this.extractValue(raw.oson);
+    const oson = MessageCodec.extractValue(raw.oson);
     if (oson !== undefined) {
-      state.oscillation = oson === 'ON';
+      state.oscillation = oson === PROTOCOL.ON;
     }
 
     // Oscillation angles
-    const oscs = this.extractValue(raw.oscs);
+    const oscs = MessageCodec.extractValue(raw.oscs);
     if (oscs !== undefined) {
       state.oscillationAngleStart = parseInt(oscs, 10);
     }
-    const osce = this.extractValue(raw.osce);
+    const osce = MessageCodec.extractValue(raw.osce);
     if (osce !== undefined) {
       state.oscillationAngleEnd = parseInt(osce, 10);
     }
 
     // Night mode
-    const nmod = this.extractValue(raw.nmod);
+    const nmod = MessageCodec.extractValue(raw.nmod);
     if (nmod !== undefined) {
-      state.nightMode = nmod === 'ON';
+      state.nightMode = nmod === PROTOCOL.ON;
     }
 
     // Continuous monitoring
-    const rhtm = this.extractValue(raw.rhtm);
+    const rhtm = MessageCodec.extractValue(raw.rhtm);
     if (rhtm !== undefined) {
-      state.continuousMonitoring = rhtm === 'ON';
+      state.continuousMonitoring = rhtm === PROTOCOL.ON;
     }
 
     // Front airflow
-    const ffoc = this.extractValue(raw.ffoc);
+    const ffoc = MessageCodec.extractValue(raw.ffoc);
     if (ffoc !== undefined) {
-      state.frontAirflow = ffoc === 'ON';
+      state.frontAirflow = ffoc === PROTOCOL.ON;
     }
 
+    // Environmental sensor data
+    MessageCodec.parseEnvironmentalData(raw, state);
+
+    // Filter status
+    MessageCodec.parseFilterData(raw, state);
+
+    // Heating (HP models)
+    MessageCodec.parseHeatingData(raw, state);
+
+    // Humidifier (PH models)
+    MessageCodec.parseHumidifierData(raw, state);
+
+    // Link series specific fields
+    MessageCodec.parseLinkSeriesData(raw, state);
+
+    return state;
+  }
+
+  /**
+   * Parse environmental sensor data from raw state
+   */
+  static parseEnvironmentalData(raw: RawStateData, state: Partial<DeviceState>): void {
     // Temperature (Kelvin * 10)
-    const tact = this.extractValue(raw.tact);
-    if (tact !== undefined && tact !== 'OFF') {
-      state.temperature = parseInt(tact, 10);
+    const tact = MessageCodec.extractValue(raw.tact);
+    if (tact !== undefined && tact !== PROTOCOL.OFF) {
+      const value = parseInt(tact, 10);
+      if (!isNaN(value)) {
+        state.temperature = value;
+      }
     }
 
     // Humidity percentage
-    const hact = this.extractValue(raw.hact);
-    if (hact !== undefined && hact !== 'OFF') {
-      state.humidity = parseInt(hact, 10);
+    const hact = MessageCodec.extractValue(raw.hact);
+    if (hact !== undefined && hact !== PROTOCOL.OFF) {
+      const value = parseInt(hact, 10);
+      if (!isNaN(value)) {
+        state.humidity = value;
+      }
     }
 
-    // Air quality sensors - advanced models use p25r/p10r, basic use pact
-    const p25r = this.extractValue(raw.p25r);
-    if (p25r !== undefined && p25r !== 'INIT' && p25r !== 'OFF') {
+    // PM2.5 - newer models use p25r, older Link models use pact
+    const p25r = MessageCodec.extractValue(raw.p25r);
+    if (p25r !== undefined && p25r !== 'INIT' && p25r !== PROTOCOL.OFF) {
       const value = parseInt(p25r, 10);
       if (!isNaN(value)) {
         state.pm25 = value;
       }
     }
-    const p10r = this.extractValue(raw.p10r);
-    if (p10r !== undefined && p10r !== 'INIT' && p10r !== 'OFF') {
+    const p10r = MessageCodec.extractValue(raw.p10r);
+    if (p10r !== undefined && p10r !== 'INIT' && p10r !== PROTOCOL.OFF) {
       const value = parseInt(p10r, 10);
       if (!isNaN(value)) {
         state.pm10 = value;
       }
     }
-    // Basic sensors use pact for particulate index (not µg/m³)
-    const pact = this.extractValue(raw.pact);
-    if (pact !== undefined && pact !== 'INIT' && pact !== 'OFF') {
+    const pact = MessageCodec.extractValue(raw.pact);
+    if (pact !== undefined && pact !== 'INIT' && pact !== PROTOCOL.OFF) {
       const value = parseInt(pact, 10);
       if (!isNaN(value)) {
         state.pm25 = value;
       }
     }
     // VOC - va10 for advanced, vact for basic
-    const va10 = this.extractValue(raw.va10);
-    if (va10 !== undefined && va10 !== 'INIT' && va10 !== 'OFF') {
+    const va10 = MessageCodec.extractValue(raw.va10);
+    if (va10 !== undefined && va10 !== 'INIT' && va10 !== PROTOCOL.OFF) {
       const value = parseInt(va10, 10);
       if (!isNaN(value)) {
         state.vocIndex = value;
       }
     }
-    const vact = this.extractValue(raw.vact);
-    if (vact !== undefined && vact !== 'INIT' && vact !== 'OFF') {
+    const vact = MessageCodec.extractValue(raw.vact);
+    if (vact !== undefined && vact !== 'INIT' && vact !== PROTOCOL.OFF) {
       const value = parseInt(vact, 10);
       if (!isNaN(value)) {
         state.vocIndex = value;
       }
     }
     // NO2 index
-    const noxl = this.extractValue(raw.noxl);
-    if (noxl !== undefined && noxl !== 'INIT' && noxl !== 'OFF') {
+    const noxl = MessageCodec.extractValue(raw.noxl);
+    if (noxl !== undefined && noxl !== 'INIT' && noxl !== PROTOCOL.OFF) {
       const value = parseInt(noxl, 10);
       if (!isNaN(value)) {
         state.no2Index = value;
       }
     }
     // Formaldehyde (HCHO) level
-    const hchr = this.extractValue(raw.hchr);
-    if (hchr !== undefined && hchr !== 'INIT' && hchr !== 'OFF') {
+    const hchr = MessageCodec.extractValue(raw.hchr);
+    if (hchr !== undefined && hchr !== 'INIT' && hchr !== PROTOCOL.OFF) {
       const value = parseInt(hchr, 10);
       if (!isNaN(value)) {
         state.formaldehydeLevel = value;
@@ -419,9 +452,9 @@ export class MessageCodec {
     }
 
     // Sleep timer
-    const sltm = this.extractValue(raw.sltm);
+    const sltm = MessageCodec.extractValue(raw.sltm);
     if (sltm !== undefined) {
-      if (sltm === 'OFF') {
+      if (sltm === PROTOCOL.OFF) {
         state.sleepTimer = 0;
       } else {
         const value = parseInt(sltm, 10);
@@ -430,93 +463,95 @@ export class MessageCodec {
         }
       }
     }
+  }
 
-    // Filter status
-    const filf = this.extractValue(raw.filf);
+  /**
+   * Parse filter status from raw state
+   */
+  private static parseFilterData(raw: RawStateData, state: Partial<DeviceState>): void {
+    const filf = MessageCodec.extractValue(raw.filf);
     if (filf !== undefined) {
-      // HEPA filter life in hours
       state.hepaFilterLife = parseInt(filf, 10);
     }
-    const fltf = this.extractValue(raw.fltf);
+    const fltf = MessageCodec.extractValue(raw.fltf);
     if (fltf !== undefined) {
-      // HEPA filter percentage - convert to hours estimate
       const percent = parseInt(fltf, 10);
       state.hepaFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
     }
-    const cflr = this.extractValue(raw.cflr);
+    const cflr = MessageCodec.extractValue(raw.cflr);
     if (cflr !== undefined) {
-      // Carbon filter percentage - convert to hours estimate
       const percent = parseInt(cflr, 10);
       state.carbonFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
     }
+  }
 
-    // Heating (HP models)
-    const hmod = this.extractValue(raw.hmod);
+  /**
+   * Parse heating data from raw state (HP models)
+   */
+  private static parseHeatingData(raw: RawStateData, state: Partial<DeviceState>): void {
+    const hmod = MessageCodec.extractValue(raw.hmod);
     if (hmod !== undefined) {
-      state.heatingEnabled = hmod === 'HEAT';
+      state.heatingEnabled = hmod === PROTOCOL.HEAT;
     }
-    const hmax = this.extractValue(raw.hmax);
+    const hmax = MessageCodec.extractValue(raw.hmax);
     if (hmax !== undefined) {
       state.targetTemperature = parseInt(hmax, 10);
     }
-    // Heating status - whether heater is actively heating
-    const hsta = this.extractValue(raw.hsta);
+    const hsta = MessageCodec.extractValue(raw.hsta);
     if (hsta !== undefined) {
-      state.heatingActive = hsta === 'ON';
+      state.heatingActive = hsta === PROTOCOL.ON;
     }
+  }
 
-    // Humidifier (PH models)
-    const hume = this.extractValue(raw.hume);
+  /**
+   * Parse humidifier data from raw state (PH models)
+   */
+  private static parseHumidifierData(raw: RawStateData, state: Partial<DeviceState>): void {
+    const hume = MessageCodec.extractValue(raw.hume);
     if (hume !== undefined) {
-      state.humidifierEnabled = hume === 'ON' || hume === 'AUTO';
+      state.humidifierEnabled = hume === PROTOCOL.ON || hume === PROTOCOL.AUTO;
     }
-    const humt = this.extractValue(raw.humt);
+    const humt = MessageCodec.extractValue(raw.humt);
     if (humt !== undefined) {
       state.targetHumidity = parseInt(humt, 10);
     }
+  }
 
-    // Link series specific fields
-    // Fan state - whether fan is actively running (Link series uses this instead of fpwr)
-    const fnst = this.extractValue(raw.fnst);
+  /**
+   * Parse Link series specific fields
+   */
+  private static parseLinkSeriesData(raw: RawStateData, state: Partial<DeviceState>): void {
+    const fnst = MessageCodec.extractValue(raw.fnst);
     if (fnst !== undefined) {
-      state.fanState = fnst === 'ON';
+      state.fanState = fnst === PROTOCOL.ON;
     }
-    // Air quality target (1-4, for auto mode sensitivity)
-    const qtar = this.extractValue(raw.qtar);
+    const qtar = MessageCodec.extractValue(raw.qtar);
     if (qtar !== undefined) {
       const value = parseInt(qtar, 10);
       if (!isNaN(value)) {
         state.airQualityTarget = value;
       }
     }
-    // Error code
-    const ercd = this.extractValue(raw.ercd);
+    const ercd = MessageCodec.extractValue(raw.ercd);
     if (ercd !== undefined) {
       state.errorCode = ercd;
     }
-    // Warning code
-    const wacd = this.extractValue(raw.wacd);
+    const wacd = MessageCodec.extractValue(raw.wacd);
     if (wacd !== undefined) {
       state.warningCode = wacd;
     }
-    // Tilt status
-    const tilt = this.extractValue(raw.tilt);
+    const tilt = MessageCodec.extractValue(raw.tilt);
     if (tilt !== undefined) {
       state.tiltStatus = tilt;
     }
-
-    return state;
   }
 
   /**
    * Encode fan speed (1-10 or -1 for AUTO) to Dyson format
-   *
-   * @param speed - Fan speed (1-10) or -1 for AUTO
-   * @returns Encoded speed string (e.g., "0005" or "AUTO")
    */
-  encodeFanSpeed(speed: number): string {
+  static encodeFanSpeed(speed: number): string {
     if (speed < 0) {
-      return 'AUTO';
+      return PROTOCOL.AUTO;
     }
     const clampedSpeed = Math.max(FAN_SPEED.MIN, Math.min(FAN_SPEED.MAX, speed));
     return String(clampedSpeed).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
@@ -524,12 +559,9 @@ export class MessageCodec {
 
   /**
    * Decode fan speed from Dyson format
-   *
-   * @param encoded - Encoded speed (e.g., "0005" or "AUTO")
-   * @returns Object with speed (1-10 or -1 for AUTO) and autoMode flag
    */
-  decodeFanSpeed(encoded: string): { speed: number; autoMode: boolean } {
-    if (encoded === 'AUTO') {
+  static decodeFanSpeed(encoded: string): { speed: number; autoMode: boolean } {
+    if (encoded === PROTOCOL.AUTO) {
       return { speed: FAN_SPEED.AUTO, autoMode: true };
     }
     const speed = parseInt(encoded, 10);
@@ -538,11 +570,8 @@ export class MessageCodec {
 
   /**
    * Convert HomeKit percentage (0-100) to Dyson speed (1-10)
-   *
-   * @param percent - HomeKit percentage (0-100)
-   * @returns Dyson speed (1-10)
    */
-  percentToSpeed(percent: number): number {
+  static percentToSpeed(percent: number): number {
     if (percent <= PERCENT.MIN) {
       return FAN_SPEED.MIN;
     }
@@ -554,40 +583,26 @@ export class MessageCodec {
 
   /**
    * Convert Dyson speed (1-10) to HomeKit percentage (0-100)
-   *
-   * @param speed - Dyson speed (1-10) or -1 for AUTO
-   * @returns HomeKit percentage (0-100)
    */
-  speedToPercent(speed: number): number {
+  static speedToPercent(speed: number): number {
     if (speed < 0) {
-      // When fnsp is 'AUTO', we don't know the actual speed
-      // Return 0% to indicate the device is managing the speed
       return PERCENT.MIN;
     }
-    // Map 1-10 to 10-100% (in steps of 10)
-    // This correctly shows the actual speed even in auto mode,
-    // since devices report the real speed in fnsp when actively running
     return Math.max(PERCENT.MIN, Math.min(PERCENT.MAX, speed * PERCENT.PER_SPEED_LEVEL));
   }
 
   /**
    * Encode oscillation angle to Dyson format
-   *
-   * @param angle - Angle in degrees (45-355)
-   * @returns Encoded angle string (e.g., "0045")
    */
-  encodeAngle(angle: number): string {
+  static encodeAngle(angle: number): string {
     const clampedAngle = Math.max(OSCILLATION_ANGLE.MIN, Math.min(OSCILLATION_ANGLE.MAX, angle));
     return String(clampedAngle).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
   }
 
   /**
    * Encode temperature from Celsius to Dyson format (Kelvin * 10)
-   *
-   * @param celsius - Temperature in Celsius
-   * @returns Encoded temperature string (e.g., "2950" for 22°C)
    */
-  encodeTemperature(celsius: number): string {
+  static encodeTemperature(celsius: number): string {
     const kelvinTimes10 = Math.round(
       (celsius + TEMPERATURE.KELVIN_OFFSET) * TEMPERATURE.KELVIN_MULTIPLIER,
     );
@@ -596,27 +611,19 @@ export class MessageCodec {
 
   /**
    * Decode temperature from Dyson format to Celsius
-   *
-   * @param encoded - Encoded temperature (Kelvin * 10)
-   * @returns Temperature in Celsius
    */
-  decodeTemperature(encoded: string | number): number {
+  static decodeTemperature(encoded: string | number): number {
     const kelvinTimes10 = typeof encoded === 'string' ? parseInt(encoded, 10) : encoded;
     return (kelvinTimes10 / TEMPERATURE.KELVIN_MULTIPLIER) - TEMPERATURE.KELVIN_OFFSET;
   }
 
   /**
    * Create a REQUEST-CURRENT-STATE message
-   *
-   * @returns JSON string for requesting current state
    */
-  encodeRequestState(): string {
+  static encodeRequestState(): string {
     return JSON.stringify({
       msg: 'REQUEST-CURRENT-STATE',
       time: new Date().toISOString(),
     });
   }
 }
-
-// Export singleton instance for convenience
-export const messageCodec = new MessageCodec();

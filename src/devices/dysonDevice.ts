@@ -9,6 +9,7 @@ import { EventEmitter } from 'events';
 
 import { DysonMqttClient } from '../protocol/mqttClient.js';
 import type { MqttMessage, MqttConnectFn } from '../protocol/mqttClient.js';
+import { MessageCodec } from '../protocol/messageCodec.js';
 
 import type {
   DeviceInfo,
@@ -347,125 +348,15 @@ export abstract class DysonDevice extends EventEmitter {
   /**
    * Handle environmental sensor data
    *
-   * Can be overridden by subclasses that support environmental sensors.
+   * Delegates to MessageCodec.parseEnvironmentalData for consistent parsing.
    *
    * @param data - Parsed sensor data
    */
   protected handleEnvironmentalMessage(data: Record<string, unknown>): void {
-    // Default implementation - subclasses can override
-    const sensorData = (data.data as Record<string, unknown>) || data;
-
+    const sensorData = (data.data as Record<string, string>) || data;
     const stateUpdate: Partial<DeviceState> = {};
 
-    // Temperature (in Kelvin * 10)
-    if ('tact' in sensorData) {
-      const temp = sensorData.tact;
-      if (typeof temp === 'string' && temp !== 'OFF') {
-        const value = parseInt(temp, 10);
-        if (!isNaN(value)) {
-          stateUpdate.temperature = value;
-        }
-      }
-    }
-
-    // Humidity percentage
-    if ('hact' in sensorData) {
-      const humidity = sensorData.hact;
-      if (typeof humidity === 'string' && humidity !== 'OFF') {
-        const value = parseInt(humidity, 10);
-        if (!isNaN(value)) {
-          stateUpdate.humidity = value;
-        }
-      }
-    }
-
-    // PM2.5 - newer models use p25r, older Link models use pact
-    if ('p25r' in sensorData) {
-      const pm25 = sensorData.p25r;
-      if (typeof pm25 === 'string' && pm25 !== 'INIT' && pm25 !== 'OFF') {
-        const value = parseInt(pm25, 10);
-        if (!isNaN(value)) {
-          stateUpdate.pm25 = value;
-        }
-      }
-    } else if ('pact' in sensorData) {
-      // Older Link series (HP02, TP02) use pact for particulate matter
-      const pact = sensorData.pact;
-      if (typeof pact === 'string' && pact !== 'INIT' && pact !== 'OFF') {
-        const value = parseInt(pact, 10);
-        if (!isNaN(value)) {
-          stateUpdate.pm25 = value;
-        }
-      }
-    }
-
-    // PM10 - only on newer models (p10r field)
-    if ('p10r' in sensorData) {
-      const pm10 = sensorData.p10r;
-      if (typeof pm10 === 'string' && pm10 !== 'INIT' && pm10 !== 'OFF') {
-        const value = parseInt(pm10, 10);
-        if (!isNaN(value)) {
-          stateUpdate.pm10 = value;
-        }
-      }
-    }
-
-    // VOC index - newer models use va10, older Link models use vact
-    if ('va10' in sensorData) {
-      const voc = sensorData.va10;
-      if (typeof voc === 'string' && voc !== 'INIT' && voc !== 'OFF') {
-        const value = parseInt(voc, 10);
-        if (!isNaN(value)) {
-          stateUpdate.vocIndex = value;
-        }
-      }
-    } else if ('vact' in sensorData) {
-      // Older Link series (HP02, TP02) use vact for VOC
-      const vact = sensorData.vact;
-      if (typeof vact === 'string' && vact !== 'INIT' && vact !== 'OFF') {
-        const value = parseInt(vact, 10);
-        if (!isNaN(value)) {
-          stateUpdate.vocIndex = value;
-        }
-      }
-    }
-
-    // NO2 index - only on newer models with formaldehyde sensor
-    if ('noxl' in sensorData) {
-      const no2 = sensorData.noxl;
-      if (typeof no2 === 'string' && no2 !== 'INIT' && no2 !== 'OFF') {
-        const value = parseInt(no2, 10);
-        if (!isNaN(value)) {
-          stateUpdate.no2Index = value;
-        }
-      }
-    }
-
-    // Formaldehyde (HCHO) level - only on formaldehyde models
-    if ('hchr' in sensorData) {
-      const hchr = sensorData.hchr;
-      if (typeof hchr === 'string' && hchr !== 'INIT' && hchr !== 'OFF') {
-        const value = parseInt(hchr, 10);
-        if (!isNaN(value)) {
-          stateUpdate.formaldehydeLevel = value;
-        }
-      }
-    }
-
-    // Sleep timer
-    if ('sltm' in sensorData) {
-      const sltm = sensorData.sltm;
-      if (typeof sltm === 'string') {
-        if (sltm === 'OFF') {
-          stateUpdate.sleepTimer = 0;
-        } else {
-          const value = parseInt(sltm, 10);
-          if (!isNaN(value)) {
-            stateUpdate.sleepTimer = value;
-          }
-        }
-      }
-    }
+    MessageCodec.parseEnvironmentalData(sensorData, stateUpdate);
 
     if (Object.keys(stateUpdate).length > 0) {
       this.updateState(stateUpdate);

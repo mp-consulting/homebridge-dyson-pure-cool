@@ -23,6 +23,9 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
   public readonly accessories: Map<string, PlatformAccessory> = new Map();
   public readonly discoveredCacheUUIDs: string[] = [];
 
+  // Track platform accessories for clean shutdown
+  private readonly platformAccessories: DysonPlatformAccessory[] = [];
+
   // This is only required when using Custom Services and Characteristics not support by HomeKit
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public readonly CustomServices: any;
@@ -52,6 +55,20 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
       // run the method to discover / register your devices as accessories
       await this.discoverDevices();
     });
+
+    // Cleanly disconnect all MQTT connections on shutdown
+    this.api.on('shutdown', async () => {
+      this.log.info('Shutting down, disconnecting devices...');
+      const disconnectPromises = this.platformAccessories.map(async (pa) => {
+        try {
+          await pa.disconnect();
+        } catch (error) {
+          this.log.debug('Error during shutdown disconnect:', error);
+        }
+      });
+      await Promise.allSettled(disconnectPromises);
+      this.log.info('All devices disconnected');
+    });
   }
 
   /**
@@ -63,6 +80,39 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
 
     // add the restored accessory to the accessories cache, so we can track if it has already been registered
     this.accessories.set(accessory.UUID, accessory);
+  }
+
+  /**
+   * Merge global config options with per-device options.
+   * Per-device settings take precedence over global settings.
+   * Returns a new object - does not mutate the original device config.
+   */
+  private mergeDeviceConfig(device: Record<string, unknown>): Record<string, unknown> {
+    const merged = { ...device };
+
+    if (merged.isNightModeEnabled === undefined && this.config.enableNightMode !== undefined) {
+      merged.isNightModeEnabled = this.config.enableNightMode;
+    }
+    if (merged.isJetFocusEnabled === undefined && this.config.enableJetFocus !== undefined) {
+      merged.isJetFocusEnabled = this.config.enableJetFocus;
+    }
+    if (merged.isContinuousMonitoringEnabled === undefined && this.config.enableContinuousMonitoring !== undefined) {
+      merged.isContinuousMonitoringEnabled = this.config.enableContinuousMonitoring;
+    }
+    if (merged.isTemperatureIgnored === undefined && this.config.enableTemperature !== undefined) {
+      merged.isTemperatureIgnored = !this.config.enableTemperature;
+    }
+    if (merged.isHumidityIgnored === undefined && this.config.enableHumidity !== undefined) {
+      merged.isHumidityIgnored = !this.config.enableHumidity;
+    }
+    if (merged.isAirQualityIgnored === undefined && this.config.enableAirQuality !== undefined) {
+      merged.isAirQualityIgnored = !this.config.enableAirQuality;
+    }
+    if (merged.isHeatingDisabled === undefined && this.config.enableHeater !== undefined) {
+      merged.isHeatingDisabled = !this.config.enableHeater;
+    }
+
+    return merged;
   }
 
   /**
@@ -104,41 +154,21 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
     }
 
     // loop over the configured devices and register each one if it has not already been registered
-    for (const device of devices) {
+    for (const rawDevice of devices) {
+      // Create merged config without mutating original
+      const device = this.mergeDeviceConfig(rawDevice);
+
       // Inject discovered IP address if not already configured
-      if (!device.ipAddress && discoveredIPs.has(device.serial)) {
-        device.ipAddress = discoveredIPs.get(device.serial);
+      if (!device.ipAddress && discoveredIPs.has(device.serial as string)) {
+        device.ipAddress = discoveredIPs.get(device.serial as string);
         this.log.info(`Using discovered IP ${device.ipAddress} for device ${device.serial}`);
       }
 
-      // Merge global options with per-device options (per-device takes precedence)
-      // Map global config names to per-device option names
-      if (device.isNightModeEnabled === undefined && this.config.enableNightMode !== undefined) {
-        device.isNightModeEnabled = this.config.enableNightMode;
-      }
-      if (device.isJetFocusEnabled === undefined && this.config.enableJetFocus !== undefined) {
-        device.isJetFocusEnabled = this.config.enableJetFocus;
-      }
-      if (device.isContinuousMonitoringEnabled === undefined && this.config.enableContinuousMonitoring !== undefined) {
-        device.isContinuousMonitoringEnabled = this.config.enableContinuousMonitoring;
-      }
-      if (device.isTemperatureIgnored === undefined && this.config.enableTemperature !== undefined) {
-        device.isTemperatureIgnored = !this.config.enableTemperature;
-      }
-      if (device.isHumidityIgnored === undefined && this.config.enableHumidity !== undefined) {
-        device.isHumidityIgnored = !this.config.enableHumidity;
-      }
-      if (device.isAirQualityIgnored === undefined && this.config.enableAirQuality !== undefined) {
-        device.isAirQualityIgnored = !this.config.enableAirQuality;
-      }
-      if (device.isHeatingDisabled === undefined && this.config.enableHeater !== undefined) {
-        device.isHeatingDisabled = !this.config.enableHeater;
-      }
       // generate a unique id for the accessory using the device serial number
-      const uuid = this.api.hap.uuid.generate(device.serial);
+      const uuid = this.api.hap.uuid.generate(device.serial as string);
 
       // determine display name (use configured name, or fall back to serial)
-      const displayName = device.name || `Dyson ${device.serial}`;
+      const displayName = (device.name as string) || `Dyson ${device.serial}`;
 
       // see if an accessory with the same uuid has already been registered and restored from
       // the cached devices we stored in the `configureAccessory` method above
@@ -165,7 +195,8 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
         this.api.updatePlatformAccessories([existingAccessory]);
 
         // create the accessory handler for the restored accessory
-        new DysonPlatformAccessory(this, existingAccessory);
+        const pa = new DysonPlatformAccessory(this, existingAccessory);
+        this.platformAccessories.push(pa);
       } else {
         // the accessory does not yet exist, so we need to create it
         this.log.info('Adding new accessory:', displayName);
@@ -183,7 +214,8 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
         this.accessories.set(uuid, accessory);
 
         // create the accessory handler for the newly created accessory AFTER registration
-        new DysonPlatformAccessory(this, accessory);
+        const pa = new DysonPlatformAccessory(this, accessory);
+        this.platformAccessories.push(pa);
       }
 
       // push into discoveredCacheUUIDs

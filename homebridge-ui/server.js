@@ -13,7 +13,6 @@
 
 import { HomebridgePluginUiServer, RequestError } from '@homebridge/plugin-ui-utils';
 import { createDecipheriv } from 'node:crypto';
-import { execSync } from 'node:child_process';
 
 import { getProductTypeDisplayNames, getDeviceFeatures, getHeatingDevices } from '../dist/config/index.js';
 import { DysonMqttClient } from '../dist/protocol/mqttClient.js';
@@ -47,94 +46,72 @@ const DEFAULT_HEADERS = {
 };
 
 // =============================================================================
-// HTTP Client (curl-based)
+// HTTP Client (native fetch)
 // =============================================================================
 
-function dysonRequest(endpoint, options = {}) {
+async function dysonRequest(endpoint, options = {}) {
   const url = `${DYSON_API_BASE_URL}${endpoint}`;
   const method = options.method || 'GET';
 
   console.log(`[DysonUI] ${method} ${endpoint}`);
 
-  const curlArgs = buildCurlCommand(url, method, options);
-  const shellCmd = escapeForShell(curlArgs);
-
-  return executeCurl(shellCmd, options.body);
-}
-
-function buildCurlCommand(url, method, options) {
-  const args = ['curl', '-s', '-X', method, '-H', 'Content-Type: application/json'];
-
-  // Add default headers
-  for (const [key, value] of Object.entries(DEFAULT_HEADERS)) {
-    args.push('-H', `${key}: ${value}`);
-  }
-
-  // Add custom headers
-  if (options.headers) {
-    for (const [key, value] of Object.entries(options.headers)) {
-      args.push('-H', `${key}: ${value}`);
-    }
-  }
-
-  // Add body
-  if (options.body) {
-    args.push('-d', options.body);
-  }
-
-  args.push(url);
-  return args;
-}
-
-function escapeForShell(args) {
-  return args.map((arg) => {
-    if (arg.startsWith('-')) return arg;
-    return `'${arg.replace(/'/g, "'\\''")}'`;
-  }).join(' ');
-}
-
-function executeCurl(shellCmd, body) {
-  if (body) {
-    console.log(`[DysonUI] Body: ${body}`);
-  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const output = execSync(shellCmd, {
-      encoding: 'utf8',
-      timeout: REQUEST_TIMEOUT,
-      maxBuffer: 1024 * 1024,
-    });
+    const headers = {
+      'Content-Type': 'application/json',
+      ...DEFAULT_HEADERS,
+      ...(options.headers || {}),
+    };
 
-    console.log(`[DysonUI] Response: ${output.substring(0, 200)}`);
+    const fetchOptions = {
+      method,
+      headers,
+      signal: controller.signal,
+    };
 
-    if (!output?.trim()) return null;
+    if (options.body) {
+      fetchOptions.body = options.body;
+    }
 
-    const data = JSON.parse(output);
+    const response = await fetch(url, fetchOptions);
+
+    clearTimeout(timeoutId);
+
+    const text = await response.text();
+    console.log(`[DysonUI] Response status: ${response.status}`);
+
+    if (!text?.trim()) return null;
+
+    const data = JSON.parse(text);
 
     if (data.Message?.includes('Unable to authenticate')) {
       throw new RequestError(data.Message, { status: 401 });
     }
 
+    if (!response.ok) {
+      throw new RequestError(data.Message || `HTTP ${response.status}`, { status: response.status });
+    }
+
     return data;
   } catch (error) {
-    handleCurlError(error);
+    clearTimeout(timeoutId);
+
+    if (error instanceof RequestError) throw error;
+
+    if (error.name === 'AbortError') {
+      throw new RequestError('Request timed out', { status: 408 });
+    }
+
+    if (error.message?.includes('JSON')) {
+      console.error('[DysonUI] JSON parse error:', error.message);
+      throw new RequestError('Invalid response from Dyson API', { status: 500 });
+    }
+
+    console.error('[DysonUI] Fetch error:', error.message);
+    throw new RequestError(`Network error: ${error.message}`, { status: 500 });
   }
-}
-
-function handleCurlError(error) {
-  if (error instanceof RequestError) throw error;
-
-  if (error.message?.includes('JSON')) {
-    console.error('[DysonUI] JSON parse error:', error.message);
-    throw new RequestError('Invalid response from Dyson API', { status: 500 });
-  }
-
-  if (error.killed) {
-    throw new RequestError('Request timed out', { status: 408 });
-  }
-
-  console.error('[DysonUI] Curl error:', error.message);
-  throw new RequestError(`Network error: ${error.message}`, { status: 500 });
 }
 
 // =============================================================================
@@ -169,7 +146,7 @@ async function handleAuthenticate(ctx, payload) {
   }
 
   ctx.pendingAuth = { email, password, countryCode };
-  console.log(`[DysonUI] Auth: ${email}, country: ${countryCode}`);
+  console.log(`[DysonUI] Auth: country: ${countryCode}`);
 
   try {
     // Step 1: Check user status
@@ -328,7 +305,7 @@ const MDNS_TIMEOUT = 5000;
 async function getDeviceIp(ctx, serial, configIp) {
   // Try config IP first if provided
   if (configIp) {
-    console.log(`[DysonUI] Using cached IP ${configIp} for ${serial}`);
+    console.log(`[DysonUI] Using cached IP for ${serial}`);
     return { ip: configIp, discovered: false };
   }
 
@@ -371,7 +348,7 @@ async function handleGetDeviceState(ctx, payload) {
     throw new RequestError(`Device ${serial} not found on network`, { status: 404 });
   }
 
-  console.log(`[DysonUI] Connecting to ${serial} at ${ip}`);
+  console.log(`[DysonUI] Connecting to ${serial}`);
 
   const client = new DysonMqttClient({
     host: ip,
@@ -426,7 +403,7 @@ async function handleGetDeviceState(ctx, payload) {
 
     // If connection failed with cached IP, try mDNS discovery
     if (ipAddress && !discovered) {
-      console.log(`[DysonUI] Cached IP ${ipAddress} failed, trying mDNS discovery...`);
+      console.log(`[DysonUI] Cached IP failed, trying mDNS discovery...`);
       const freshResult = await getDeviceIp(ctx, serial, null);
       if (freshResult.ip && freshResult.ip !== ipAddress) {
         // Retry with freshly discovered IP
@@ -503,7 +480,7 @@ async function handleSetContinuousMonitoring(ctx, payload) {
 
     // If connection failed with cached IP, try mDNS discovery
     if (ipAddress && !discovered) {
-      console.log(`[DysonUI] Cached IP ${ipAddress} failed, trying mDNS discovery...`);
+      console.log(`[DysonUI] Cached IP failed, trying mDNS discovery...`);
       const freshResult = await getDeviceIp(ctx, serial, null);
       if (freshResult.ip && freshResult.ip !== ipAddress) {
         // Retry with freshly discovered IP

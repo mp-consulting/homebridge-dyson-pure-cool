@@ -9,6 +9,9 @@ import { createDevice, isProductTypeSupported, getSupportedProductTypes } from '
 import type { DeviceInfo, MqttClientFactory } from '../../../src/devices/index.js';
 import type { DysonMqttClient, MqttMessage } from '../../../src/protocol/mqttClient.js';
 
+/** Flush pending microtasks so queued commands are sent before assertions */
+const flushMicrotasks = () => new Promise(resolve => setTimeout(resolve, 0));
+
 // Create mock MQTT client
 function createMockMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
@@ -111,6 +114,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send ON command when turning on', async () => {
       await device.setFanPower(true);
+      await flushMicrotasks();
 
       // Newer models use fmod only (no auto field)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
@@ -124,6 +128,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send OFF command when turning off', async () => {
       await device.setFanPower(false);
+      await flushMicrotasks();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -140,6 +145,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send speed command for valid speed', async () => {
       await device.setFanSpeed(5);
+      await flushMicrotasks();
 
       // Newer models use fnsp and fmod only (no auto field)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
@@ -151,6 +157,7 @@ describe('DysonLinkDevice', () => {
 
     it('should clamp speed to minimum 1', async () => {
       await device.setFanSpeed(0);
+      await flushMicrotasks();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -161,6 +168,7 @@ describe('DysonLinkDevice', () => {
 
     it('should clamp speed to maximum 10', async () => {
       await device.setFanSpeed(15);
+      await flushMicrotasks();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -171,6 +179,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send AUTO command for negative speed', async () => {
       await device.setFanSpeed(-1);
+      await flushMicrotasks();
 
       // Newer models use fmod only (no auto field)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
@@ -188,6 +197,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send ON command when enabling', async () => {
       await device.setOscillation(true);
+      await flushMicrotasks();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -198,6 +208,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send OFF command when disabling', async () => {
       await device.setOscillation(false);
+      await flushMicrotasks();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -214,6 +225,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send ON command when enabling', async () => {
       await device.setNightMode(true);
+      await flushMicrotasks();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -224,6 +236,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send OFF command when disabling', async () => {
       await device.setNightMode(false);
+      await flushMicrotasks();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -240,6 +253,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send AUTO command when enabling', async () => {
       await device.setAutoMode(true);
+      await flushMicrotasks();
 
       // Newer models use fmod only (no fpwr/auto fields)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
@@ -251,6 +265,7 @@ describe('DysonLinkDevice', () => {
 
     it('should send FAN command with speed when disabling', async () => {
       await device.setAutoMode(false);
+      await flushMicrotasks();
 
       // Newer models use fmod and fnsp for manual mode
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(

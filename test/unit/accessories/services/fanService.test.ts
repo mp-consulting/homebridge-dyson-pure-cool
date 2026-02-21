@@ -108,6 +108,18 @@ function createMockApi() {
   } as unknown as API;
 }
 
+/**
+ * Flush microtask command queue.
+ * Commands are batched via queueMicrotask in DysonLinkDevice.
+ * Multiple await rounds are needed to process the full chain:
+ * queueMicrotask → flushCommand → sendCommand → publishCommand
+ */
+async function flushCommands(): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
+}
+
 describe('FanService', () => {
   let fanService: FanService;
   let mockMqttClient: ReturnType<typeof createMockMqttClient>;
@@ -190,6 +202,7 @@ describe('FanService', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.clearAllMocks();
   });
 
@@ -267,6 +280,7 @@ describe('FanService', () => {
 
     it('should call setFanPower(true) when set to 1', async () => {
       await activeSetHandler(1);
+      await flushCommands();
 
       // setFanPower uses fmod command - FAN mode for manual, AUTO for auto mode
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
@@ -280,6 +294,7 @@ describe('FanService', () => {
 
     it('should call setFanPower(false) when set to 0', async () => {
       await activeSetHandler(0);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -307,16 +322,16 @@ describe('FanService', () => {
       expect(result).toBe(2);
     });
 
-    it('should return 1 (IDLE) when fan is on in auto mode', async () => {
-      // Simulate state change from device - fan on in auto mode
+    it('should return 2 (PURIFYING_AIR) when fan is on in auto mode', async () => {
+      // Simulate state change from device - fan on in auto mode with speed > 0
       mockMqttClient._emit('message', {
         topic: 'status',
         payload: Buffer.from('{}'),
-        data: { msg: 'STATE-CHANGE', 'product-state': { fpwr: 'ON', fmod: 'AUTO' } },
+        data: { msg: 'STATE-CHANGE', 'product-state': { fpwr: 'ON', fmod: 'AUTO', fnsp: '0004' } },
       });
 
       const result = currentStateGetHandler();
-      expect(result).toBe(1);
+      expect(result).toBe(2); // PURIFYING_AIR - device is on and actively purifying
     });
   });
 
@@ -340,6 +355,7 @@ describe('FanService', () => {
 
     it('should call setAutoMode(true) when set to 1 (AUTO)', async () => {
       await targetStateSetHandler(1);
+      await flushCommands();
 
       // Newer models use fmod only, no fpwr/auto fields
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
@@ -351,6 +367,7 @@ describe('FanService', () => {
 
     it('should call setAutoMode(false) when set to 0 (MANUAL)', async () => {
       await targetStateSetHandler(0);
+      await flushCommands();
 
       // Newer models use fmod and fnsp for manual mode
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
@@ -398,14 +415,14 @@ describe('FanService', () => {
       speedSetHandler(0);
       // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
-      await Promise.resolve(); // Allow async operations to complete
+      // Flush microtask command queue (Promise.resolve works with fake timers)
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { fmod: 'OFF' },
         }),
       );
-      jest.useRealTimers();
     });
 
     it('should call setFanSpeed with converted value', async () => {
@@ -413,14 +430,13 @@ describe('FanService', () => {
       speedSetHandler(50);
       // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
-      await Promise.resolve(); // Allow async operations to complete
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ fnsp: '0005' }),
         }),
       );
-      jest.useRealTimers();
     });
 
     it('should turn fan on if off when setting speed', async () => {
@@ -429,7 +445,7 @@ describe('FanService', () => {
       speedSetHandler(50);
       // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
-      await Promise.resolve(); // Allow async operations to complete
+      await flushCommands();
 
       // Should have both speed and power commands
       const calls = mockMqttClient.publishCommand.mock.calls;
@@ -437,7 +453,6 @@ describe('FanService', () => {
 
       // Check that we have a speed command
       expect(dataValues.some((d) => d.fnsp === '0005')).toBe(true);
-      jest.useRealTimers();
     });
   });
 
@@ -461,6 +476,7 @@ describe('FanService', () => {
 
     it('should call setOscillation(true) when set to 1', async () => {
       await swingModeSetHandler(1);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -471,6 +487,7 @@ describe('FanService', () => {
 
     it('should call setOscillation(false) when set to 0', async () => {
       await swingModeSetHandler(0);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -504,7 +521,7 @@ describe('FanService', () => {
       );
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.CurrentAirPurifierState,
-        1, // IDLE because auto mode
+        2, // PURIFYING_AIR - device is on and running
       );
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.TargetAirPurifierState,
@@ -593,41 +610,55 @@ describe('FanService', () => {
   });
 
   describe('error handling', () => {
-    it('should throw and log error when setFanPower(false) fails', async () => {
+    it('should emit commandError when setFanPower MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      // Test setFanPower(false) which has simpler async behavior without delays
-      await expect(activeSetHandler(0)).rejects.toThrow('MQTT error');
-      expect(mockLog.error).toHaveBeenCalled();
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+
+      await activeSetHandler(0);
+      await flushCommands();
+
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+      expect((errorHandler.mock.calls[0][0] as Error).message).toBe('MQTT error');
     });
 
-    it('should log error when setFanSpeed fails', async () => {
+    it('should emit commandError when setFanSpeed MQTT publish fails', async () => {
       jest.useFakeTimers();
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+
       speedSetHandler(50);
-      // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
-      // Allow async operations to complete
-      await Promise.resolve();
-      await jest.runAllTimersAsync();
+      await flushCommands();
 
-      expect(mockLog.error).toHaveBeenCalled();
-      jest.useRealTimers();
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
     });
 
-    it('should throw and log error when setOscillation fails', async () => {
+    it('should emit commandError when setOscillation MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      await expect(swingModeSetHandler(1)).rejects.toThrow('MQTT error');
-      expect(mockLog.error).toHaveBeenCalled();
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+
+      await swingModeSetHandler(1);
+      await flushCommands();
+
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
     });
 
-    it('should throw and log error when setAutoMode fails', async () => {
+    it('should emit commandError when setAutoMode MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      await expect(targetStateSetHandler(1)).rejects.toThrow('MQTT error');
-      expect(mockLog.error).toHaveBeenCalled();
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+
+      await targetStateSetHandler(1);
+      await flushCommands();
+
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
     });
   });
 });
