@@ -425,9 +425,10 @@ export class DysonCloudApi {
   private async rateLimitDelay(): Promise<void> {
     const elapsed = Date.now() - this.lastRequestTime;
     if (elapsed < RATE_LIMIT_DELAY) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, RATE_LIMIT_DELAY - elapsed),
-      );
+      await new Promise((resolve) => {
+        const timer = setTimeout(resolve, RATE_LIMIT_DELAY - elapsed);
+        timer.unref();
+      });
     }
   }
 }

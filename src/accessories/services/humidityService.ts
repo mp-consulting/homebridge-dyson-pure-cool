@@ -83,7 +83,7 @@ export class HumidityService {
 
     // Link to primary service if provided
     if (config.primaryService) {
-      this.service.addLinkedService(config.primaryService);
+      config.primaryService.addLinkedService(this.service);
     }
 
     // Subscribe to device state changes

@@ -44,26 +44,14 @@ export interface DeviceOptions {
   isHumidityIgnored?: boolean;
   /** Disable air quality sensor */
   isAirQualityIgnored?: boolean;
-  /** Show temperature as separate accessory */
-  isTemperatureSensorEnabled?: boolean;
-  /** Show humidity as separate accessory */
-  isHumiditySensorEnabled?: boolean;
-  /** Show air quality as separate accessory */
-  isAirQualitySensorEnabled?: boolean;
 
   // Display options
   /** Use Fahrenheit for temperature display */
   useFahrenheit?: boolean;
-  /** Combine all services into single accessory */
-  isSingleAccessoryModeEnabled?: boolean;
-  /** Combine all sensors into single accessory */
-  isSingleSensorAccessoryModeEnabled?: boolean;
 
   // Heating options (HP models)
   /** Disable heating controls */
   isHeatingDisabled?: boolean;
-  /** Override heating safety restrictions */
-  isHeatingSafetyIgnored?: boolean;
   /**
    * Heating service type to expose in HomeKit
    * - 'thermostat': Traditional Thermostat service (matches reference plugin)
@@ -76,14 +64,6 @@ export interface DeviceOptions {
   /** Enable full humidity range (0-100%) for humidifier */
   fullRangeHumidity?: boolean;
 
-  // Activation behaviors
-  /** Enable auto mode on device activation */
-  enableAutoModeWhenActivating?: boolean;
-  /** Enable oscillation on device activation */
-  enableOscillationWhenActivating?: boolean;
-  /** Enable night mode on device activation */
-  enableNightModeWhenActivating?: boolean;
-
   // Service toggles
   /** Enable night mode switch */
   isNightModeEnabled?: boolean;
@@ -91,6 +71,10 @@ export interface DeviceOptions {
   isJetFocusEnabled?: boolean;
   /** Enable continuous monitoring switch */
   isContinuousMonitoringEnabled?: boolean;
+  /** Disable filter status service */
+  isFilterStatusDisabled?: boolean;
+  /** Disable humidifier control service */
+  isHumidifierDisabled?: boolean;
 }
 
 /**
@@ -242,8 +226,8 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
-    // Create FilterService if device has filters
-    if (features.hepaFilter || features.carbonFilter) {
+    // Create FilterService if device has filters and not disabled
+    if ((features.hepaFilter || features.carbonFilter) && !opts.isFilterStatusDisabled) {
       this.filterService = new FilterService({
         accessory: this.accessory,
         device: linkDevice,
@@ -281,8 +265,8 @@ export class DysonLinkAccessory extends DysonAccessory {
       }
     }
 
-    // Create HumidifierControlService for PH models
-    if (features.humidifier) {
+    // Create HumidifierControlService for PH models (if not disabled)
+    if (features.humidifier && !opts.isHumidifierDisabled) {
       this.humidifierControlService = new HumidifierControlService({
         accessory: this.accessory,
         device: linkDevice,

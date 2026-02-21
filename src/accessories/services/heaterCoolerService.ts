@@ -156,7 +156,7 @@ export class HeaterCoolerService {
 
     // Link to primary service if provided
     if (config.primaryService) {
-      this.service.addLinkedService(config.primaryService);
+      config.primaryService.addLinkedService(this.service);
     }
 
     // Subscribe to device state changes
@@ -344,7 +344,7 @@ export class HeaterCoolerService {
     } else {
       const currentTemp = this.convertTemperature(state.temperature);
       const targetTemp = this.convertTargetTemperature(state.targetTemperature);
-      currentState = currentTemp < targetTemp - 0.5
+      currentState = currentTemp < targetTemp - HEATING_TOLERANCE_CELSIUS
         ? this.CURRENT_STATE.HEATING
         : this.CURRENT_STATE.IDLE;
     }

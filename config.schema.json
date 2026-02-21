@@ -83,6 +83,7 @@
                 { "title": "PH01 - Purifier Humidify+Cool", "enum": ["358"] },
                 { "title": "PH02 - Purifier Humidify+Cool", "enum": ["520E"] },
                 { "title": "PH03 - Purifier Humidify+Cool", "enum": ["358H"] },
+                { "title": "PH03 - Purifier Humidify+Cool", "enum": ["358J"] },
                 { "title": "PH03/PH04 - Purifier Humidify+Cool Formaldehyde", "enum": ["358E"] },
                 { "title": "PH04 - Purifier Humidify+Cool Formaldehyde", "enum": ["520F"] },
                 { "title": "BP02 - Purifier Big+Quiet", "enum": ["664"] },

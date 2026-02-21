@@ -14,6 +14,7 @@ import type {
 
 import type { DysonDevice } from '../devices/dysonDevice.js';
 import type { DeviceState } from '../devices/types.js';
+import { getDeviceModelName } from '../config/index.js';
 
 /**
  * Configuration for DysonAccessory
@@ -168,22 +169,7 @@ export abstract class DysonAccessory {
    * Returns a human-readable model name based on product type.
    */
   private getModelName(): string {
-    const productType = this.device.productType;
-
-    const modelNames: Record<string, string> = {
-      '455': 'Pure Hot+Cool Link (HP02)',
-      '438': 'Pure Cool Tower (TP04)',
-      '438E': 'Purifier Cool (TP07)',
-      '469': 'Pure Cool Link Desk (DP01)',
-      '475': 'Pure Cool Link Tower (TP02)',
-      '520': 'Pure Cool Desk (DP04)',
-      '527': 'Pure Hot+Cool (HP04)',
-      '527E': 'Purifier Hot+Cool (HP07)',
-      '358': 'Pure Humidify+Cool (PH01)',
-      '358E': 'Pure Humidify+Cool (PH03)',
-    };
-
-    return modelNames[productType] || `Dyson (${productType})`;
+    return getDeviceModelName(this.device.productType);
   }
 
   /**

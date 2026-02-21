@@ -79,6 +79,7 @@ export class MdnsDiscovery {
     const devices = new Map<string, string>();
 
     return new Promise((resolve) => {
+      let resolved = false;
       this.bonjour = this.bonjourFactory();
 
       // Service type is 'dyson_mqtt' (without leading underscore for bonjour-service)
@@ -86,25 +87,30 @@ export class MdnsDiscovery {
 
       this.browser = this.bonjour.find({ type: serviceType });
 
+      // Set timeout to stop discovery (unref to avoid keeping the process alive)
+      const discoveryTimeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          this.cleanup();
+          resolve(devices);
+        }
+      }, timeout);
+      discoveryTimeout.unref();
+
       this.browser.on('up', (service: Service) => {
         const device = this.parseService(service);
         if (device) {
           devices.set(device.serial, device.ipAddress);
 
           // Stop early if we found enough devices
-          if (maxDevices > 0 && devices.size >= maxDevices) {
+          if (maxDevices > 0 && devices.size >= maxDevices && !resolved) {
+            resolved = true;
+            clearTimeout(discoveryTimeout);
             this.cleanup();
             resolve(devices);
           }
         }
       });
-
-      // Set timeout to stop discovery (unref to avoid keeping the process alive)
-      const discoveryTimeout = setTimeout(() => {
-        this.cleanup();
-        resolve(devices);
-      }, timeout);
-      discoveryTimeout.unref();
     });
   }
 
@@ -121,11 +127,22 @@ export class MdnsDiscovery {
     const devices: DiscoveredDevice[] = [];
 
     return new Promise((resolve) => {
+      let resolved = false;
       this.bonjour = this.bonjourFactory();
 
       const serviceType = DYSON_MDNS_SERVICE.replace('_', '').replace('._tcp', '');
 
       this.browser = this.bonjour.find({ type: serviceType });
+
+      // Set timeout to stop discovery (unref to avoid keeping the process alive)
+      const detailedTimeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          this.cleanup();
+          resolve(devices);
+        }
+      }, timeout);
+      detailedTimeout.unref();
 
       this.browser.on('up', (service: Service) => {
         const device = this.parseService(service);
@@ -136,19 +153,14 @@ export class MdnsDiscovery {
           }
 
           // Stop early if we found enough devices
-          if (maxDevices > 0 && devices.length >= maxDevices) {
+          if (maxDevices > 0 && devices.length >= maxDevices && !resolved) {
+            resolved = true;
+            clearTimeout(detailedTimeout);
             this.cleanup();
             resolve(devices);
           }
         }
       });
-
-      // Set timeout to stop discovery (unref to avoid keeping the process alive)
-      const detailedTimeout = setTimeout(() => {
-        this.cleanup();
-        resolve(devices);
-      }, timeout);
-      detailedTimeout.unref();
     });
   }
 

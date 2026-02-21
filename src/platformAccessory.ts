@@ -52,14 +52,16 @@ interface DeviceConfig {
   heatingServiceType?: 'thermostat' | 'heater-cooler' | 'both';
   /** Enable full humidity range (0-100%) */
   fullRangeHumidity?: boolean;
-  /** Enable auto mode on device activation */
-  enableAutoModeWhenActivating?: boolean;
   /** Enable night mode switch */
   isNightModeEnabled?: boolean;
   /** Enable jet focus switch */
   isJetFocusEnabled?: boolean;
   /** Enable continuous monitoring switch */
   isContinuousMonitoringEnabled?: boolean;
+  /** Disable filter status service */
+  isFilterStatusDisabled?: boolean;
+  /** Disable humidifier control service */
+  isHumidifierDisabled?: boolean;
 }
 
 /**
@@ -154,6 +156,12 @@ export class DysonPlatformAccessory {
         options: this.extractDeviceOptions(config),
       });
 
+      // Apply polling interval from config if set
+      const pollingInterval = this.platform.config.pollingInterval as number | undefined;
+      if (pollingInterval) {
+        this.device.setPollingInterval(pollingInterval);
+      }
+
       // Connect to the device if IP address is available
       if (config.ipAddress) {
         this.connectDevice();
@@ -218,6 +226,9 @@ export class DysonPlatformAccessory {
             config.ipAddress = newIp;
             this.accessory.context.device = config;
 
+            // Clean up old accessory handler before recreating
+            this.accessoryHandler?.destroy();
+
             // Recreate the accessory handler with the new device
             this.accessoryHandler = new DysonLinkAccessory({
               accessory: this.accessory,
@@ -267,10 +278,11 @@ export class DysonPlatformAccessory {
       isHeatingDisabled: config.isHeatingDisabled,
       heatingServiceType: config.heatingServiceType,
       fullRangeHumidity: config.fullRangeHumidity,
-      enableAutoModeWhenActivating: config.enableAutoModeWhenActivating,
       isNightModeEnabled: config.isNightModeEnabled,
       isJetFocusEnabled: config.isJetFocusEnabled,
       isContinuousMonitoringEnabled: config.isContinuousMonitoringEnabled,
+      isFilterStatusDisabled: config.isFilterStatusDisabled,
+      isHumidifierDisabled: config.isHumidifierDisabled,
     };
   }
 

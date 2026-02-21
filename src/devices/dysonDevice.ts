@@ -220,9 +220,13 @@ export abstract class DysonDevice extends EventEmitter {
     // Start periodic polling for state updates
     this.startPolling();
 
-    // Update connection state
-    this.updateState({ connected: true });
-    this.emit('connect');
+    // Set connected state if the MQTT handler hasn't already done so
+    // (the real MQTT client emits 'connect' during await connect(), but
+    // this guard ensures correctness regardless of timing)
+    if (!this.state.connected) {
+      this.updateState({ connected: true });
+      this.emit('connect');
+    }
   }
 
   /**

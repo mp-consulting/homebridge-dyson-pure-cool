@@ -74,7 +74,11 @@ export class DysonLinkDevice extends DysonDevice {
 
     if (!this.commandFlushScheduled) {
       this.commandFlushScheduled = true;
-      queueMicrotask(() => this.flushCommand());
+      queueMicrotask(() => {
+        this.flushCommand().catch((error) => {
+          this.emit('error', error instanceof Error ? error : new Error(String(error)));
+        });
+      });
     }
   }
 

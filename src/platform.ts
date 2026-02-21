@@ -4,8 +4,6 @@ import { DysonPlatformAccessory } from './platformAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './config/index.js';
 import { MdnsDiscovery, DEFAULT_DISCOVERY_TIMEOUT } from './discovery/index.js';
 
-// This is only required when using Custom Services and Characteristics not support by HomeKit
-import { EveHomeKitTypes } from 'homebridge-lib/EveHomeKitTypes';
 
 /**
  * DysonPureCoolPlatform
@@ -23,12 +21,6 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
   // Track platform accessories for clean shutdown
   private readonly platformAccessories: DysonPlatformAccessory[] = [];
 
-  // This is only required when using Custom Services and Characteristics not support by HomeKit
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomServices: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomCharacteristics: any;
-
   constructor(
     public readonly log: Logging,
     public readonly config: PlatformConfig,
@@ -36,10 +28,6 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
   ) {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
-
-    // This is only required when using Custom Services and Characteristics not support by HomeKit
-    this.CustomServices = new EveHomeKitTypes(this.api).Services;
-    this.CustomCharacteristics = new EveHomeKitTypes(this.api).Characteristics;
 
     this.log.debug('Finished initializing platform:', this.config.name);
 
@@ -107,6 +95,12 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
     }
     if (merged.isHeatingDisabled === undefined && this.config.enableHeater !== undefined) {
       merged.isHeatingDisabled = !this.config.enableHeater;
+    }
+    if (merged.isFilterStatusDisabled === undefined && this.config.enableFilterStatus !== undefined) {
+      merged.isFilterStatusDisabled = !this.config.enableFilterStatus;
+    }
+    if (merged.isHumidifierDisabled === undefined && this.config.enableHumidifier !== undefined) {
+      merged.isHumidifierDisabled = !this.config.enableHumidifier;
     }
 
     return merged;
@@ -224,6 +218,7 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
       if (!this.discoveredCacheUUIDs.includes(uuid)) {
         this.log.info('Removing accessory no longer in config:', accessory.displayName);
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+        this.accessories.delete(uuid);
       }
     }
   }

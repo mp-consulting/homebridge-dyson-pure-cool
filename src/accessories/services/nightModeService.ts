@@ -65,7 +65,7 @@ export class NightModeService {
 
     // Link to primary service if provided
     if (config.primaryService) {
-      this.service.addLinkedService(config.primaryService);
+      config.primaryService.addLinkedService(this.service);
     }
 
     // Subscribe to device state changes
@@ -95,8 +95,9 @@ export class NightModeService {
    */
   private handleOnGet(): CharacteristicValue {
     const state = this.device.getState();
-    this.log.debug('Get Night Mode ->', state.nightMode);
-    return state.nightMode;
+    const nightMode = state.nightMode ?? false;
+    this.log.debug('Get Night Mode ->', nightMode);
+    return nightMode;
   }
 
   /**
@@ -123,7 +124,7 @@ export class NightModeService {
     this.log.debug('Night mode state changed ->', state.nightMode);
 
     const Characteristic = this.api.hap.Characteristic;
-    this.service.updateCharacteristic(Characteristic.On, state.nightMode);
+    this.service.updateCharacteristic(Characteristic.On, state.nightMode ?? false);
   }
 
   /**
