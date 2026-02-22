@@ -16,7 +16,7 @@ export type DeviceSeries =
   | 'pure-cool'           // TP04, TP06, TP07, TP09, TP11, DP04
   | 'hot-cool-link'       // HP02 (older Link series)
   | 'hot-cool'            // HP04, HP06, HP07, HP09, HP11
-  | 'humidify-cool'       // PH01, PH02, PH03, PH04
+  | 'humidify-cool'       // PH01, PH02, PH03, PH04, PH05
   | 'big-quiet';          // BP02, BP03, BP04, BP06
 
 /**
@@ -239,15 +239,7 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
   {
     productType: '527',
     modelName: 'Dyson Pure Hot+Cool',
-    modelCode: 'HP04',
-    series: 'hot-cool',
-    features: FEATURES_HOT_COOL_JET,
-    formaldehyde: false,
-  },
-  {
-    productType: '358K',
-    modelName: 'Dyson Pure Hot+Cool Cryptomic',
-    modelCode: 'HP06',
+    modelCode: 'HP04', // Also covers HP06 (Cryptomic) which shares the same product type
     series: 'hot-cool',
     features: FEATURES_HOT_COOL_JET,
     formaldehyde: false,
@@ -325,6 +317,14 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
     series: 'humidify-cool',
     features: FEATURES_HUMIDIFY_COOL_FORMALDEHYDE,
     formaldehyde: true,
+  },
+  {
+    productType: '358K',
+    modelName: 'Dyson Purifier Humidify+Cool De-Nox',
+    modelCode: 'PH05',
+    series: 'humidify-cool',
+    features: FEATURES_HUMIDIFY_COOL_FORMALDEHYDE,
+    formaldehyde: false,
   },
 
   // Big+Quiet Series

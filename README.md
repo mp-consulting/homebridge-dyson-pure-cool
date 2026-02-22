@@ -32,6 +32,7 @@
 | **Purifier Hot+Cool** | HP11 | Fan, Heating, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
 | **Purifier Humidify+Cool** | PH01, PH02, PH03 | Fan, Humidifier, Air Quality, Temp, Humidity, Jet Focus |
 | **Purifier Humidify+Cool Formaldehyde** | PH04 | Fan, Humidifier, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
+| **Purifier Humidify+Cool De-Nox** | PH05 | Fan, Humidifier, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
 | **Purifier Big+Quiet** | BP02, BP03, BP04, BP06 | Fan, Air Quality (incl. NO2), Temp, Humidity |
 
 ## Installation
