@@ -194,7 +194,7 @@ describe('DysonAccessory', () => {
     it('should set model name based on product type', () => {
       expect(mockInfoService.setCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.Model,
-        'Pure Cool Tower (TP04)',
+        'Dyson Pure Cool Tower (TP04)',
       );
     });
 
@@ -237,7 +237,7 @@ describe('DysonAccessory', () => {
 
       expect(newMockInfoService.setCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.Model,
-        'Pure Hot+Cool Link (HP02)',
+        'Dyson Pure Hot+Cool Link (HP02)',
       );
     });
 
@@ -271,7 +271,7 @@ describe('DysonAccessory', () => {
 
       expect(newMockInfoService.setCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.Model,
-        'Dyson (999)',
+        'Dyson Device (999)',
       );
     });
   });

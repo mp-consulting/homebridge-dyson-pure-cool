@@ -11,7 +11,18 @@ export type {
   MqttConnectFn,
 } from './mqttClient.js';
 
-export { MessageCodec, messageCodec } from './messageCodec.js';
+export { MessageCodec } from './messageCodec.js';
+export {
+  FAN_SPEED,
+  OSCILLATION_ANGLE,
+  TEMPERATURE,
+  HEATING_TEMP,
+  HUMIDITY,
+  FILTER,
+  FORMAT,
+  PROTOCOL,
+  PERCENT,
+} from './messageCodec.js';
 export type {
   CommandData,
   RawStateData,

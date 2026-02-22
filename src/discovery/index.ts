@@ -4,7 +4,7 @@
  */
 
 export { DysonCloudApi } from './cloudApi.js';
-export { MdnsDiscovery } from './mdnsDiscovery.js';
+export { MdnsDiscovery, DEFAULT_DISCOVERY_TIMEOUT } from './mdnsDiscovery.js';
 export type {
   DiscoveredDevice,
   DiscoveryOptions,

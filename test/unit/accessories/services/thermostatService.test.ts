@@ -124,6 +124,16 @@ function createMockApi() {
   } as unknown as API;
 }
 
+/**
+ * Flush microtask command queue.
+ * Commands are batched via queueMicrotask in DysonLinkDevice.
+ */
+async function flushCommands(): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
+}
+
 describe('ThermostatService', () => {
   let thermostatService: ThermostatService;
   let mockMqttClient: ReturnType<typeof createMockMqttClient>;
@@ -300,6 +310,7 @@ describe('ThermostatService', () => {
 
     it('should call setHeating(true) when set to HEAT (1)', async () => {
       await targetStateSetHandler(1);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -312,6 +323,7 @@ describe('ThermostatService', () => {
 
     it('should call setHeating(false) when set to OFF (0)', async () => {
       await targetStateSetHandler(0);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -402,6 +414,7 @@ describe('ThermostatService', () => {
 
     it('should call setTargetTemperature when set', async () => {
       await targetTempSetHandler(25);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -520,18 +533,22 @@ describe('ThermostatService', () => {
   });
 
   describe('error handling', () => {
-    it('should throw and log error when setHeating fails', async () => {
+    it('should emit commandError when setHeating MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-
-      await expect(targetStateSetHandler(1)).rejects.toThrow('MQTT error');
-      expect(mockLog.error).toHaveBeenCalled();
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+      await targetStateSetHandler(1);
+      await flushCommands();
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
     });
 
-    it('should throw and log error when setTargetTemperature fails', async () => {
+    it('should emit commandError when setTargetTemperature MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-
-      await expect(targetTempSetHandler(25)).rejects.toThrow('MQTT error');
-      expect(mockLog.error).toHaveBeenCalled();
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+      await targetTempSetHandler(25);
+      await flushCommands();
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
     });
   });
 

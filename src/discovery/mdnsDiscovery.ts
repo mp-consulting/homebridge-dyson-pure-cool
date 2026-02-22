@@ -8,7 +8,7 @@ import { Bonjour, type Browser, type Service } from 'bonjour-service';
 import { DYSON_MDNS_SERVICE } from '../config/index.js';
 
 /** Default discovery timeout in milliseconds */
-const DEFAULT_TIMEOUT = 10000;
+export const DEFAULT_DISCOVERY_TIMEOUT = 10000;
 
 /** Minimum timeout allowed */
 const MIN_TIMEOUT = 1000;
@@ -73,12 +73,13 @@ export class MdnsDiscovery {
    * @returns Map of device serial numbers to IP addresses
    */
   async discover(options: DiscoveryOptions = {}): Promise<Map<string, string>> {
-    const timeout = this.validateTimeout(options.timeout ?? DEFAULT_TIMEOUT);
+    const timeout = this.validateTimeout(options.timeout ?? DEFAULT_DISCOVERY_TIMEOUT);
     const maxDevices = options.maxDevices ?? 0;
 
     const devices = new Map<string, string>();
 
     return new Promise((resolve) => {
+      let resolved = false;
       this.bonjour = this.bonjourFactory();
 
       // Service type is 'dyson_mqtt' (without leading underscore for bonjour-service)
@@ -86,24 +87,30 @@ export class MdnsDiscovery {
 
       this.browser = this.bonjour.find({ type: serviceType });
 
+      // Set timeout to stop discovery (unref to avoid keeping the process alive)
+      const discoveryTimeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          this.cleanup();
+          resolve(devices);
+        }
+      }, timeout);
+      discoveryTimeout.unref();
+
       this.browser.on('up', (service: Service) => {
         const device = this.parseService(service);
         if (device) {
           devices.set(device.serial, device.ipAddress);
 
           // Stop early if we found enough devices
-          if (maxDevices > 0 && devices.size >= maxDevices) {
+          if (maxDevices > 0 && devices.size >= maxDevices && !resolved) {
+            resolved = true;
+            clearTimeout(discoveryTimeout);
             this.cleanup();
             resolve(devices);
           }
         }
       });
-
-      // Set timeout to stop discovery
-      setTimeout(() => {
-        this.cleanup();
-        resolve(devices);
-      }, timeout);
     });
   }
 
@@ -114,17 +121,28 @@ export class MdnsDiscovery {
    * @returns Array of discovered device details
    */
   async discoverDetailed(options: DiscoveryOptions = {}): Promise<DiscoveredDevice[]> {
-    const timeout = this.validateTimeout(options.timeout ?? DEFAULT_TIMEOUT);
+    const timeout = this.validateTimeout(options.timeout ?? DEFAULT_DISCOVERY_TIMEOUT);
     const maxDevices = options.maxDevices ?? 0;
 
     const devices: DiscoveredDevice[] = [];
 
     return new Promise((resolve) => {
+      let resolved = false;
       this.bonjour = this.bonjourFactory();
 
       const serviceType = DYSON_MDNS_SERVICE.replace('_', '').replace('._tcp', '');
 
       this.browser = this.bonjour.find({ type: serviceType });
+
+      // Set timeout to stop discovery (unref to avoid keeping the process alive)
+      const detailedTimeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          this.cleanup();
+          resolve(devices);
+        }
+      }, timeout);
+      detailedTimeout.unref();
 
       this.browser.on('up', (service: Service) => {
         const device = this.parseService(service);
@@ -135,18 +153,14 @@ export class MdnsDiscovery {
           }
 
           // Stop early if we found enough devices
-          if (maxDevices > 0 && devices.length >= maxDevices) {
+          if (maxDevices > 0 && devices.length >= maxDevices && !resolved) {
+            resolved = true;
+            clearTimeout(detailedTimeout);
             this.cleanup();
             resolve(devices);
           }
         }
       });
-
-      // Set timeout to stop discovery
-      setTimeout(() => {
-        this.cleanup();
-        resolve(devices);
-      }, timeout);
     });
   }
 

@@ -25,9 +25,11 @@
 | **Pure Cool Link** | TP02, DP01 | Fan, Air Quality, Temp, Humidity |
 | **Pure Cool** | TP04, TP06, TP07, DP04 | Fan, Air Quality, Temp, Humidity, Jet Focus |
 | **Pure Cool Formaldehyde** | TP09 | Fan, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
+| **Purifier Cool** | TP11 | Fan, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
 | **Pure Hot+Cool Link** | HP02 | Fan, Heating, Air Quality, Temp, Humidity, Jet Focus |
 | **Pure Hot+Cool** | HP04, HP06, HP07 | Fan, Heating, Air Quality, Temp, Humidity, Jet Focus |
 | **Pure Hot+Cool Formaldehyde** | HP09 | Fan, Heating, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
+| **Purifier Hot+Cool** | HP11 | Fan, Heating, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
 | **Purifier Humidify+Cool** | PH01, PH02, PH03 | Fan, Humidifier, Air Quality, Temp, Humidity, Jet Focus |
 | **Purifier Humidify+Cool Formaldehyde** | PH04 | Fan, Humidifier, Air Quality (incl. NO2), Temp, Humidity, Jet Focus |
 | **Purifier Big+Quiet** | BP02, BP03, BP04, BP06 | Fan, Air Quality (incl. NO2), Temp, Humidity |
@@ -93,7 +95,7 @@ If you prefer not to use your Dyson account, you can configure devices manually:
 |--------|------|---------|-------------|
 | `countryCode` | string | `US` | Account country code (US, GB, DE, etc.) |
 | `discoveryTimeout` | number | `30` | mDNS discovery timeout in seconds |
-| `pollInterval` | number | `60` | State polling interval in seconds |
+| `pollingInterval` | number | `60` | State polling interval in seconds (10-300) |
 
 #### Feature Toggles
 
@@ -107,7 +109,7 @@ If you prefer not to use your Dyson account, you can configure devices manually:
 | `enableJetFocus` | boolean | `true` | Show jet focus switch |
 | `enableHeater` | boolean | `true` | Show thermostat for HP models |
 | `enableHumidifier` | boolean | `true` | Show humidifier for PH models |
-| `enableFilter` | boolean | `true` | Show filter status |
+| `enableFilterStatus` | boolean | `false` | Show filter life remaining indicator |
 
 #### Per-Device Options
 
@@ -116,9 +118,8 @@ If you prefer not to use your Dyson account, you can configure devices manually:
 | `temperatureOffset` | number | `0` | Temperature calibration offset (°C) |
 | `humidityOffset` | number | `0` | Humidity calibration offset (%) |
 | `fullRangeHumidity` | boolean | `false` | Enable 0-100% humidity range (default: 30-70%) |
-| `enableAutoModeWhenActivating` | boolean | `false` | Auto-enable auto mode on power on |
-| `enableOscillationWhenActivating` | boolean | `false` | Auto-enable oscillation on power on |
-| `enableNightModeWhenActivating` | boolean | `false` | Auto-enable night mode on power on |
+| `heatingServiceType` | string | `thermostat` | Heating service type: `thermostat`, `heater-cooler`, or `both` |
+| `useFahrenheit` | boolean | `false` | Display temperature in Fahrenheit in logs |
 
 ## HomeKit Controls
 
@@ -198,7 +199,7 @@ To use the device as a fan without heating, simply turn off the heater and contr
 ### Sensors Not Updating
 
 1. Ensure continuous monitoring is enabled on the device
-2. Check `pollInterval` isn't set too high
+2. Check `pollingInterval` isn't set too high
 3. Some sensors take time to initialize after power-on
 
 ### Temperature/Humidity Readings Inaccurate

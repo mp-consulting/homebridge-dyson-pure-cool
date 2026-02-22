@@ -120,6 +120,16 @@ function createMockApi() {
   } as unknown as API;
 }
 
+/**
+ * Flush microtask command queue.
+ * Commands are batched via queueMicrotask in DysonLinkDevice.
+ */
+async function flushCommands(): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
+}
+
 describe('HumidifierControlService', () => {
   let humidifierService: HumidifierControlService;
   let mockMqttClient: ReturnType<typeof createMockMqttClient>;
@@ -311,6 +321,7 @@ describe('HumidifierControlService', () => {
 
     it('should call setHumidifier(true) when set to 1', async () => {
       await activeSetHandler(1);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -323,6 +334,7 @@ describe('HumidifierControlService', () => {
 
     it('should call setHumidifier(false) when set to 0', async () => {
       await activeSetHandler(0);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -371,6 +383,7 @@ describe('HumidifierControlService', () => {
 
     it('should call setHumidifierAuto() when set to HUMIDIFIER_OR_DEHUMIDIFIER (0)', async () => {
       await targetStateSetHandler(0);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -382,6 +395,7 @@ describe('HumidifierControlService', () => {
     it('should not send command when set to HUMIDIFIER (1)', async () => {
       mockMqttClient.publishCommand.mockClear();
       await targetStateSetHandler(1);
+      await flushCommands();
 
       // No command should be sent for manual mode
       expect(mockMqttClient.publishCommand).not.toHaveBeenCalled();
@@ -449,6 +463,7 @@ describe('HumidifierControlService', () => {
 
     it('should call setTargetHumidity when set', async () => {
       await targetHumiditySetHandler(55);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -606,25 +621,31 @@ describe('HumidifierControlService', () => {
   });
 
   describe('error handling', () => {
-    it('should throw and log error when setHumidifier fails', async () => {
+    it('should emit commandError when setHumidifier MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-
-      await expect(activeSetHandler(1)).rejects.toThrow('MQTT error');
-      expect(mockLog.error).toHaveBeenCalled();
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+      await activeSetHandler(1);
+      await flushCommands();
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
     });
 
-    it('should throw and log error when setTargetHumidity fails', async () => {
+    it('should emit commandError when setTargetHumidity MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-
-      await expect(targetHumiditySetHandler(50)).rejects.toThrow('MQTT error');
-      expect(mockLog.error).toHaveBeenCalled();
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+      await targetHumiditySetHandler(50);
+      await flushCommands();
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
     });
 
-    it('should throw and log error when setHumidifierAuto fails', async () => {
+    it('should emit commandError when setHumidifierAuto MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-
-      await expect(targetStateSetHandler(0)).rejects.toThrow('MQTT error');
-      expect(mockLog.error).toHaveBeenCalled();
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+      await targetStateSetHandler(0);
+      await flushCommands();
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
     });
   });
 });

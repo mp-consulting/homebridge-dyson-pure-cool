@@ -18,6 +18,7 @@ import type { DysonLinkDevice } from '../../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../../devices/types.js';
 import { MessageCodec } from '../../protocol/messageCodec.js';
 
+
 /**
  * Configuration for FanService
  */
@@ -77,18 +78,19 @@ export class FanService {
   private readonly device: DysonLinkDevice;
   private readonly log: Logging;
   private readonly api: API;
-  private readonly codec: MessageCodec;
+  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   /** Timer for debouncing speed changes */
   private speedDebounceTimer?: ReturnType<typeof setTimeout>;
   /** Pending speed value to be set after debounce */
   private pendingSpeed?: number;
+  /** Whether this service has been destroyed */
+  private destroyed = false;
 
   constructor(config: FanServiceConfig) {
     this.device = config.device;
     this.log = config.log;
     this.api = config.api;
-    this.codec = new MessageCodec();
 
     const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
@@ -132,7 +134,8 @@ export class FanService {
       .onSet(this.handleSwingModeSet.bind(this));
 
     // Subscribe to device state changes
-    this.device.on('stateChange', this.handleStateChange.bind(this));
+    this.boundHandleStateChange = this.handleStateChange.bind(this);
+    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('FanService (AirPurifier) initialized for', config.accessory.displayName);
   }
@@ -142,6 +145,17 @@ export class FanService {
    */
   getService(): Service {
     return this.service;
+  }
+
+  /**
+   * Clean up event listeners and timers
+   */
+  destroy(): void {
+    this.destroyed = true;
+    this.device.off('stateChange', this.boundHandleStateChange);
+    if (this.speedDebounceTimer) {
+      clearTimeout(this.speedDebounceTimer);
+    }
   }
 
   /**
@@ -181,10 +195,10 @@ export class FanService {
     let currentState: number;
     if (!state.isOn) {
       currentState = AirPurifierState.INACTIVE;
-    } else if (state.fanSpeed === 0 || state.autoMode) {
-      // In auto mode or speed 0, consider it idle/monitoring
+    } else if (state.fanSpeed === 0) {
       currentState = AirPurifierState.IDLE;
     } else {
+      // Device is on and running (whether manual or auto mode)
       currentState = AirPurifierState.PURIFYING_AIR;
     }
 
@@ -225,7 +239,7 @@ export class FanService {
    */
   private handleSpeedGet(): CharacteristicValue {
     const state = this.device.getState();
-    const percent = this.codec.speedToPercent(state.fanSpeed);
+    const percent = MessageCodec.speedToPercent(state.fanSpeed);
     this.log.debug('Get RotationSpeed ->', percent);
     return percent;
   }
@@ -254,6 +268,10 @@ export class FanService {
    * Apply the pending speed value after debounce delay
    */
   private async applyPendingSpeed(): Promise<void> {
+    if (this.destroyed) {
+      return;
+    }
+
     const percent = this.pendingSpeed;
     if (percent === undefined) {
       return;
@@ -268,7 +286,7 @@ export class FanService {
         await this.device.setFanPower(false);
       } else {
         // Convert percentage to speed (1-10)
-        const speed = this.codec.percentToSpeed(percent);
+        const speed = MessageCodec.percentToSpeed(percent);
         await this.device.setFanSpeed(speed);
 
         // Also ensure fan is on when setting speed
@@ -328,7 +346,7 @@ export class FanService {
     let currentState: number;
     if (!state.isOn) {
       currentState = AirPurifierState.INACTIVE;
-    } else if (state.fanSpeed === 0 || state.autoMode) {
+    } else if (state.fanSpeed === 0) {
       currentState = AirPurifierState.IDLE;
     } else {
       currentState = AirPurifierState.PURIFYING_AIR;
@@ -345,7 +363,7 @@ export class FanService {
     );
 
     // Update RotationSpeed
-    const percent = this.codec.speedToPercent(state.fanSpeed);
+    const percent = MessageCodec.speedToPercent(state.fanSpeed);
     this.service.updateCharacteristic(
       Characteristic.RotationSpeed,
       percent,

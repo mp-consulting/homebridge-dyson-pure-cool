@@ -104,6 +104,16 @@ function createMockApi() {
   } as unknown as API;
 }
 
+/**
+ * Flush microtask command queue.
+ * Commands are batched via queueMicrotask in DysonLinkDevice.
+ */
+async function flushCommands(): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
+}
+
 describe('NightModeService', () => {
   let nightModeService: NightModeService;
   let mockMqttClient: ReturnType<typeof createMockMqttClient>;
@@ -214,6 +224,7 @@ describe('NightModeService', () => {
 
     it('should call setNightMode(true) when set to true', async () => {
       await onSetHandler(true);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -224,6 +235,7 @@ describe('NightModeService', () => {
 
     it('should call setNightMode(false) when set to false', async () => {
       await onSetHandler(false);
+      await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -293,11 +305,16 @@ describe('NightModeService', () => {
   });
 
   describe('error handling', () => {
-    it('should throw and log error when setNightMode fails', async () => {
+    it('should emit commandError when setNightMode MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      await expect(onSetHandler(true)).rejects.toThrow('MQTT error');
-      expect(mockLog.error).toHaveBeenCalled();
+      const errorHandler = jest.fn();
+      device.on('commandError', errorHandler);
+
+      await onSetHandler(true);
+      await flushCommands();
+
+      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
     });
   });
 });

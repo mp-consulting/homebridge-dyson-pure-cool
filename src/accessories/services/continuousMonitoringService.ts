@@ -39,6 +39,7 @@ export class ContinuousMonitoringService {
   private readonly device: DysonLinkDevice;
   private readonly log: Logging;
   private readonly api: API;
+  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   constructor(config: ContinuousMonitoringServiceConfig) {
     this.device = config.device;
@@ -64,11 +65,12 @@ export class ContinuousMonitoringService {
 
     // Link to primary service if provided
     if (config.primaryService) {
-      this.service.addLinkedService(config.primaryService);
+      config.primaryService.addLinkedService(this.service);
     }
 
     // Subscribe to device state changes
-    this.device.on('stateChange', this.handleStateChange.bind(this));
+    this.boundHandleStateChange = this.handleStateChange.bind(this);
+    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('ContinuousMonitoringService initialized for', config.accessory.displayName);
   }
@@ -78,6 +80,13 @@ export class ContinuousMonitoringService {
    */
   getService(): Service {
     return this.service;
+  }
+
+  /**
+   * Clean up event listeners
+   */
+  destroy(): void {
+    this.device.off('stateChange', this.boundHandleStateChange);
   }
 
   /**

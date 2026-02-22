@@ -429,4 +429,149 @@ describe('DysonLinkAccessory', () => {
       );
     });
   });
+
+  describe('options propagation to setupServices', () => {
+    it('should disable temperature sensor when isTemperatureIgnored is true', () => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { isTemperatureIgnored: true },
+      });
+
+      // TP04 (438) normally has temperature sensor, but it should be disabled
+      expect(accessory.getTemperatureService()).toBeUndefined();
+    });
+
+    it('should disable humidity sensor when isHumidityIgnored is true', () => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { isHumidityIgnored: true },
+      });
+
+      expect(accessory.getHumidityService()).toBeUndefined();
+    });
+
+    it('should disable night mode when isNightModeEnabled is false', () => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { isNightModeEnabled: false },
+      });
+
+      expect(accessory.getNightModeService()).toBeUndefined();
+    });
+
+    it('should enable continuous monitoring when isContinuousMonitoringEnabled is true', () => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { isContinuousMonitoringEnabled: true },
+      });
+
+      expect(accessory.getContinuousMonitoringService()).toBeDefined();
+    });
+
+    it('should disable jet focus when isJetFocusEnabled is false', () => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { isJetFocusEnabled: false },
+      });
+
+      expect(accessory.getJetFocusService()).toBeUndefined();
+    });
+
+    it('should create heater-cooler service when heatingServiceType is heater-cooler', () => {
+      // Use HP04 (527) which supports heating
+      const hp04Device = new DysonLinkDevice(
+        { ...defaultDeviceInfo, productType: '527' },
+        mockMqttClientFactory,
+      );
+
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device: hp04Device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { heatingServiceType: 'heater-cooler' },
+      });
+
+      expect(accessory.getHeaterCoolerService()).toBeDefined();
+      expect(accessory.getThermostatService()).toBeUndefined();
+    });
+
+    it('should disable heating when isHeatingDisabled is true', () => {
+      const hp04Device = new DysonLinkDevice(
+        { ...defaultDeviceInfo, productType: '527' },
+        mockMqttClientFactory,
+      );
+
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device: hp04Device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { isHeatingDisabled: true },
+      });
+
+      expect(accessory.getThermostatService()).toBeUndefined();
+      expect(accessory.getHeaterCoolerService()).toBeUndefined();
+    });
+
+    it('should create both heating services when heatingServiceType is both', () => {
+      const hp04Device = new DysonLinkDevice(
+        { ...defaultDeviceInfo, productType: '527' },
+        mockMqttClientFactory,
+      );
+
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device: hp04Device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { heatingServiceType: 'both' },
+      });
+
+      expect(accessory.getThermostatService()).toBeDefined();
+      expect(accessory.getHeaterCoolerService()).toBeDefined();
+    });
+
+    it('should pass options correctly when set before super() call', () => {
+      // This test verifies the fix for the constructor ordering bug.
+      // Previously, options were set AFTER super() which meant setupServices()
+      // would see an empty options object.
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: {
+          isTemperatureIgnored: true,
+          isHumidityIgnored: true,
+          isNightModeEnabled: false,
+          isJetFocusEnabled: false,
+        },
+      });
+
+      // All of these should be disabled because options were passed
+      expect(accessory.getTemperatureService()).toBeUndefined();
+      expect(accessory.getHumidityService()).toBeUndefined();
+      expect(accessory.getNightModeService()).toBeUndefined();
+      expect(accessory.getJetFocusService()).toBeUndefined();
+
+      // Fan service should always be present
+      expect(accessory.getFanService()).toBeDefined();
+    });
+  });
 });

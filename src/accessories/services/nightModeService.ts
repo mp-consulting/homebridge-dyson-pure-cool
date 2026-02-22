@@ -39,6 +39,7 @@ export class NightModeService {
   private readonly device: DysonLinkDevice;
   private readonly log: Logging;
   private readonly api: API;
+  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   constructor(config: NightModeServiceConfig) {
     this.device = config.device;
@@ -64,11 +65,12 @@ export class NightModeService {
 
     // Link to primary service if provided
     if (config.primaryService) {
-      this.service.addLinkedService(config.primaryService);
+      config.primaryService.addLinkedService(this.service);
     }
 
     // Subscribe to device state changes
-    this.device.on('stateChange', this.handleStateChange.bind(this));
+    this.boundHandleStateChange = this.handleStateChange.bind(this);
+    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('NightModeService initialized for', config.accessory.displayName);
   }
@@ -81,13 +83,21 @@ export class NightModeService {
   }
 
   /**
+   * Clean up event listeners
+   */
+  destroy(): void {
+    this.device.off('stateChange', this.boundHandleStateChange);
+  }
+
+  /**
    * Handle On GET request
    * Returns true if night mode is enabled
    */
   private handleOnGet(): CharacteristicValue {
     const state = this.device.getState();
-    this.log.debug('Get Night Mode ->', state.nightMode);
-    return state.nightMode;
+    const nightMode = state.nightMode ?? false;
+    this.log.debug('Get Night Mode ->', nightMode);
+    return nightMode;
   }
 
   /**
@@ -114,7 +124,7 @@ export class NightModeService {
     this.log.debug('Night mode state changed ->', state.nightMode);
 
     const Characteristic = this.api.hap.Characteristic;
-    this.service.updateCharacteristic(Characteristic.On, state.nightMode);
+    this.service.updateCharacteristic(Characteristic.On, state.nightMode ?? false);
   }
 
   /**

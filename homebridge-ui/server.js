@@ -13,7 +13,6 @@
 
 import { HomebridgePluginUiServer, RequestError } from '@homebridge/plugin-ui-utils';
 import { createDecipheriv } from 'node:crypto';
-import { execSync } from 'node:child_process';
 
 import { getProductTypeDisplayNames, getDeviceFeatures, getHeatingDevices } from '../dist/config/index.js';
 import { DysonMqttClient } from '../dist/protocol/mqttClient.js';
@@ -47,94 +46,72 @@ const DEFAULT_HEADERS = {
 };
 
 // =============================================================================
-// HTTP Client (curl-based)
+// HTTP Client (native fetch)
 // =============================================================================
 
-function dysonRequest(endpoint, options = {}) {
+async function dysonRequest(endpoint, options = {}) {
   const url = `${DYSON_API_BASE_URL}${endpoint}`;
   const method = options.method || 'GET';
 
   console.log(`[DysonUI] ${method} ${endpoint}`);
 
-  const curlArgs = buildCurlCommand(url, method, options);
-  const shellCmd = escapeForShell(curlArgs);
-
-  return executeCurl(shellCmd, options.body);
-}
-
-function buildCurlCommand(url, method, options) {
-  const args = ['curl', '-s', '-X', method, '-H', 'Content-Type: application/json'];
-
-  // Add default headers
-  for (const [key, value] of Object.entries(DEFAULT_HEADERS)) {
-    args.push('-H', `${key}: ${value}`);
-  }
-
-  // Add custom headers
-  if (options.headers) {
-    for (const [key, value] of Object.entries(options.headers)) {
-      args.push('-H', `${key}: ${value}`);
-    }
-  }
-
-  // Add body
-  if (options.body) {
-    args.push('-d', options.body);
-  }
-
-  args.push(url);
-  return args;
-}
-
-function escapeForShell(args) {
-  return args.map((arg) => {
-    if (arg.startsWith('-')) return arg;
-    return `'${arg.replace(/'/g, "'\\''")}'`;
-  }).join(' ');
-}
-
-function executeCurl(shellCmd, body) {
-  if (body) {
-    console.log(`[DysonUI] Body: ${body}`);
-  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const output = execSync(shellCmd, {
-      encoding: 'utf8',
-      timeout: REQUEST_TIMEOUT,
-      maxBuffer: 1024 * 1024,
-    });
+    const headers = {
+      'Content-Type': 'application/json',
+      ...DEFAULT_HEADERS,
+      ...(options.headers || {}),
+    };
 
-    console.log(`[DysonUI] Response: ${output.substring(0, 200)}`);
+    const fetchOptions = {
+      method,
+      headers,
+      signal: controller.signal,
+    };
 
-    if (!output?.trim()) return null;
+    if (options.body) {
+      fetchOptions.body = options.body;
+    }
 
-    const data = JSON.parse(output);
+    const response = await fetch(url, fetchOptions);
+
+    clearTimeout(timeoutId);
+
+    const text = await response.text();
+    console.log(`[DysonUI] Response status: ${response.status}`);
+
+    if (!text?.trim()) return null;
+
+    const data = JSON.parse(text);
 
     if (data.Message?.includes('Unable to authenticate')) {
       throw new RequestError(data.Message, { status: 401 });
     }
 
+    if (!response.ok) {
+      throw new RequestError(data.Message || `HTTP ${response.status}`, { status: response.status });
+    }
+
     return data;
   } catch (error) {
-    handleCurlError(error);
+    clearTimeout(timeoutId);
+
+    if (error instanceof RequestError) throw error;
+
+    if (error.name === 'AbortError') {
+      throw new RequestError('Request timed out', { status: 408 });
+    }
+
+    if (error.message?.includes('JSON')) {
+      console.error('[DysonUI] JSON parse error:', error.message);
+      throw new RequestError('Invalid response from Dyson API', { status: 500 });
+    }
+
+    console.error('[DysonUI] Fetch error:', error.message);
+    throw new RequestError(`Network error: ${error.message}`, { status: 500 });
   }
-}
-
-function handleCurlError(error) {
-  if (error instanceof RequestError) throw error;
-
-  if (error.message?.includes('JSON')) {
-    console.error('[DysonUI] JSON parse error:', error.message);
-    throw new RequestError('Invalid response from Dyson API', { status: 500 });
-  }
-
-  if (error.killed) {
-    throw new RequestError('Request timed out', { status: 408 });
-  }
-
-  console.error('[DysonUI] Curl error:', error.message);
-  throw new RequestError(`Network error: ${error.message}`, { status: 500 });
 }
 
 // =============================================================================
@@ -152,7 +129,8 @@ function decryptCredentials(encryptedCredentials) {
 
     const data = JSON.parse(decrypted.toString('utf8'));
     return data.apPasswordHash || '';
-  } catch {
+  } catch (error) {
+    console.warn('[DysonUI] Failed to decrypt device credentials:', error?.message || 'unknown error');
     return '';
   }
 }
@@ -169,7 +147,19 @@ async function handleAuthenticate(ctx, payload) {
   }
 
   ctx.pendingAuth = { email, password, countryCode };
-  console.log(`[DysonUI] Auth: ${email}, country: ${countryCode}`);
+
+  // Clear any existing timeout and set a new one to avoid holding credentials in memory
+  if (ctx._pendingAuthTimer) clearTimeout(ctx._pendingAuthTimer);
+  ctx._pendingAuthTimer = setTimeout(() => {
+    if (ctx.pendingAuth) {
+      console.log('[DysonUI] Clearing stale pending auth (timeout)');
+      ctx.pendingAuth = null;
+      ctx.challengeId = null;
+    }
+    ctx._pendingAuthTimer = null;
+  }, PENDING_AUTH_TIMEOUT);
+
+  console.log(`[DysonUI] Auth: country: ${countryCode}`);
 
   try {
     // Step 1: Check user status
@@ -236,6 +226,7 @@ async function handleVerifyOtp(ctx, payload) {
     console.log('[DysonUI] Verify success');
     ctx.pendingAuth = null;
     ctx.challengeId = null;
+    if (ctx._pendingAuthTimer) { clearTimeout(ctx._pendingAuthTimer); ctx._pendingAuthTimer = null; }
 
     return { success: true, token: response.token };
   } catch (error) {
@@ -247,6 +238,7 @@ async function handleVerifyOtp(ctx, payload) {
 
     ctx.pendingAuth = null;
     ctx.challengeId = null;
+    if (ctx._pendingAuthTimer) { clearTimeout(ctx._pendingAuthTimer); ctx._pendingAuthTimer = null; }
     throw error;
   }
 }
@@ -270,16 +262,28 @@ async function handleGetDevices(payload) {
     console.log(`[DysonUI] Found ${manifest?.length || 0} devices`);
 
     const devices = (manifest || []).map((d) => {
-      const features = getDeviceFeatures(d.ProductType);
+      // Support both v2 field names (Serial, ProductType, etc.) and
+      // v3 field names (serialNumber, type, etc.) for API compatibility
+      const serial = d.Serial || d.serialNumber;
+      const productType = d.ProductType || d.type;
+      const name = d.Name || d.name || d.productName;
+      const version = d.Version || '';
+      const autoUpdate = d.AutoUpdate ?? d.connectedConfiguration?.firmware?.autoUpdate ?? false;
+      const newVersionAvailable = d.NewVersionAvailable ?? false;
+
+      // Credentials: v2 uses LocalCredentials, v3 uses connectedConfiguration.mqtt.localBrokerCredentials
+      const rawCredentials = d.LocalCredentials || d.connectedConfiguration?.mqtt?.localBrokerCredentials || '';
+
+      const features = getDeviceFeatures(productType);
       return {
-        serial: d.Serial,
-        name: d.Name,
-        productType: d.ProductType,
-        productName: productTypes[d.ProductType] || `Unknown (${d.ProductType})`,
-        version: d.Version,
-        localCredentials: decryptCredentials(d.LocalCredentials),
-        autoUpdate: d.AutoUpdate,
-        newVersionAvailable: d.NewVersionAvailable,
+        serial,
+        name,
+        productType,
+        productName: productTypes[productType] || `Unknown (${productType})`,
+        version,
+        localCredentials: rawCredentials ? decryptCredentials(rawCredentials) : '',
+        autoUpdate,
+        newVersionAvailable,
         // Expose device capabilities from catalog
         hasHeating: features.heating,
         hasHumidifier: features.humidifier,
@@ -328,7 +332,7 @@ const MDNS_TIMEOUT = 5000;
 async function getDeviceIp(ctx, serial, configIp) {
   // Try config IP first if provided
   if (configIp) {
-    console.log(`[DysonUI] Using cached IP ${configIp} for ${serial}`);
+    console.log(`[DysonUI] Using cached IP for ${serial}`);
     return { ip: configIp, discovered: false };
   }
 
@@ -371,7 +375,7 @@ async function handleGetDeviceState(ctx, payload) {
     throw new RequestError(`Device ${serial} not found on network`, { status: 404 });
   }
 
-  console.log(`[DysonUI] Connecting to ${serial} at ${ip}`);
+  console.log(`[DysonUI] Connecting to ${serial}`);
 
   const client = new DysonMqttClient({
     host: ip,
@@ -413,7 +417,6 @@ async function handleGetDeviceState(ctx, payload) {
     return {
       success: true,
       continuousMonitoring,
-      rawState: state['product-state'],
       discoveredIp: discovered ? ip : undefined,
     };
   } catch (error) {
@@ -424,9 +427,9 @@ async function handleGetDeviceState(ctx, payload) {
       // Ignore disconnect errors
     }
 
-    // If connection failed with cached IP, try mDNS discovery
-    if (ipAddress && !discovered) {
-      console.log(`[DysonUI] Cached IP ${ipAddress} failed, trying mDNS discovery...`);
+    // If connection failed with cached IP, try mDNS discovery (but only once)
+    if (ipAddress && !discovered && !payload._retried) {
+      console.log(`[DysonUI] Cached IP failed, trying mDNS discovery...`);
       const freshResult = await getDeviceIp(ctx, serial, null);
       if (freshResult.ip && freshResult.ip !== ipAddress) {
         // Retry with freshly discovered IP
@@ -501,9 +504,9 @@ async function handleSetContinuousMonitoring(ctx, payload) {
       // Ignore disconnect errors
     }
 
-    // If connection failed with cached IP, try mDNS discovery
-    if (ipAddress && !discovered) {
-      console.log(`[DysonUI] Cached IP ${ipAddress} failed, trying mDNS discovery...`);
+    // If connection failed with cached IP, try mDNS discovery (but only once)
+    if (ipAddress && !discovered && !payload._retried) {
+      console.log(`[DysonUI] Cached IP failed, trying mDNS discovery...`);
       const freshResult = await getDeviceIp(ctx, serial, null);
       if (freshResult.ip && freshResult.ip !== ipAddress) {
         // Retry with freshly discovered IP
@@ -519,12 +522,16 @@ async function handleSetContinuousMonitoring(ctx, payload) {
 // Server
 // =============================================================================
 
+/** Timeout to clear pending auth (10 minutes) */
+const PENDING_AUTH_TIMEOUT = 10 * 60 * 1000;
+
 class DysonUiServer extends HomebridgePluginUiServer {
   constructor() {
     super();
 
     this.challengeId = null;
     this.pendingAuth = null;
+    this._pendingAuthTimer = null;
 
     this.onRequest('/authenticate', (p) => handleAuthenticate(this, p));
     this.onRequest('/verify-otp', (p) => handleVerifyOtp(this, p));

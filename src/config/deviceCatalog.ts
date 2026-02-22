@@ -13,7 +13,7 @@ import { DEFAULT_FEATURES } from '../devices/types.js';
  */
 export type DeviceSeries =
   | 'pure-cool-link'      // TP02, DP01 (older Link series)
-  | 'pure-cool'           // TP04, TP07, TP09, TP11, DP04
+  | 'pure-cool'           // TP04, TP06, TP07, TP09, TP11, DP04
   | 'hot-cool-link'       // HP02 (older Link series)
   | 'hot-cool'            // HP04, HP06, HP07, HP09, HP11
   | 'humidify-cool'       // PH01, PH02, PH03, PH04
@@ -187,7 +187,7 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
   {
     productType: '438',
     modelName: 'Dyson Pure Cool Tower',
-    modelCode: 'TP04',
+    modelCode: 'TP04', // Also covers TP06 (Cryptomic) which shares the same product type
     series: 'pure-cool',
     features: FEATURES_PURE_COOL_JET,
     formaldehyde: false,
