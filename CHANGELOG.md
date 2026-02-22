@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix device not turning off - command batching could overwrite the OFF command with a concurrent mode change (e.g. AUTO), preventing the device from turning off
+- Restore TP06 (Pure Cool Cryptomic) to supported devices - was incorrectly removed during earlier refactoring (shares product type `438` with TP04)
 - Fix stale accessory handler leak when device IP is rediscovered - old handler is now destroyed before recreating
 - Fix linked service direction in HomeKit - secondary services (sensors, switches) are now correctly linked to the primary Air Purifier service
 - Fix duplicate connect event emission causing double state sync on reconnection

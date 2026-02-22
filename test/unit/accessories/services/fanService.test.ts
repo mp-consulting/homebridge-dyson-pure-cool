@@ -610,17 +610,10 @@ describe('FanService', () => {
   });
 
   describe('error handling', () => {
-    it('should emit commandError when setFanPower MQTT publish fails', async () => {
+    it('should throw when setFanPower(false) MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      const errorHandler = jest.fn();
-      device.on('commandError', errorHandler);
-
-      await activeSetHandler(0);
-      await flushCommands();
-
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
-      expect((errorHandler.mock.calls[0][0] as Error).message).toBe('MQTT error');
+      await expect(activeSetHandler(0)).rejects.toThrow('MQTT error');
     });
 
     it('should emit commandError when setFanSpeed MQTT publish fails', async () => {

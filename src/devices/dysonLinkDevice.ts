@@ -42,6 +42,9 @@ export class DysonLinkDevice extends DysonDevice {
   /** Whether a command flush is scheduled */
   private commandFlushScheduled = false;
 
+  /** Whether a power-off is in progress (prevents concurrent commands from overriding OFF) */
+  private turningOff = false;
+
   /**
    * Create a new DysonLinkDevice
    *
@@ -108,6 +111,7 @@ export class DysonLinkDevice extends DysonDevice {
    */
   async setFanPower(on: boolean): Promise<void> {
     if (on) {
+      this.turningOff = false;
       // If already on, skip to avoid overriding mode changes
       // (HomeKit often sends Active=true along with mode changes)
       if (this.state.isOn) {
@@ -130,10 +134,20 @@ export class DysonLinkDevice extends DysonDevice {
         }
       }
     } else {
-      if (this.isLinkSeries) {
-        this.queueCommand({ fpwr: PROTOCOL.OFF });
-      } else {
-        this.queueCommand({ fmod: PROTOCOL.OFF });
+      // Power off: send directly to prevent concurrent mode changes
+      // (e.g. TargetAirPurifierState) from overwriting the OFF command
+      // via command batching. The turningOff flag prevents other methods
+      // called in the same tick from queuing commands that override OFF.
+      this.turningOff = true;
+      this.pendingCommandFields = {};
+      try {
+        if (this.isLinkSeries) {
+          await this.sendCommand({ fpwr: PROTOCOL.OFF });
+        } else {
+          await this.sendCommand({ fmod: PROTOCOL.OFF });
+        }
+      } finally {
+        this.turningOff = false;
       }
     }
   }
@@ -144,6 +158,9 @@ export class DysonLinkDevice extends DysonDevice {
    * @param speed - Fan speed (1-10) or -1 for auto mode
    */
   async setFanSpeed(speed: number): Promise<void> {
+    if (this.turningOff) {
+      return;
+    }
     if (this.isLinkSeries) {
       if (speed < 0) {
         this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
@@ -188,6 +205,9 @@ export class DysonLinkDevice extends DysonDevice {
    * Set auto mode on or off
    */
   async setAutoMode(on: boolean): Promise<void> {
+    if (this.turningOff) {
+      return;
+    }
     if (this.isLinkSeries) {
       if (on) {
         this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
