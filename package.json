@@ -16,8 +16,8 @@
     "url": "https://github.com/mp-consulting/homebridge-dyson-pure-cool/issues"
   },
   "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/mp-consulting"
+    "type": "paypal",
+    "url": "https://paypal.me/mickaelpalma"
   },
   "keywords": [
     "homebridge-plugin",
