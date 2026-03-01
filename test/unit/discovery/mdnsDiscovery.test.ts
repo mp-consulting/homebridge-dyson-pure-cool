@@ -2,7 +2,7 @@
  * MdnsDiscovery Unit Tests
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi } from 'vitest';
 
 import { MdnsDiscovery } from '../../../src/discovery/mdnsDiscovery.js';
 import type { BonjourFactory } from '../../../src/discovery/mdnsDiscovery.js';
@@ -12,19 +12,19 @@ function createMockBonjour() {
   const eventHandlers: Map<string, ((service: unknown) => void)[]> = new Map();
 
   const mockBrowser = {
-    on: jest.fn((event: string, handler: (service: unknown) => void) => {
+    on: vi.fn((event: string, handler: (service: unknown) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockBrowser;
     }),
-    stop: jest.fn(),
+    stop: vi.fn(),
   };
 
   const mockBonjour = {
-    find: jest.fn(() => mockBrowser),
-    destroy: jest.fn(),
+    find: vi.fn(() => mockBrowser),
+    destroy: vi.fn(),
     // Helper to emit events for testing
     _emitService: (service: unknown) => {
       const handlers = eventHandlers.get('up') || [];
@@ -42,14 +42,14 @@ describe('MdnsDiscovery', () => {
   let mockBonjourFactory: BonjourFactory;
 
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     mockBonjour = createMockBonjour();
-    mockBonjourFactory = jest.fn(() => mockBonjour) as unknown as BonjourFactory;
+    mockBonjourFactory = vi.fn(() => mockBonjour) as unknown as BonjourFactory;
     discovery = new MdnsDiscovery(mockBonjourFactory);
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
     discovery.stop();
   });
 
@@ -69,7 +69,7 @@ describe('MdnsDiscovery', () => {
       });
 
       // Fast-forward to timeout
-      jest.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(5000);
 
       const devices = await discoverPromise;
 
@@ -97,7 +97,7 @@ describe('MdnsDiscovery', () => {
         addresses: ['192.168.1.101'],
       });
 
-      jest.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(5000);
 
       const devices = await discoverPromise;
 
@@ -109,7 +109,7 @@ describe('MdnsDiscovery', () => {
     it('should return empty map when no devices found', async () => {
       const discoverPromise = discovery.discover({ timeout: 1000 });
 
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       const devices = await discoverPromise;
 
@@ -121,7 +121,7 @@ describe('MdnsDiscovery', () => {
       const discoverPromise = discovery.discover();
 
       // Should not resolve before 10 seconds
-      jest.advanceTimersByTime(9000);
+      vi.advanceTimersByTime(9000);
 
       // Promise should still be pending - emit a device
       await Promise.resolve();
@@ -133,7 +133,7 @@ describe('MdnsDiscovery', () => {
       });
 
       // Now advance past default timeout
-      jest.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(2000);
 
       const devices = await discoverPromise;
       expect(devices.size).toBe(1);
@@ -163,7 +163,7 @@ describe('MdnsDiscovery', () => {
       const discoverPromise = discovery.discover({ timeout: 100 }); // Below minimum
 
       // Should use minimum of 1000ms
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       const devices = await discoverPromise;
       expect(devices.size).toBe(0);
@@ -173,7 +173,7 @@ describe('MdnsDiscovery', () => {
       const discoverPromise = discovery.discover({ timeout: 120000 }); // Above maximum
 
       // Should use maximum of 60000ms
-      jest.advanceTimersByTime(60000);
+      vi.advanceTimersByTime(60000);
 
       const devices = await discoverPromise;
       expect(devices.size).toBe(0);
@@ -191,7 +191,7 @@ describe('MdnsDiscovery', () => {
         addresses: ['fe80::1', '192.168.1.100', '::1'],
       });
 
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       const devices = await discoverPromise;
 
@@ -217,7 +217,7 @@ describe('MdnsDiscovery', () => {
         addresses: ['192.168.1.101'],
       });
 
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       const devices = await discoverPromise;
 
@@ -238,7 +238,7 @@ describe('MdnsDiscovery', () => {
         addresses: [],
       });
 
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       const devices = await discoverPromise;
 
@@ -258,7 +258,7 @@ describe('MdnsDiscovery', () => {
         referer: { address: '192.168.1.100' },
       });
 
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       const devices = await discoverPromise;
 
@@ -280,7 +280,7 @@ describe('MdnsDiscovery', () => {
         addresses: ['192.168.1.100'],
       });
 
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       const devices = await discoverPromise;
 
@@ -313,7 +313,7 @@ describe('MdnsDiscovery', () => {
         addresses: ['192.168.1.100'],
       });
 
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       const devices = await discoverPromise;
 
@@ -361,7 +361,7 @@ describe('MdnsDiscovery', () => {
       for (const testCase of testCases) {
         // Create fresh instance for each test
         const freshMockBonjour = createMockBonjour();
-        const freshFactory = jest.fn(() => freshMockBonjour) as unknown as BonjourFactory;
+        const freshFactory = vi.fn(() => freshMockBonjour) as unknown as BonjourFactory;
         const freshDiscovery = new MdnsDiscovery(freshFactory);
 
         const discoverPromise = freshDiscovery.discover({ timeout: 1000 });
@@ -375,7 +375,7 @@ describe('MdnsDiscovery', () => {
           addresses: ['192.168.1.100'],
         });
 
-        jest.advanceTimersByTime(1000);
+        vi.advanceTimersByTime(1000);
 
         const devices = await discoverPromise;
 

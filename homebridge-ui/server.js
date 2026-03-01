@@ -82,7 +82,9 @@ async function dysonRequest(endpoint, options = {}) {
     const text = await response.text();
     console.log(`[DysonUI] Response status: ${response.status}`);
 
-    if (!text?.trim()) return null;
+    if (!text?.trim()) {
+      return null;
+    }
 
     const data = JSON.parse(text);
 
@@ -98,7 +100,9 @@ async function dysonRequest(endpoint, options = {}) {
   } catch (error) {
     clearTimeout(timeoutId);
 
-    if (error instanceof RequestError) throw error;
+    if (error instanceof RequestError) {
+      throw error;
+    }
 
     if (error.name === 'AbortError') {
       throw new RequestError('Request timed out', { status: 408 });
@@ -149,7 +153,9 @@ async function handleAuthenticate(ctx, payload) {
   ctx.pendingAuth = { email, password, countryCode };
 
   // Clear any existing timeout and set a new one to avoid holding credentials in memory
-  if (ctx._pendingAuthTimer) clearTimeout(ctx._pendingAuthTimer);
+  if (ctx._pendingAuthTimer) {
+    clearTimeout(ctx._pendingAuthTimer);
+  }
   ctx._pendingAuthTimer = setTimeout(() => {
     if (ctx.pendingAuth) {
       console.log('[DysonUI] Clearing stale pending auth (timeout)');
@@ -197,7 +203,9 @@ async function handleAuthenticate(ctx, payload) {
     throw new RequestError('Unexpected response from Dyson', { status: 500 });
   } catch (error) {
     console.error('[DysonUI] Auth error:', error.message);
-    if (!(error instanceof RequestError)) ctx.pendingAuth = null;
+    if (!(error instanceof RequestError)) {
+      ctx.pendingAuth = null;
+    }
     throw error;
   }
 }
@@ -226,7 +234,10 @@ async function handleVerifyOtp(ctx, payload) {
     console.log('[DysonUI] Verify success');
     ctx.pendingAuth = null;
     ctx.challengeId = null;
-    if (ctx._pendingAuthTimer) { clearTimeout(ctx._pendingAuthTimer); ctx._pendingAuthTimer = null; }
+    if (ctx._pendingAuthTimer) {
+      clearTimeout(ctx._pendingAuthTimer);
+      ctx._pendingAuthTimer = null;
+    }
 
     return { success: true, token: response.token };
   } catch (error) {
@@ -238,7 +249,10 @@ async function handleVerifyOtp(ctx, payload) {
 
     ctx.pendingAuth = null;
     ctx.challengeId = null;
-    if (ctx._pendingAuthTimer) { clearTimeout(ctx._pendingAuthTimer); ctx._pendingAuthTimer = null; }
+    if (ctx._pendingAuthTimer) {
+      clearTimeout(ctx._pendingAuthTimer);
+      ctx._pendingAuthTimer = null;
+    }
     throw error;
   }
 }
@@ -368,7 +382,7 @@ async function handleGetDeviceState(ctx, payload) {
   }
 
   // Get device IP - use config IP first, fall back to mDNS
-  let { ip, discovered } = await getDeviceIp(ctx, serial, ipAddress);
+  const { ip, discovered } = await getDeviceIp(ctx, serial, ipAddress);
 
   // If config IP fails, try mDNS discovery
   if (!ip) {
@@ -429,7 +443,7 @@ async function handleGetDeviceState(ctx, payload) {
 
     // If connection failed with cached IP, try mDNS discovery (but only once)
     if (ipAddress && !discovered && !payload._retried) {
-      console.log(`[DysonUI] Cached IP failed, trying mDNS discovery...`);
+      console.log('[DysonUI] Cached IP failed, trying mDNS discovery...');
       const freshResult = await getDeviceIp(ctx, serial, null);
       if (freshResult.ip && freshResult.ip !== ipAddress) {
         // Retry with freshly discovered IP
@@ -456,7 +470,7 @@ async function handleSetContinuousMonitoring(ctx, payload) {
   }
 
   // Get device IP - use config IP first, fall back to mDNS
-  let { ip, discovered } = await getDeviceIp(ctx, serial, ipAddress);
+  const { ip, discovered } = await getDeviceIp(ctx, serial, ipAddress);
   if (!ip) {
     throw new RequestError(`Device ${serial} not found on network`, { status: 404 });
   }
@@ -506,7 +520,7 @@ async function handleSetContinuousMonitoring(ctx, payload) {
 
     // If connection failed with cached IP, try mDNS discovery (but only once)
     if (ipAddress && !discovered && !payload._retried) {
-      console.log(`[DysonUI] Cached IP failed, trying mDNS discovery...`);
+      console.log('[DysonUI] Cached IP failed, trying mDNS discovery...');
       const freshResult = await getDeviceIp(ctx, serial, null);
       if (freshResult.ip && freshResult.ip !== ipAddress) {
         // Retry with freshly discovered IP

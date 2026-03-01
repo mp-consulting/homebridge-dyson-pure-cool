@@ -2,7 +2,7 @@
  * DysonMqttClient Unit Tests
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi, type Mock } from 'vitest';
 
 import { DysonMqttClient } from '../../../src/protocol/mqttClient.js';
 import type { MqttConnectFn } from '../../../src/protocol/mqttClient.js';
@@ -13,26 +13,26 @@ function createMockMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    end: jest.fn((force: boolean, opts: object, callback: () => void) => {
+    end: vi.fn((force: boolean, opts: object, callback: () => void) => {
       callback();
     }),
-    subscribe: jest.fn((topic: string, opts: object, callback: (error?: Error) => void) => {
+    subscribe: vi.fn((topic: string, opts: object, callback: (error?: Error) => void) => {
       callback();
     }),
-    unsubscribe: jest.fn((topic: string, callback: (error?: Error) => void) => {
+    unsubscribe: vi.fn((topic: string, callback: (error?: Error) => void) => {
       callback();
     }),
-    publish: jest.fn((topic: string, payload: string, opts: object, callback: (error?: Error) => void) => {
+    publish: vi.fn((topic: string, payload: string, opts: object, callback: (error?: Error) => void) => {
       callback();
     }),
-    removeAllListeners: jest.fn(),
+    removeAllListeners: vi.fn(),
     // Helper methods for testing
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
@@ -57,14 +57,14 @@ describe('DysonMqttClient', () => {
   };
 
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     mockMqttClient = createMockMqttClient();
-    mockConnect = jest.fn(() => mockMqttClient as unknown as MqttClientType);
+    mockConnect = vi.fn(() => mockMqttClient as unknown as MqttClientType);
     client = new DysonMqttClient(defaultOptions, mockConnect);
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('connect', () => {
@@ -77,7 +77,7 @@ describe('DysonMqttClient', () => {
       await connectPromise;
 
       expect(mockConnect).toHaveBeenCalledTimes(1);
-      const [brokerUrl, options] = (mockConnect as jest.Mock).mock.calls[0] as [string, IClientOptions];
+      const [brokerUrl, options] = (mockConnect as Mock).mock.calls[0] as [string, IClientOptions];
       expect(brokerUrl).toBe('mqtt://192.168.1.100:1883');
       expect(options.username).toBe('ABC-AB-12345678');
       expect(options.password).toBe('localPassword123');
@@ -88,7 +88,7 @@ describe('DysonMqttClient', () => {
     });
 
     it('should emit connect event on successful connection', async () => {
-      const connectHandler = jest.fn();
+      const connectHandler = vi.fn();
       client.on('connect', connectHandler);
 
       const connectPromise = client.connect();
@@ -125,7 +125,7 @@ describe('DysonMqttClient', () => {
       const connectPromise = client.connect();
 
       // Advance time past timeout
-      jest.advanceTimersByTime(10001);
+      vi.advanceTimersByTime(10001);
 
       await expect(connectPromise).rejects.toThrow('Connection timeout after 10000ms');
       expect(client.isConnected()).toBe(false);
@@ -139,7 +139,7 @@ describe('DysonMqttClient', () => {
 
       const connectPromise = customClient.connect();
 
-      jest.advanceTimersByTime(5001);
+      vi.advanceTimersByTime(5001);
 
       await expect(connectPromise).rejects.toThrow('Connection timeout after 5000ms');
     });
@@ -153,12 +153,12 @@ describe('DysonMqttClient', () => {
       customClient.connect();
       mockMqttClient._emit('connect');
 
-      const [, options] = (mockConnect as jest.Mock).mock.calls[0] as [string, IClientOptions];
+      const [, options] = (mockConnect as Mock).mock.calls[0] as [string, IClientOptions];
       expect(options.keepalive).toBe(60);
     });
 
     it('should emit error for errors after connection', async () => {
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       client.on('error', errorHandler);
 
       const connectPromise = client.connect();
@@ -171,8 +171,8 @@ describe('DysonMqttClient', () => {
     });
 
     it('should emit disconnect on close after connected', async () => {
-      const disconnectHandler = jest.fn();
-      const closeHandler = jest.fn();
+      const disconnectHandler = vi.fn();
+      const closeHandler = vi.fn();
       client.on('disconnect', disconnectHandler);
       client.on('close', closeHandler);
 
@@ -188,7 +188,7 @@ describe('DysonMqttClient', () => {
     });
 
     it('should emit disconnect on offline', async () => {
-      const disconnectHandler = jest.fn();
+      const disconnectHandler = vi.fn();
       client.on('disconnect', disconnectHandler);
 
       const connectPromise = client.connect();
@@ -352,7 +352,7 @@ describe('DysonMqttClient', () => {
     });
 
     it('should emit message event with parsed JSON', async () => {
-      const messageHandler = jest.fn();
+      const messageHandler = vi.fn();
       client.on('message', messageHandler);
 
       const jsonPayload = JSON.stringify({ msg: 'CURRENT-STATE', data: { fpwr: 'ON' } });
@@ -366,7 +366,7 @@ describe('DysonMqttClient', () => {
     });
 
     it('should emit message event without data for non-JSON payloads', async () => {
-      const messageHandler = jest.fn();
+      const messageHandler = vi.fn();
       client.on('message', messageHandler);
 
       mockMqttClient._emit('message', 'test/topic', Buffer.from('not json'));
@@ -423,7 +423,7 @@ describe('DysonMqttClient', () => {
         );
 
         const publishedPayload = JSON.parse(
-          (mockMqttClient.publish as jest.Mock).mock.calls[0][1] as string,
+          (mockMqttClient.publish as Mock).mock.calls[0][1] as string,
         );
         expect(publishedPayload.msg).toBe('REQUEST-CURRENT-STATE');
         expect(publishedPayload.time).toBeDefined();
@@ -495,7 +495,7 @@ describe('DysonMqttClient', () => {
 
   describe('automatic reconnection', () => {
     it('should emit offline event on disconnect', async () => {
-      const offlineHandler = jest.fn();
+      const offlineHandler = vi.fn();
       client.on('offline', offlineHandler);
 
       const connectPromise = client.connect();
@@ -509,7 +509,7 @@ describe('DysonMqttClient', () => {
     });
 
     it('should emit reconnect event with attempt number', async () => {
-      const reconnectHandler = jest.fn();
+      const reconnectHandler = vi.fn();
       client.on('reconnect', reconnectHandler);
 
       const connectPromise = client.connect();
@@ -533,15 +533,15 @@ describe('DysonMqttClient', () => {
       // First attempt after 1 second
       expect(mockConnect).toHaveBeenCalledTimes(1);
 
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
       await Promise.resolve(); // Let promises settle
 
       expect(mockConnect).toHaveBeenCalledTimes(2);
     });
 
     it('should emit reconnectFailed after max attempts', async () => {
-      const reconnectFailedHandler = jest.fn();
-      const reconnectHandler = jest.fn();
+      const reconnectFailedHandler = vi.fn();
+      const reconnectHandler = vi.fn();
       const customClient = new DysonMqttClient(
         { ...defaultOptions, maxReconnectAttempts: 2, timeout: 100 },
         mockConnect,
@@ -558,30 +558,30 @@ describe('DysonMqttClient', () => {
       expect(reconnectHandler).toHaveBeenCalledWith(1);
 
       // First reconnect attempt after 1s backoff
-      jest.advanceTimersByTime(1000);
-      await jest.runAllTimersAsync().catch(() => {});
+      vi.advanceTimersByTime(1000);
+      await vi.runAllTimersAsync().catch(() => {});
 
       // Simulate failed reconnect (timeout after 100ms)
-      jest.advanceTimersByTime(101);
-      await jest.runAllTimersAsync().catch(() => {});
+      vi.advanceTimersByTime(101);
+      await vi.runAllTimersAsync().catch(() => {});
 
       // Second reconnect attempt should now be scheduled
       expect(reconnectHandler).toHaveBeenCalledWith(2);
 
       // Second reconnect after 2s backoff
-      jest.advanceTimersByTime(2000);
-      await jest.runAllTimersAsync().catch(() => {});
+      vi.advanceTimersByTime(2000);
+      await vi.runAllTimersAsync().catch(() => {});
 
       // Second reconnect fails (timeout)
-      jest.advanceTimersByTime(101);
-      await jest.runAllTimersAsync().catch(() => {});
+      vi.advanceTimersByTime(101);
+      await vi.runAllTimersAsync().catch(() => {});
 
       // Max attempts (2) reached, should emit reconnectFailed
       expect(reconnectFailedHandler).toHaveBeenCalled();
     });
 
     it('should not reconnect when autoReconnect is disabled', async () => {
-      const reconnectHandler = jest.fn();
+      const reconnectHandler = vi.fn();
       const customClient = new DysonMqttClient(
         { ...defaultOptions, autoReconnect: false },
         mockConnect,
@@ -596,7 +596,7 @@ describe('DysonMqttClient', () => {
       mockMqttClient._emit('close');
 
       // Advance time
-      jest.advanceTimersByTime(10000);
+      vi.advanceTimersByTime(10000);
       await Promise.resolve();
 
       expect(reconnectHandler).not.toHaveBeenCalled();
@@ -604,7 +604,7 @@ describe('DysonMqttClient', () => {
     });
 
     it('should not reconnect after intentional disconnect', async () => {
-      const reconnectHandler = jest.fn();
+      const reconnectHandler = vi.fn();
       client.on('reconnect', reconnectHandler);
 
       const connectPromise = client.connect();
@@ -615,7 +615,7 @@ describe('DysonMqttClient', () => {
       await client.disconnect();
 
       // Advance time
-      jest.advanceTimersByTime(10000);
+      vi.advanceTimersByTime(10000);
       await Promise.resolve();
 
       expect(reconnectHandler).not.toHaveBeenCalled();
@@ -632,7 +632,7 @@ describe('DysonMqttClient', () => {
       mockMqttClient._emit('close');
 
       // First reconnect attempt
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
       await Promise.resolve();
 
       // Simulate successful reconnection
@@ -659,7 +659,7 @@ describe('DysonMqttClient', () => {
       mockMqttClient._emit('close');
 
       // Reconnect
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
       await Promise.resolve();
 
       // Simulate successful reconnection

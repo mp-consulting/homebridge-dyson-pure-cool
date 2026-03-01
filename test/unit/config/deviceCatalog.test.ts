@@ -2,7 +2,7 @@
  * Device Catalog Unit Tests
  */
 
-import { describe, it, expect } from '@jest/globals';
+
 
 import {
   DEVICE_CATALOG,

@@ -2,36 +2,36 @@
  * Retry Utilities Unit Tests
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi } from 'vitest';
 
 import { sleep, calculateBackoff, RECONNECT_DEFAULTS } from '../../../src/utils/retry.js';
 
 describe('Retry Utilities', () => {
   describe('sleep', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('should resolve after specified duration', async () => {
       const sleepPromise = sleep(1000);
 
-      jest.advanceTimersByTime(999);
-      expect(jest.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(999);
+      expect(vi.getTimerCount()).toBe(1);
 
-      jest.advanceTimersByTime(1);
+      vi.advanceTimersByTime(1);
       await sleepPromise;
 
-      expect(jest.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('should handle zero duration', async () => {
       const sleepPromise = sleep(0);
 
-      jest.advanceTimersByTime(0);
+      vi.advanceTimersByTime(0);
       await sleepPromise;
     });
   });

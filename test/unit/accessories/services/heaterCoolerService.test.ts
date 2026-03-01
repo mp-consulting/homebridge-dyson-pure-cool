@@ -2,7 +2,7 @@
  * HeaterCoolerService Unit Tests
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi, type Mock, type Mocked } from 'vitest';
 
 import { HeaterCoolerService } from '../../../../src/accessories/services/heaterCoolerService.js';
 import type { HeaterCoolerServiceConfig } from '../../../../src/accessories/services/heaterCoolerService.js';
@@ -16,73 +16,73 @@ function createMockMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    connect: jest.fn().mockResolvedValue(undefined),
-    disconnect: jest.fn().mockResolvedValue(undefined),
-    subscribeToStatus: jest.fn().mockResolvedValue(undefined),
-    requestCurrentState: jest.fn().mockResolvedValue(undefined),
-    publishCommand: jest.fn().mockResolvedValue(undefined),
-    isConnected: jest.fn().mockReturnValue(true),
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
+    requestCurrentState: vi.fn().mockResolvedValue(undefined),
+    publishCommand: vi.fn().mockResolvedValue(undefined),
+    isConnected: vi.fn().mockReturnValue(true),
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
       handlers.forEach((handler) => handler(...args));
     },
   };
 
-  return mockClient as unknown as jest.Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
+  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
 }
 
 // Create mock HomeKit service
 function createMockService() {
   const characteristics = new Map<string, {
-    onGet: jest.Mock;
-    onSet: jest.Mock;
-    setProps: jest.Mock;
-    getValue: jest.Mock;
-    updateValue: jest.Mock;
+    onGet: Mock;
+    onSet: Mock;
+    setProps: Mock;
+    getValue: Mock;
+    updateValue: Mock;
   }>();
 
   const mockService = {
-    setCharacteristic: jest.fn().mockReturnThis(),
-    getCharacteristic: jest.fn((char: unknown) => {
+    setCharacteristic: vi.fn().mockReturnThis(),
+    getCharacteristic: vi.fn((char: unknown) => {
       const uuid = typeof char === 'object' && char !== null && 'UUID' in char
         ? (char as { UUID: string }).UUID
         : String(char);
       if (!characteristics.has(uuid)) {
         const charMock = {
-          onGet: jest.fn().mockReturnThis(),
-          onSet: jest.fn().mockReturnThis(),
-          setProps: jest.fn().mockReturnThis(),
-          getValue: jest.fn(),
-          updateValue: jest.fn().mockReturnThis(),
+          onGet: vi.fn().mockReturnThis(),
+          onSet: vi.fn().mockReturnThis(),
+          setProps: vi.fn().mockReturnThis(),
+          getValue: vi.fn(),
+          updateValue: vi.fn().mockReturnThis(),
         };
         characteristics.set(uuid, charMock);
       }
       return characteristics.get(uuid);
     }),
-    updateCharacteristic: jest.fn(),
-    addOptionalCharacteristic: jest.fn().mockReturnThis(),
-    addLinkedService: jest.fn().mockReturnThis(),
+    updateCharacteristic: vi.fn(),
+    addOptionalCharacteristic: vi.fn().mockReturnThis(),
+    addLinkedService: vi.fn().mockReturnThis(),
   };
 
-  return mockService as unknown as jest.Mocked<Service>;
+  return mockService as unknown as Mocked<Service>;
 }
 
 // Create mock logging
 function createMockLog(): Logging {
   return {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    log: jest.fn(),
-    success: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    log: vi.fn(),
+    success: vi.fn(),
   } as unknown as Logging;
 }
 
@@ -151,7 +151,7 @@ describe('HeaterCoolerService', () => {
   beforeEach(async () => {
     // Set up mocks
     mockMqttClient = createMockMqttClient();
-    mockMqttClientFactory = jest.fn().mockReturnValue(mockMqttClient);
+    mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
 
     mockService = createMockService();
@@ -160,8 +160,8 @@ describe('HeaterCoolerService', () => {
 
     mockAccessory = {
       displayName: 'Living Room',
-      getService: jest.fn().mockReturnValue(null),
-      addService: jest.fn().mockReturnValue(mockService),
+      getService: vi.fn().mockReturnValue(null),
+      addService: vi.fn().mockReturnValue(mockService),
     } as unknown as PlatformAccessory;
 
     // Connect device so we can control it
@@ -180,25 +180,25 @@ describe('HeaterCoolerService', () => {
 
     // Extract handlers from mock calls
     const activeChar = mockService.getCharacteristic(Characteristic.Active);
-    activeGetHandler = (activeChar!.onGet as jest.Mock).mock.calls[0][0];
-    activeSetHandler = (activeChar!.onSet as jest.Mock).mock.calls[0][0];
+    activeGetHandler = (activeChar!.onGet as Mock).mock.calls[0][0];
+    activeSetHandler = (activeChar!.onSet as Mock).mock.calls[0][0];
 
     const currentStateChar = mockService.getCharacteristic(Characteristic.CurrentHeaterCoolerState);
-    currentStateGetHandler = (currentStateChar!.onGet as jest.Mock).mock.calls[0][0];
+    currentStateGetHandler = (currentStateChar!.onGet as Mock).mock.calls[0][0];
 
     const targetStateChar = mockService.getCharacteristic(Characteristic.TargetHeaterCoolerState);
-    targetStateGetHandler = (targetStateChar!.onGet as jest.Mock).mock.calls[0][0];
+    targetStateGetHandler = (targetStateChar!.onGet as Mock).mock.calls[0][0];
 
     const currentTempChar = mockService.getCharacteristic(Characteristic.CurrentTemperature);
-    currentTempGetHandler = (currentTempChar!.onGet as jest.Mock).mock.calls[0][0];
+    currentTempGetHandler = (currentTempChar!.onGet as Mock).mock.calls[0][0];
 
     const heatingThresholdChar = mockService.getCharacteristic(Characteristic.HeatingThresholdTemperature);
-    heatingThresholdGetHandler = (heatingThresholdChar!.onGet as jest.Mock).mock.calls[0][0];
-    heatingThresholdSetHandler = (heatingThresholdChar!.onSet as jest.Mock).mock.calls[0][0];
+    heatingThresholdGetHandler = (heatingThresholdChar!.onGet as Mock).mock.calls[0][0];
+    heatingThresholdSetHandler = (heatingThresholdChar!.onSet as Mock).mock.calls[0][0];
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('initialization', () => {
@@ -491,7 +491,7 @@ describe('HeaterCoolerService', () => {
   describe('error handling', () => {
     it('should emit commandError when setHeatingMode MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('commandError', errorHandler);
       await activeSetHandler(1);
       await flushCommands();
@@ -500,7 +500,7 @@ describe('HeaterCoolerService', () => {
 
     it('should emit commandError when setTargetTemperature MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('commandError', errorHandler);
       await heatingThresholdSetHandler(22);
       await flushCommands();

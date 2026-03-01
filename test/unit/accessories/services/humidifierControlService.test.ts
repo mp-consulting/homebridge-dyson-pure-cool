@@ -2,7 +2,7 @@
  * HumidifierControlService Unit Tests
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi, type Mock, type Mocked } from 'vitest';
 
 import { HumidifierControlService } from '../../../../src/accessories/services/humidifierControlService.js';
 import type { HumidifierControlServiceConfig } from '../../../../src/accessories/services/humidifierControlService.js';
@@ -16,71 +16,71 @@ function createMockMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    connect: jest.fn().mockResolvedValue(undefined),
-    disconnect: jest.fn().mockResolvedValue(undefined),
-    subscribeToStatus: jest.fn().mockResolvedValue(undefined),
-    requestCurrentState: jest.fn().mockResolvedValue(undefined),
-    publishCommand: jest.fn().mockResolvedValue(undefined),
-    isConnected: jest.fn().mockReturnValue(true),
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
+    requestCurrentState: vi.fn().mockResolvedValue(undefined),
+    publishCommand: vi.fn().mockResolvedValue(undefined),
+    isConnected: vi.fn().mockReturnValue(true),
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
       handlers.forEach((handler) => handler(...args));
     },
   };
 
-  return mockClient as unknown as jest.Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
+  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
 }
 
 // Create mock HomeKit service
 function createMockService() {
   const characteristics = new Map<string, {
-    onGet: jest.Mock;
-    onSet: jest.Mock;
-    setProps: jest.Mock;
-    getValue: jest.Mock;
+    onGet: Mock;
+    onSet: Mock;
+    setProps: Mock;
+    getValue: Mock;
   }>();
 
   const mockService = {
-    setCharacteristic: jest.fn().mockReturnThis(),
-    getCharacteristic: jest.fn((char: unknown) => {
+    setCharacteristic: vi.fn().mockReturnThis(),
+    getCharacteristic: vi.fn((char: unknown) => {
       const uuid = typeof char === 'object' && char !== null && 'UUID' in char
         ? (char as { UUID: string }).UUID
         : String(char);
       if (!characteristics.has(uuid)) {
         const charMock = {
-          onGet: jest.fn().mockReturnThis(),
-          onSet: jest.fn().mockReturnThis(),
-          setProps: jest.fn().mockReturnThis(),
-          getValue: jest.fn(),
+          onGet: vi.fn().mockReturnThis(),
+          onSet: vi.fn().mockReturnThis(),
+          setProps: vi.fn().mockReturnThis(),
+          getValue: vi.fn(),
         };
         characteristics.set(uuid, charMock);
       }
       return characteristics.get(uuid);
     }),
-    updateCharacteristic: jest.fn(),
-    addOptionalCharacteristic: jest.fn().mockReturnThis(),
-    addLinkedService: jest.fn().mockReturnThis(),
+    updateCharacteristic: vi.fn(),
+    addOptionalCharacteristic: vi.fn().mockReturnThis(),
+    addLinkedService: vi.fn().mockReturnThis(),
   };
 
-  return mockService as unknown as jest.Mocked<Service>;
+  return mockService as unknown as Mocked<Service>;
 }
 
 // Create mock logging
 function createMockLog(): Logging {
   return {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    log: jest.fn(),
-    success: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    log: vi.fn(),
+    success: vi.fn(),
   } as unknown as Logging;
 }
 
@@ -162,7 +162,7 @@ describe('HumidifierControlService', () => {
   beforeEach(async () => {
     // Set up mocks
     mockMqttClient = createMockMqttClient();
-    mockMqttClientFactory = jest.fn().mockReturnValue(mockMqttClient);
+    mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
 
     mockService = createMockService();
@@ -171,8 +171,8 @@ describe('HumidifierControlService', () => {
 
     mockAccessory = {
       displayName: 'Living Room Humidifier',
-      getService: jest.fn().mockReturnValue(mockService),
-      addService: jest.fn().mockReturnValue(mockService),
+      getService: vi.fn().mockReturnValue(mockService),
+      addService: vi.fn().mockReturnValue(mockService),
     } as unknown as PlatformAccessory;
 
     // Connect device so we can control it
@@ -191,29 +191,29 @@ describe('HumidifierControlService', () => {
 
     // Extract handlers from mock calls
     const activeChar = mockService.getCharacteristic(Characteristic.Active);
-    activeGetHandler = (activeChar!.onGet as jest.Mock).mock.calls[0][0];
-    activeSetHandler = (activeChar!.onSet as jest.Mock).mock.calls[0][0];
+    activeGetHandler = (activeChar!.onGet as Mock).mock.calls[0][0];
+    activeSetHandler = (activeChar!.onSet as Mock).mock.calls[0][0];
 
     const currentStateChar = mockService.getCharacteristic(Characteristic.CurrentHumidifierDehumidifierState);
-    currentStateGetHandler = (currentStateChar!.onGet as jest.Mock).mock.calls[0][0];
+    currentStateGetHandler = (currentStateChar!.onGet as Mock).mock.calls[0][0];
 
     const targetStateChar = mockService.getCharacteristic(Characteristic.TargetHumidifierDehumidifierState);
-    targetStateGetHandler = (targetStateChar!.onGet as jest.Mock).mock.calls[0][0];
-    targetStateSetHandler = (targetStateChar!.onSet as jest.Mock).mock.calls[0][0];
+    targetStateGetHandler = (targetStateChar!.onGet as Mock).mock.calls[0][0];
+    targetStateSetHandler = (targetStateChar!.onSet as Mock).mock.calls[0][0];
 
     const currentHumidityChar = mockService.getCharacteristic(Characteristic.CurrentRelativeHumidity);
-    currentHumidityGetHandler = (currentHumidityChar!.onGet as jest.Mock).mock.calls[0][0];
+    currentHumidityGetHandler = (currentHumidityChar!.onGet as Mock).mock.calls[0][0];
 
     const targetHumidityChar = mockService.getCharacteristic(Characteristic.RelativeHumidityHumidifierThreshold);
-    targetHumidityGetHandler = (targetHumidityChar!.onGet as jest.Mock).mock.calls[0][0];
-    targetHumiditySetHandler = (targetHumidityChar!.onSet as jest.Mock).mock.calls[0][0];
+    targetHumidityGetHandler = (targetHumidityChar!.onGet as Mock).mock.calls[0][0];
+    targetHumiditySetHandler = (targetHumidityChar!.onSet as Mock).mock.calls[0][0];
 
     const waterLevelChar = mockService.getCharacteristic(Characteristic.WaterLevel);
-    waterLevelGetHandler = (waterLevelChar!.onGet as jest.Mock).mock.calls[0][0];
+    waterLevelGetHandler = (waterLevelChar!.onGet as Mock).mock.calls[0][0];
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('initialization', () => {
@@ -278,8 +278,8 @@ describe('HumidifierControlService', () => {
       const fullRangeService = createMockService();
       const fullRangeAccessory = {
         displayName: 'Full Range Humidifier',
-        getService: jest.fn().mockReturnValue(fullRangeService),
-        addService: jest.fn().mockReturnValue(fullRangeService),
+        getService: vi.fn().mockReturnValue(fullRangeService),
+        addService: vi.fn().mockReturnValue(fullRangeService),
       } as unknown as PlatformAccessory;
 
       const config: HumidifierControlServiceConfig = {
@@ -623,7 +623,7 @@ describe('HumidifierControlService', () => {
   describe('error handling', () => {
     it('should emit commandError when setHumidifier MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('commandError', errorHandler);
       await activeSetHandler(1);
       await flushCommands();
@@ -632,7 +632,7 @@ describe('HumidifierControlService', () => {
 
     it('should emit commandError when setTargetHumidity MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('commandError', errorHandler);
       await targetHumiditySetHandler(50);
       await flushCommands();
@@ -641,7 +641,7 @@ describe('HumidifierControlService', () => {
 
     it('should emit commandError when setHumidifierAuto MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('commandError', errorHandler);
       await targetStateSetHandler(0);
       await flushCommands();

@@ -5,7 +5,7 @@
  * Eliminates duplication of mock creation code.
  */
 
-import { jest } from '@jest/globals';
+import { vi, type Mock, type Mocked } from 'vitest';
 import type { Logging, PlatformAccessory, Service } from 'homebridge';
 import type { DysonMqttClient } from '../../src/protocol/mqttClient.js';
 import type { DeviceInfo, MqttClientFactory } from '../../src/devices/index.js';
@@ -14,7 +14,7 @@ import type { DeviceInfo, MqttClientFactory } from '../../src/devices/index.js';
 // Mock MQTT Client (for DysonMqttClient - used in device/service tests)
 // ============================================================================
 
-export type MockDysonMqttClient = jest.Mocked<DysonMqttClient> & {
+export type MockDysonMqttClient = Mocked<DysonMqttClient> & {
   _emit: (event: string, ...args: unknown[]) => void;
 };
 
@@ -26,19 +26,19 @@ export function createMockMqttClient(): MockDysonMqttClient {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    connect: jest.fn().mockResolvedValue(undefined),
-    disconnect: jest.fn().mockResolvedValue(undefined),
-    subscribeToStatus: jest.fn().mockResolvedValue(undefined),
-    requestCurrentState: jest.fn().mockResolvedValue(undefined),
-    publishCommand: jest.fn().mockResolvedValue(undefined),
-    isConnected: jest.fn().mockReturnValue(true),
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
+    requestCurrentState: vi.fn().mockResolvedValue(undefined),
+    publishCommand: vi.fn().mockResolvedValue(undefined),
+    isConnected: vi.fn().mockReturnValue(true),
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
       handlers.forEach((handler) => handler(...args));
@@ -62,26 +62,26 @@ export function createMockRawMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    end: jest.fn((force: boolean, opts: object, callback: () => void) => {
+    end: vi.fn((force: boolean, opts: object, callback: () => void) => {
       callback();
     }),
-    subscribe: jest.fn((topic: string, opts: object, callback: (error?: Error) => void) => {
+    subscribe: vi.fn((topic: string, opts: object, callback: (error?: Error) => void) => {
       callback();
     }),
-    unsubscribe: jest.fn((topic: string, callback: (error?: Error) => void) => {
+    unsubscribe: vi.fn((topic: string, callback: (error?: Error) => void) => {
       callback();
     }),
-    publish: jest.fn((topic: string, payload: string, opts: object, callback: (error?: Error) => void) => {
+    publish: vi.fn((topic: string, payload: string, opts: object, callback: (error?: Error) => void) => {
       callback();
     }),
-    removeAllListeners: jest.fn(),
+    removeAllListeners: vi.fn(),
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
       handlers.forEach((handler) => handler(...args));
@@ -101,35 +101,35 @@ export function createMockRawMqttClient() {
  */
 export function createMockService() {
   const characteristics = new Map<string, {
-    onGet: jest.Mock;
-    onSet: jest.Mock;
-    setProps: jest.Mock;
-    getValue: jest.Mock;
+    onGet: Mock;
+    onSet: Mock;
+    setProps: Mock;
+    getValue: Mock;
   }>();
 
   const mockService = {
-    setCharacteristic: jest.fn().mockReturnThis(),
-    getCharacteristic: jest.fn((char: unknown) => {
+    setCharacteristic: vi.fn().mockReturnThis(),
+    getCharacteristic: vi.fn((char: unknown) => {
       const uuid = typeof char === 'object' && char !== null && 'UUID' in char
         ? (char as { UUID: string }).UUID
         : String(char);
       if (!characteristics.has(uuid)) {
         const charMock = {
-          onGet: jest.fn().mockReturnThis(),
-          onSet: jest.fn().mockReturnThis(),
-          setProps: jest.fn().mockReturnThis(),
-          getValue: jest.fn(),
+          onGet: vi.fn().mockReturnThis(),
+          onSet: vi.fn().mockReturnThis(),
+          setProps: vi.fn().mockReturnThis(),
+          getValue: vi.fn(),
         };
         characteristics.set(uuid, charMock);
       }
       return characteristics.get(uuid);
     }),
-    updateCharacteristic: jest.fn(),
-    addOptionalCharacteristic: jest.fn().mockReturnThis(),
-    addLinkedService: jest.fn().mockReturnThis(),
+    updateCharacteristic: vi.fn(),
+    addOptionalCharacteristic: vi.fn().mockReturnThis(),
+    addLinkedService: vi.fn().mockReturnThis(),
   };
 
-  return mockService as unknown as jest.Mocked<Service>;
+  return mockService as unknown as Mocked<Service>;
 }
 
 // ============================================================================
@@ -139,15 +139,15 @@ export function createMockService() {
 /**
  * Create a mock Homebridge Logging instance.
  */
-export function createMockLog(): jest.Mocked<Logging> {
+export function createMockLog(): Mocked<Logging> {
   return {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    log: jest.fn(),
-    success: jest.fn(),
-  } as unknown as jest.Mocked<Logging>;
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    log: vi.fn(),
+    success: vi.fn(),
+  } as unknown as Mocked<Logging>;
 }
 
 // ============================================================================
@@ -157,20 +157,20 @@ export function createMockLog(): jest.Mocked<Logging> {
 /**
  * Create a mock PlatformAccessory.
  */
-export function createMockAccessory(primaryService?: jest.Mocked<Service>) {
+export function createMockAccessory(primaryService?: Mocked<Service>) {
   return {
     displayName: 'Test Dyson',
     UUID: 'test-uuid',
-    getService: jest.fn((serviceType: unknown) => {
+    getService: vi.fn((serviceType: unknown) => {
       if (primaryService && serviceType === primaryService) {
         return primaryService;
       }
       return undefined;
     }),
-    addService: jest.fn(() => primaryService ?? createMockService()),
-    removeService: jest.fn(),
+    addService: vi.fn(() => primaryService ?? createMockService()),
+    removeService: vi.fn(),
     context: { device: {} },
-  } as unknown as jest.Mocked<PlatformAccessory>;
+  } as unknown as Mocked<PlatformAccessory>;
 }
 
 // ============================================================================
@@ -192,5 +192,5 @@ export const DEFAULT_DEVICE_INFO: DeviceInfo = {
  * Create a mock MQTT client factory that returns the given mock client.
  */
 export function createMockMqttClientFactory(mockClient: MockDysonMqttClient): MqttClientFactory {
-  return jest.fn().mockReturnValue(mockClient) as unknown as MqttClientFactory;
+  return vi.fn().mockReturnValue(mockClient) as unknown as MqttClientFactory;
 }

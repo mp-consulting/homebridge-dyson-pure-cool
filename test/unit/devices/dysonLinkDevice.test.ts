@@ -2,7 +2,7 @@
  * DysonLinkDevice Unit Tests
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi, type Mocked } from 'vitest';
 
 import { DysonLinkDevice } from '../../../src/devices/dysonLinkDevice.js';
 import { createDevice, isProductTypeSupported, getSupportedProductTypes } from '../../../src/devices/deviceFactory.js';
@@ -17,26 +17,26 @@ function createMockMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    connect: jest.fn().mockResolvedValue(undefined),
-    disconnect: jest.fn().mockResolvedValue(undefined),
-    subscribeToStatus: jest.fn().mockResolvedValue(undefined),
-    requestCurrentState: jest.fn().mockResolvedValue(undefined),
-    publishCommand: jest.fn().mockResolvedValue(undefined),
-    isConnected: jest.fn().mockReturnValue(true),
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
+    requestCurrentState: vi.fn().mockResolvedValue(undefined),
+    publishCommand: vi.fn().mockResolvedValue(undefined),
+    isConnected: vi.fn().mockReturnValue(true),
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
       handlers.forEach((handler) => handler(...args));
     },
   };
 
-  return mockClient as unknown as jest.Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
+  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
 }
 
 describe('DysonLinkDevice', () => {
@@ -54,12 +54,12 @@ describe('DysonLinkDevice', () => {
 
   beforeEach(() => {
     mockMqttClient = createMockMqttClient();
-    mockMqttClientFactory = jest.fn().mockReturnValue(mockMqttClient);
+    mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
@@ -282,7 +282,7 @@ describe('DysonLinkDevice', () => {
     });
 
     it('should parse CURRENT-STATE message with product-state', () => {
-      const stateChangeHandler = jest.fn();
+      const stateChangeHandler = vi.fn();
       device.on('stateChange', stateChangeHandler);
 
       const message: MqttMessage = {
@@ -414,7 +414,7 @@ describe('deviceFactory', () => {
 
     beforeEach(() => {
       mockMqttClient = createMockMqttClient();
-      mockMqttClientFactory = jest.fn().mockReturnValue(mockMqttClient);
+      mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     });
 
     it('should create DysonLinkDevice for 438', () => {

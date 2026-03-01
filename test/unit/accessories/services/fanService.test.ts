@@ -2,7 +2,7 @@
  * FanService Unit Tests (AirPurifier Service)
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi, type Mock, type Mocked } from 'vitest';
 
 import { FanService } from '../../../../src/accessories/services/fanService.js';
 import type { FanServiceConfig } from '../../../../src/accessories/services/fanService.js';
@@ -16,71 +16,71 @@ function createMockMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    connect: jest.fn().mockResolvedValue(undefined),
-    disconnect: jest.fn().mockResolvedValue(undefined),
-    subscribeToStatus: jest.fn().mockResolvedValue(undefined),
-    requestCurrentState: jest.fn().mockResolvedValue(undefined),
-    publishCommand: jest.fn().mockResolvedValue(undefined),
-    isConnected: jest.fn().mockReturnValue(true),
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
+    requestCurrentState: vi.fn().mockResolvedValue(undefined),
+    publishCommand: vi.fn().mockResolvedValue(undefined),
+    isConnected: vi.fn().mockReturnValue(true),
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
       handlers.forEach((handler) => handler(...args));
     },
   };
 
-  return mockClient as unknown as jest.Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
+  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
 }
 
 // Create mock HomeKit service
 function createMockService() {
   const characteristics = new Map<string, {
-    onGet: jest.Mock;
-    onSet: jest.Mock;
-    setProps: jest.Mock;
-    getValue: jest.Mock;
+    onGet: Mock;
+    onSet: Mock;
+    setProps: Mock;
+    getValue: Mock;
   }>();
 
   const mockService = {
-    setCharacteristic: jest.fn().mockReturnThis(),
-    getCharacteristic: jest.fn((char: unknown) => {
+    setCharacteristic: vi.fn().mockReturnThis(),
+    getCharacteristic: vi.fn((char: unknown) => {
       const uuid = typeof char === 'object' && char !== null && 'UUID' in char
         ? (char as { UUID: string }).UUID
         : String(char);
       if (!characteristics.has(uuid)) {
         const charMock = {
-          onGet: jest.fn().mockReturnThis(),
-          onSet: jest.fn().mockReturnThis(),
-          setProps: jest.fn().mockReturnThis(),
-          getValue: jest.fn(),
+          onGet: vi.fn().mockReturnThis(),
+          onSet: vi.fn().mockReturnThis(),
+          setProps: vi.fn().mockReturnThis(),
+          getValue: vi.fn(),
         };
         characteristics.set(uuid, charMock);
       }
       return characteristics.get(uuid);
     }),
-    updateCharacteristic: jest.fn(),
-    addOptionalCharacteristic: jest.fn().mockReturnThis(),
-    addLinkedService: jest.fn().mockReturnThis(),
+    updateCharacteristic: vi.fn(),
+    addOptionalCharacteristic: vi.fn().mockReturnThis(),
+    addLinkedService: vi.fn().mockReturnThis(),
   };
 
-  return mockService as unknown as jest.Mocked<Service>;
+  return mockService as unknown as Mocked<Service>;
 }
 
 // Create mock logging
 function createMockLog(): Logging {
   return {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    log: jest.fn(),
-    success: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    log: vi.fn(),
+    success: vi.fn(),
   } as unknown as Logging;
 }
 
@@ -152,7 +152,7 @@ describe('FanService', () => {
   beforeEach(async () => {
     // Set up mocks
     mockMqttClient = createMockMqttClient();
-    mockMqttClientFactory = jest.fn().mockReturnValue(mockMqttClient);
+    mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
 
     mockService = createMockService();
@@ -161,8 +161,8 @@ describe('FanService', () => {
 
     mockAccessory = {
       displayName: 'Living Room',
-      getService: jest.fn().mockReturnValue(mockService),
-      addService: jest.fn().mockReturnValue(mockService),
+      getService: vi.fn().mockReturnValue(mockService),
+      addService: vi.fn().mockReturnValue(mockService),
     } as unknown as PlatformAccessory;
 
     // Connect device so we can control it
@@ -182,28 +182,28 @@ describe('FanService', () => {
 
     // Extract handlers from mock calls
     const activeChar = mockService.getCharacteristic(Characteristic.Active);
-    activeGetHandler = (activeChar!.onGet as jest.Mock).mock.calls[0][0];
-    activeSetHandler = (activeChar!.onSet as jest.Mock).mock.calls[0][0];
+    activeGetHandler = (activeChar!.onGet as Mock).mock.calls[0][0];
+    activeSetHandler = (activeChar!.onSet as Mock).mock.calls[0][0];
 
     const currentStateChar = mockService.getCharacteristic(Characteristic.CurrentAirPurifierState);
-    currentStateGetHandler = (currentStateChar!.onGet as jest.Mock).mock.calls[0][0];
+    currentStateGetHandler = (currentStateChar!.onGet as Mock).mock.calls[0][0];
 
     const targetStateChar = mockService.getCharacteristic(Characteristic.TargetAirPurifierState);
-    targetStateGetHandler = (targetStateChar!.onGet as jest.Mock).mock.calls[0][0];
-    targetStateSetHandler = (targetStateChar!.onSet as jest.Mock).mock.calls[0][0];
+    targetStateGetHandler = (targetStateChar!.onGet as Mock).mock.calls[0][0];
+    targetStateSetHandler = (targetStateChar!.onSet as Mock).mock.calls[0][0];
 
     const speedChar = mockService.getCharacteristic(Characteristic.RotationSpeed);
-    speedGetHandler = (speedChar!.onGet as jest.Mock).mock.calls[0][0];
-    speedSetHandler = (speedChar!.onSet as jest.Mock).mock.calls[0][0];
+    speedGetHandler = (speedChar!.onGet as Mock).mock.calls[0][0];
+    speedSetHandler = (speedChar!.onSet as Mock).mock.calls[0][0];
 
     const swingChar = mockService.getCharacteristic(Characteristic.SwingMode);
-    swingModeGetHandler = (swingChar!.onGet as jest.Mock).mock.calls[0][0];
-    swingModeSetHandler = (swingChar!.onSet as jest.Mock).mock.calls[0][0];
+    swingModeGetHandler = (swingChar!.onGet as Mock).mock.calls[0][0];
+    swingModeSetHandler = (swingChar!.onSet as Mock).mock.calls[0][0];
   });
 
   afterEach(() => {
-    jest.useRealTimers();
-    jest.clearAllMocks();
+    vi.useRealTimers();
+    vi.clearAllMocks();
   });
 
   describe('initialization', () => {
@@ -411,10 +411,10 @@ describe('FanService', () => {
     });
 
     it('should call setFanPower(false) when set to 0', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       speedSetHandler(0);
       // Fast-forward debounce timer
-      jest.advanceTimersByTime(300);
+      vi.advanceTimersByTime(300);
       // Flush microtask command queue (Promise.resolve works with fake timers)
       await flushCommands();
 
@@ -426,10 +426,10 @@ describe('FanService', () => {
     });
 
     it('should call setFanSpeed with converted value', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       speedSetHandler(50);
       // Fast-forward debounce timer
-      jest.advanceTimersByTime(300);
+      vi.advanceTimersByTime(300);
       await flushCommands();
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
@@ -440,11 +440,11 @@ describe('FanService', () => {
     });
 
     it('should turn fan on if off when setting speed', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       // Fan is off by default
       speedSetHandler(50);
       // Fast-forward debounce timer
-      jest.advanceTimersByTime(300);
+      vi.advanceTimersByTime(300);
       await flushCommands();
 
       // Should have both speed and power commands
@@ -617,14 +617,14 @@ describe('FanService', () => {
     });
 
     it('should emit commandError when setFanSpeed MQTT publish fails', async () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('commandError', errorHandler);
 
       speedSetHandler(50);
-      jest.advanceTimersByTime(300);
+      vi.advanceTimersByTime(300);
       await flushCommands();
 
       expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
@@ -633,7 +633,7 @@ describe('FanService', () => {
     it('should emit commandError when setOscillation MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('commandError', errorHandler);
 
       await swingModeSetHandler(1);
@@ -645,7 +645,7 @@ describe('FanService', () => {
     it('should emit commandError when setAutoMode MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('commandError', errorHandler);
 
       await targetStateSetHandler(1);

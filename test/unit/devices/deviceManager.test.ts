@@ -2,17 +2,17 @@
  * DeviceManager Unit Tests
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi, type Mocked } from 'vitest';
 
 import { DeviceManager } from '../../../src/devices/deviceManager.js';
 import type { ManualDeviceConfig } from '../../../src/devices/deviceManager.js';
 import type { Logging } from 'homebridge';
 
 // Mock the discovery modules
-jest.unstable_mockModule('../../../src/discovery/cloudApi.js', () => ({
-  DysonCloudApi: jest.fn().mockImplementation(() => ({
-    authenticate: jest.fn().mockResolvedValue(undefined),
-    getDevices: jest.fn().mockResolvedValue([
+vi.mock('../../../src/discovery/cloudApi.js', () => ({
+  DysonCloudApi: vi.fn().mockImplementation(() => ({
+    authenticate: vi.fn().mockResolvedValue(undefined),
+    getDevices: vi.fn().mockResolvedValue([
       {
         serial: 'ABC-AB-12345678',
         productType: '438',
@@ -23,24 +23,24 @@ jest.unstable_mockModule('../../../src/discovery/cloudApi.js', () => ({
   })),
 }));
 
-jest.unstable_mockModule('../../../src/discovery/mdnsDiscovery.js', () => ({
-  MdnsDiscovery: jest.fn().mockImplementation(() => ({
-    discover: jest.fn().mockResolvedValue(
+vi.mock('../../../src/discovery/mdnsDiscovery.js', () => ({
+  MdnsDiscovery: vi.fn().mockImplementation(() => ({
+    discover: vi.fn().mockResolvedValue(
       new Map([['ABC-AB-12345678', '192.168.1.100']]),
     ),
   })),
 }));
 
 // Create mock logger
-function createMockLog(): jest.Mocked<Logging> {
+function createMockLog(): Mocked<Logging> {
   return {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    log: jest.fn(),
-    success: jest.fn(),
-  } as unknown as jest.Mocked<Logging>;
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    log: vi.fn(),
+    success: vi.fn(),
+  } as unknown as Mocked<Logging>;
 }
 
 // Create mock MQTT client
@@ -48,19 +48,19 @@ function createMockMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    connect: jest.fn().mockResolvedValue(undefined),
-    disconnect: jest.fn().mockResolvedValue(undefined),
-    subscribeToStatus: jest.fn().mockResolvedValue(undefined),
-    requestCurrentState: jest.fn().mockResolvedValue(undefined),
-    publishCommand: jest.fn().mockResolvedValue(undefined),
-    isConnected: jest.fn().mockReturnValue(true),
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
+    requestCurrentState: vi.fn().mockResolvedValue(undefined),
+    publishCommand: vi.fn().mockResolvedValue(undefined),
+    isConnected: vi.fn().mockReturnValue(true),
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
       handlers.forEach((handler) => handler(...args));
@@ -71,7 +71,7 @@ function createMockMqttClient() {
 }
 
 describe('DeviceManager', () => {
-  let mockLog: jest.Mocked<Logging>;
+  let mockLog: Mocked<Logging>;
   let mockMqttClient: ReturnType<typeof createMockMqttClient>;
 
   beforeEach(() => {
@@ -80,7 +80,7 @@ describe('DeviceManager', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
@@ -310,7 +310,7 @@ describe('DeviceManager', () => {
         const client = createMockMqttClient();
         // First device fails to connect
         if (connectAttempt === 1) {
-          client.connect = jest.fn().mockRejectedValue(new Error('Connection failed'));
+          client.connect = vi.fn().mockRejectedValue(new Error('Connection failed'));
         }
         return client as unknown as ReturnType<typeof createMockMqttClient>;
       };
@@ -350,7 +350,7 @@ describe('DeviceManager', () => {
     it('should log discovery completion with failure count', async () => {
       const failingMockClient = () => {
         const client = createMockMqttClient();
-        client.connect = jest.fn().mockRejectedValue(new Error('Connection failed'));
+        client.connect = vi.fn().mockRejectedValue(new Error('Connection failed'));
         return client as unknown as ReturnType<typeof createMockMqttClient>;
       };
 
@@ -380,7 +380,7 @@ describe('DeviceManager', () => {
     it('should handle disconnect errors gracefully', async () => {
       const errorMockClient = () => {
         const client = createMockMqttClient();
-        client.disconnect = jest.fn().mockRejectedValue(new Error('Disconnect error'));
+        client.disconnect = vi.fn().mockRejectedValue(new Error('Disconnect error'));
         return client as unknown as ReturnType<typeof createMockMqttClient>;
       };
 
@@ -412,9 +412,9 @@ describe('DeviceManager', () => {
   describe('device without IP address', () => {
     it('should warn and skip device without IP address', async () => {
       // Use a device that relies on mDNS but mDNS returns no IP
-      jest.unstable_mockModule('../../../src/discovery/mdnsDiscovery.js', () => ({
-        MdnsDiscovery: jest.fn().mockImplementation(() => ({
-          discover: jest.fn().mockResolvedValue(new Map()), // No IPs found
+      vi.mock('../../../src/discovery/mdnsDiscovery.js', () => ({
+        MdnsDiscovery: vi.fn().mockImplementation(() => ({
+          discover: vi.fn().mockResolvedValue(new Map()), // No IPs found
         })),
       }));
 

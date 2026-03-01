@@ -8,7 +8,7 @@
 
 import { createCipheriv } from 'node:crypto';
 
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { vi } from 'vitest';
 
 import { DysonCloudApi, CloudApiError, CloudApiErrorType } from '../../../src/discovery/index.js';
 
@@ -97,14 +97,14 @@ function mockDeviceManifestV3(devices: Array<{
 }
 
 // Mock fetch globally
-const mockFetch = jest.fn<typeof fetch>();
+const mockFetch = vi.fn<typeof fetch>();
 global.fetch = mockFetch;
 
 describe('DysonCloudApi', () => {
   let api: DysonCloudApi;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     api = new DysonCloudApi({
       email: 'test@example.com',
       password: 'testpassword',

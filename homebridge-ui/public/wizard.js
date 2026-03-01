@@ -62,7 +62,9 @@
         homebridge.toast[type](msg, title);
       } else {
         console[type === 'error' ? 'error' : type === 'warning' ? 'warn' : 'log'](`${type}:`, msg);
-        if (type === 'error') alert(msg);
+        if (type === 'error') {
+          alert(msg);
+        }
       }
     };
 
@@ -175,8 +177,11 @@
     const numericStep = step === 0 || step === '1b' ? 1 : step === 'success' ? 4 : step;
     el.progress.querySelectorAll('li').forEach((li, i) => {
       li.classList.remove('active', 'completed');
-      if (i + 1 < numericStep) li.classList.add('completed');
-      else if (i + 1 === numericStep) li.classList.add('active');
+      if (i + 1 < numericStep) {
+        li.classList.add('completed');
+      } else if (i + 1 === numericStep) {
+        li.classList.add('active');
+      }
     });
     el.progress.querySelectorAll('.step-connector').forEach((c, i) => {
       c.classList.toggle('completed', i < numericStep - 1);
@@ -246,7 +251,9 @@
 
   // Auto-save config when on step 0 (existing config view)
   async function autoSaveConfig() {
-    if (state.currentStep !== 0) return;
+    if (state.currentStep !== 0) {
+      return;
+    }
     try {
       await hb.updatePluginConfig([buildConfig()]);
       await hb.savePluginConfig();
@@ -259,7 +266,9 @@
   // Debounce helper for auto-save
   let autoSaveTimeout = null;
   function debouncedAutoSave() {
-    if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
     autoSaveTimeout = setTimeout(autoSaveConfig, 500);
   }
 
@@ -318,7 +327,9 @@
 
       checkbox.addEventListener('change', async (e) => {
         const dev = state.devices.find((d) => d.serial === e.target.dataset.serial);
-        if (!dev) return;
+        if (!dev) {
+          return;
+        }
 
         const enabled = e.target.checked;
         checkbox.disabled = true;
@@ -408,7 +419,9 @@
       checkbox.addEventListener('change', async (e) => {
         const serial = e.target.dataset.serial;
         const device = state.devices.find((d) => d.serial === serial);
-        if (!device) return;
+        if (!device) {
+          return;
+        }
 
         const enabled = e.target.checked;
         checkbox.disabled = true;
@@ -456,15 +469,33 @@
   function loadExistingConfig(config) {
     const opts = el.options;
 
-    if (config.enableTemperature !== undefined) opts.temperature.checked = config.enableTemperature;
-    if (config.enableHumidity !== undefined) opts.humidity.checked = config.enableHumidity;
-    if (config.enableAirQuality !== undefined) opts.airQuality.checked = config.enableAirQuality;
-    if (config.enableNightMode !== undefined) opts.nightMode.checked = config.enableNightMode;
-    if (config.enableJetFocus !== undefined) opts.jetFocus.checked = config.enableJetFocus;
-    if (config.enableAutoMode !== undefined) opts.autoMode.checked = config.enableAutoMode;
-    if (config.enableFilterStatus !== undefined) opts.filterStatus.checked = config.enableFilterStatus;
-    if (config.pollingInterval) opts.polling.value = config.pollingInterval;
-    if (config.countryCode) el.country.value = config.countryCode;
+    if (config.enableTemperature !== undefined) {
+      opts.temperature.checked = config.enableTemperature;
+    }
+    if (config.enableHumidity !== undefined) {
+      opts.humidity.checked = config.enableHumidity;
+    }
+    if (config.enableAirQuality !== undefined) {
+      opts.airQuality.checked = config.enableAirQuality;
+    }
+    if (config.enableNightMode !== undefined) {
+      opts.nightMode.checked = config.enableNightMode;
+    }
+    if (config.enableJetFocus !== undefined) {
+      opts.jetFocus.checked = config.enableJetFocus;
+    }
+    if (config.enableAutoMode !== undefined) {
+      opts.autoMode.checked = config.enableAutoMode;
+    }
+    if (config.enableFilterStatus !== undefined) {
+      opts.filterStatus.checked = config.enableFilterStatus;
+    }
+    if (config.pollingInterval) {
+      opts.polling.value = config.pollingInterval;
+    }
+    if (config.countryCode) {
+      el.country.value = config.countryCode;
+    }
 
     if (config.devices) {
       state.devices = config.devices.map((d) => ({
@@ -552,7 +583,9 @@
   }
 
   async function handleVerifyOtp() {
-    if (state.isSubmitting) return;
+    if (state.isSubmitting) {
+      return;
+    }
 
     const otpCode = el.otpCode.value.trim();
     if (!otpCode || otpCode.length < 6) {

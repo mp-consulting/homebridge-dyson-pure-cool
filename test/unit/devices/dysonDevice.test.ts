@@ -2,7 +2,7 @@
  * DysonDevice Unit Tests
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi, type Mocked } from 'vitest';
 
 import { DysonDevice, DEFAULT_FEATURES, createDefaultState } from '../../../src/devices/dysonDevice.js';
 import type { DeviceInfo, DeviceState, DeviceFeatures, MqttClientFactory } from '../../../src/devices/dysonDevice.js';
@@ -77,19 +77,19 @@ function createMockMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    connect: jest.fn().mockResolvedValue(undefined),
-    disconnect: jest.fn().mockResolvedValue(undefined),
-    subscribeToStatus: jest.fn().mockResolvedValue(undefined),
-    requestCurrentState: jest.fn().mockResolvedValue(undefined),
-    publishCommand: jest.fn().mockResolvedValue(undefined),
-    isConnected: jest.fn().mockReturnValue(true),
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
+    requestCurrentState: vi.fn().mockResolvedValue(undefined),
+    publishCommand: vi.fn().mockResolvedValue(undefined),
+    isConnected: vi.fn().mockReturnValue(true),
     // Helper methods for testing
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
@@ -97,7 +97,7 @@ function createMockMqttClient() {
     },
   };
 
-  return mockClient as unknown as jest.Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
+  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
 }
 
 describe('DysonDevice', () => {
@@ -115,12 +115,12 @@ describe('DysonDevice', () => {
 
   beforeEach(() => {
     mockMqttClient = createMockMqttClient();
-    mockMqttClientFactory = jest.fn().mockReturnValue(mockMqttClient);
+    mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     device = new TestDevice(defaultDeviceInfo, mockMqttClientFactory);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
@@ -162,7 +162,7 @@ describe('DysonDevice', () => {
     });
 
     it('should emit connect event', async () => {
-      const connectHandler = jest.fn();
+      const connectHandler = vi.fn();
       device.on('connect', connectHandler);
 
       await device.connect();
@@ -205,7 +205,7 @@ describe('DysonDevice', () => {
     });
 
     it('should emit disconnect event', async () => {
-      const disconnectHandler = jest.fn();
+      const disconnectHandler = vi.fn();
       device.on('disconnect', disconnectHandler);
 
       await device.connect();
@@ -232,7 +232,7 @@ describe('DysonDevice', () => {
 
   describe('state management', () => {
     it('should emit stateChange on updateState', () => {
-      const stateChangeHandler = jest.fn();
+      const stateChangeHandler = vi.fn();
       device.on('stateChange', stateChangeHandler);
 
       device.testUpdateState({ isOn: true, fanSpeed: 5 });
@@ -410,7 +410,7 @@ describe('DysonDevice', () => {
     });
 
     it('should handle MQTT disconnect event', () => {
-      const disconnectHandler = jest.fn();
+      const disconnectHandler = vi.fn();
       device.on('disconnect', disconnectHandler);
 
       mockMqttClient._emit('disconnect');
@@ -420,7 +420,7 @@ describe('DysonDevice', () => {
     });
 
     it('should handle MQTT connect event', () => {
-      const connectHandler = jest.fn();
+      const connectHandler = vi.fn();
       device.on('connect', connectHandler);
 
       // Reset state
@@ -433,7 +433,7 @@ describe('DysonDevice', () => {
     });
 
     it('should handle MQTT error event', () => {
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('error', errorHandler);
 
       const error = new Error('MQTT error');
@@ -449,7 +449,7 @@ describe('DysonDevice', () => {
     });
 
     it('should handle MQTT reconnectFailed event', () => {
-      const errorHandler = jest.fn();
+      const errorHandler = vi.fn();
       device.on('error', errorHandler);
 
       mockMqttClient._emit('reconnectFailed');

@@ -2,7 +2,7 @@
  * DysonAccessory Unit Tests
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi, type Mocked } from 'vitest';
 
 import { DysonAccessory } from '../../../src/accessories/dysonAccessory.js';
 import type { DysonAccessoryConfig } from '../../../src/accessories/dysonAccessory.js';
@@ -44,45 +44,45 @@ function createMockMqttClient() {
   const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   const mockClient = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    connect: jest.fn().mockResolvedValue(undefined),
-    disconnect: jest.fn().mockResolvedValue(undefined),
-    subscribeToStatus: jest.fn().mockResolvedValue(undefined),
-    requestCurrentState: jest.fn().mockResolvedValue(undefined),
-    publishCommand: jest.fn().mockResolvedValue(undefined),
-    isConnected: jest.fn().mockReturnValue(true),
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
+    requestCurrentState: vi.fn().mockResolvedValue(undefined),
+    publishCommand: vi.fn().mockResolvedValue(undefined),
+    isConnected: vi.fn().mockReturnValue(true),
     _emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
       handlers.forEach((handler) => handler(...args));
     },
   };
 
-  return mockClient as unknown as jest.Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
+  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
 }
 
 // Create mock logging
 function createMockLog(): Logging {
   return {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    log: jest.fn(),
-    success: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    log: vi.fn(),
+    success: vi.fn(),
   } as unknown as Logging;
 }
 
 // Create mock AccessoryInformation service
 function createMockInfoService() {
   return {
-    setCharacteristic: jest.fn().mockReturnThis(),
-    getCharacteristic: jest.fn().mockReturnThis(),
+    setCharacteristic: vi.fn().mockReturnThis(),
+    getCharacteristic: vi.fn().mockReturnThis(),
   };
 }
 
@@ -135,7 +135,7 @@ describe('DysonAccessory', () => {
 
     // Set up mocks
     mockMqttClient = createMockMqttClient();
-    mockMqttClientFactory = jest.fn().mockReturnValue(mockMqttClient);
+    mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
 
     mockLog = createMockLog();
@@ -144,7 +144,7 @@ describe('DysonAccessory', () => {
 
     mockAccessory = {
       displayName: 'Living Room',
-      getService: jest.fn((serviceType: unknown) => {
+      getService: vi.fn((serviceType: unknown) => {
         const uuid = typeof serviceType === 'object' && serviceType !== null && 'UUID' in serviceType
           ? (serviceType as { UUID: string }).UUID
           : String(serviceType);
@@ -153,8 +153,8 @@ describe('DysonAccessory', () => {
         }
         return undefined;
       }),
-      addService: jest.fn().mockReturnValue({}),
-      removeService: jest.fn(),
+      addService: vi.fn().mockReturnValue({}),
+      removeService: vi.fn(),
     } as unknown as PlatformAccessory;
 
     // Connect device
@@ -171,7 +171,7 @@ describe('DysonAccessory', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('initialization', () => {
@@ -217,7 +217,7 @@ describe('DysonAccessory', () => {
       const newMockInfoService = createMockInfoService();
       const newMockAccessory = {
         ...mockAccessory,
-        getService: jest.fn((serviceType: unknown) => {
+        getService: vi.fn((serviceType: unknown) => {
           const uuid = typeof serviceType === 'object' && serviceType !== null && 'UUID' in serviceType
             ? (serviceType as { UUID: string }).UUID
             : String(serviceType);
@@ -251,7 +251,7 @@ describe('DysonAccessory', () => {
       const newMockInfoService = createMockInfoService();
       const newMockAccessory = {
         ...mockAccessory,
-        getService: jest.fn((serviceType: unknown) => {
+        getService: vi.fn((serviceType: unknown) => {
           const uuid = typeof serviceType === 'object' && serviceType !== null && 'UUID' in serviceType
             ? (serviceType as { UUID: string }).UUID
             : String(serviceType);
@@ -278,7 +278,7 @@ describe('DysonAccessory', () => {
 
   describe('device event handling', () => {
     it('should subscribe to device stateChange events', () => {
-      const stateHandler = jest.fn();
+      const stateHandler = vi.fn();
       accessory.stateChangeHandler = stateHandler;
 
       // Simulate state change

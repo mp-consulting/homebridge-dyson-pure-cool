@@ -2,7 +2,7 @@
  * Device Factory Unit Tests
  */
 
-import { describe, it, expect } from '@jest/globals';
+
 
 import { createDevice, isProductTypeSupported, getSupportedProductTypes } from '../../../src/devices/deviceFactory.js';
 import { DysonLinkDevice } from '../../../src/devices/dysonLinkDevice.js';
