@@ -5,6 +5,8 @@
 
 **The most feature-rich Dyson plugin for HomeKit.** Control your Dyson Pure Cool, Hot+Cool, Humidify+Cool, and Big+Quiet devices through Apple HomeKit.
 
+> Originally based on [homebridge-dyson-pure-cool](https://github.com/lukasroegner/homebridge-dyson-pure-cool) by [Lukas Rogner](https://github.com/lukasroegner), licensed under the MIT License. This fork has been substantially rewritten by [MP Consulting](https://github.com/mp-consulting).
+
 ## Features
 
 - **Fan Control** - Power on/off, speed (1-10), oscillation, auto mode
@@ -241,7 +243,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a list of changes.
 
 ## License
 
-This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. The original work by [Lukas Rogner](https://github.com/lukasroegner) is copyright (c) 2019 under the MIT License. Modifications by [MP Consulting](https://github.com/mp-consulting) are copyright (c) 2025 under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
