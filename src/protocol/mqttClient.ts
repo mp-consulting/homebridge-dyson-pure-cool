@@ -475,10 +475,15 @@ export class DysonMqttClient extends EventEmitter {
 
       this.reconnectAttempts++;
 
-      // Clean up existing client before reconnecting
+      // Clean up existing client before reconnecting.
+      // Must call end() to stop keepalive timers, otherwise a
+      // keepalive timeout can fire on the old client after listeners
+      // are removed, causing an unhandled error that crashes the process.
       if (this.client) {
-        this.client.removeAllListeners();
+        const oldClient = this.client;
         this.client = null;
+        oldClient.end(true);
+        oldClient.removeAllListeners();
       }
 
       // Attempt to reconnect
@@ -537,8 +542,10 @@ export class DysonMqttClient extends EventEmitter {
    */
   private cleanup(): void {
     if (this.client) {
-      this.client.removeAllListeners();
+      const oldClient = this.client;
       this.client = null;
+      oldClient.end(true);
+      oldClient.removeAllListeners();
     }
     this.connected = false;
     this.isReconnecting = false;
