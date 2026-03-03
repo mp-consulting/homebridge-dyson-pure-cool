@@ -20,8 +20,10 @@ function createMockMqttClient() {
       eventHandlers.get(event)!.push(handler);
       return mockClient;
     }),
-    end: vi.fn((force: boolean, opts: object, callback: () => void) => {
-      callback();
+    end: vi.fn((force?: boolean, opts?: object, callback?: () => void) => {
+      if (typeof callback === 'function') {
+        callback();
+      }
     }),
     subscribe: vi.fn((topic: string, opts: object, callback: (error?: Error) => void) => {
       callback();
