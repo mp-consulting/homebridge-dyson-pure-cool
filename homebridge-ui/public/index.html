@@ -1,268 +1,297 @@
-<!-- Dyson Pure Cool - Custom Configuration UI -->
-<!-- Bootstrap 5 is automatically injected by Homebridge -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
-<link rel="stylesheet" href="styles.css">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dyson Pure Cool Setup</title>
+  <script>
+    (function() {
+      try {
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.dataset.bsTheme = 'dark';
+        }
+      } catch(e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="lib/kit.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="dyson-wizard">
+    <!-- Header -->
+    <div class="wizard-header">
+      <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="50" r="45" stroke="currentColor" stroke-width="2" fill="none" opacity="0.2"/>
+        <circle cx="50" cy="50" r="35" stroke="currentColor" stroke-width="2" fill="none" opacity="0.4"/>
+        <circle cx="50" cy="50" r="25" stroke="currentColor" stroke-width="3" fill="none"/>
+        <circle cx="50" cy="50" r="8" fill="currentColor"/>
+      </svg>
+      <h4>Dyson Pure Cool</h4>
+      <p class="text-muted">Connect your Dyson devices to HomeKit</p>
+    </div>
 
-<div class="dyson-wizard">
-  <!-- Header -->
-  <div class="wizard-header">
-    <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="45" stroke="currentColor" stroke-width="2" fill="none" opacity="0.2"/>
-      <circle cx="50" cy="50" r="35" stroke="currentColor" stroke-width="2" fill="none" opacity="0.4"/>
-      <circle cx="50" cy="50" r="25" stroke="currentColor" stroke-width="3" fill="none"/>
-      <circle cx="50" cy="50" r="8" fill="currentColor"/>
-    </svg>
-    <h4>Dyson Pure Cool</h4>
-    <p class="text-muted">Connect your Dyson devices to HomeKit</p>
-  </div>
+    <!-- Step Progress -->
+    <ul class="step-progress" id="step-progress">
+      <li class="active" data-step="1">
+        <span class="step-number">1</span>
+        <span class="step-label">Account</span>
+      </li>
+      <div class="step-connector"></div>
+      <li data-step="2">
+        <span class="step-number">2</span>
+        <span class="step-label">Devices</span>
+      </li>
+      <div class="step-connector"></div>
+      <li data-step="3">
+        <span class="step-number">3</span>
+        <span class="step-label">Options</span>
+      </li>
+    </ul>
 
-  <!-- Step Progress -->
-  <ul class="step-progress" id="step-progress">
-    <li class="active" data-step="1">
-      <span class="step-number">1</span>
-      <span class="step-label">Account</span>
-    </li>
-    <div class="step-connector"></div>
-    <li data-step="2">
-      <span class="step-number">2</span>
-      <span class="step-label">Devices</span>
-    </li>
-    <div class="step-connector"></div>
-    <li data-step="3">
-      <span class="step-number">3</span>
-      <span class="step-label">Options</span>
-    </li>
-  </ul>
+    <!-- Step 0: Existing Config (shown when devices already configured) -->
+    <div class="wizard-step" id="step-0">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title mb-3">Your Dyson Devices</h5>
+          <p class="text-muted mb-4">Your devices are already configured. You can edit options or re-sync from the cloud.</p>
 
-  <!-- Step 0: Existing Config (shown when devices already configured) -->
-  <div class="wizard-step" id="step-0">
-    <div class="card">
-      <div class="card-body">
-        <h5 class="card-title mb-3">Your Dyson Devices</h5>
-        <p class="text-muted mb-4">Your devices are already configured. You can edit options or re-sync from the cloud.</p>
+          <div id="existing-device-list" class="mb-4">
+            <!-- Existing devices will be shown here -->
+          </div>
 
-        <div id="existing-device-list" class="mb-4">
-          <!-- Existing devices will be shown here -->
-        </div>
-
-        <div class="d-grid gap-2">
-          <button class="btn btn-primary" id="btn-edit-options">Edit Options</button>
-          <button class="btn btn-outline-secondary" id="btn-resync">
-            <span class="btn-text">Re-sync from Dyson Cloud</span>
-            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
-          </button>
+          <div class="d-grid gap-2">
+            <button class="btn btn-primary" id="btn-edit-options">Edit Options</button>
+            <button class="btn btn-outline-secondary" id="btn-resync">
+              <span class="btn-text">Re-sync from Dyson Cloud</span>
+              <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Step 1: Account Login -->
-  <div class="wizard-step" id="step-1">
-    <div class="card">
-      <div class="card-body">
-        <h5 class="card-title mb-3">Connect Your Dyson Account</h5>
-        <p class="text-muted mb-4">Enter your Dyson account credentials to discover your devices.</p>
-
-        <div class="mb-3">
-          <label class="form-label" for="email">Email Address</label>
-          <input type="email" class="form-control" id="email" placeholder="your@email.com" autocomplete="email">
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label" for="password">Password</label>
-          <input type="password" class="form-control" id="password" placeholder="Your Dyson password" autocomplete="current-password">
-        </div>
-
-        <div class="mb-4">
-          <label class="form-label" for="country">Country</label>
-          <select class="form-select country-select" id="country">
-            <optgroup label="Americas">
-              <option value="CA">Canada</option>
-              <option value="US">United States</option>
-            </optgroup>
-            <optgroup label="Asia Pacific">
-              <option value="AU">Australia</option>
-              <option value="CN">China</option>
-              <option value="HK">Hong Kong</option>
-              <option value="IN">India</option>
-              <option value="JP">Japan</option>
-              <option value="MY">Malaysia</option>
-              <option value="NZ">New Zealand</option>
-              <option value="SG">Singapore</option>
-              <option value="KR">South Korea</option>
-              <option value="TW">Taiwan</option>
-              <option value="TH">Thailand</option>
-            </optgroup>
-            <optgroup label="Europe">
-              <option value="AT">Austria</option>
-              <option value="BE">Belgium</option>
-              <option value="CZ">Czech Republic</option>
-              <option value="DK">Denmark</option>
-              <option value="FI">Finland</option>
-              <option value="FR">France</option>
-              <option value="DE">Germany</option>
-              <option value="IE">Ireland</option>
-              <option value="IT">Italy</option>
-              <option value="NL">Netherlands</option>
-              <option value="NO">Norway</option>
-              <option value="PL">Poland</option>
-              <option value="PT">Portugal</option>
-              <option value="ES">Spain</option>
-              <option value="SE">Sweden</option>
-              <option value="CH">Switzerland</option>
-              <option value="GB">United Kingdom</option>
-            </optgroup>
-            <optgroup label="Middle East">
-              <option value="SA">Saudi Arabia</option>
-              <option value="AE">United Arab Emirates</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <div class="d-grid">
-          <button class="btn btn-primary" id="btn-connect">
-            <span class="btn-text">Connect Account</span>
-            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Step 1b: 2FA Verification -->
-  <div class="wizard-step" id="step-1b">
-    <div class="card">
-      <div class="card-body">
-        <h5 class="card-title mb-3">Verify Your Identity</h5>
-        <p class="text-muted mb-4">We've sent a verification code to your email. Enter it below.</p>
-
-        <div class="alert alert-info d-flex align-items-center mb-4">
-          <span class="alert-icon">&#9993;</span>
-          <span>Check your inbox for an email from Dyson with your verification code.</span>
-        </div>
-
-        <div class="mb-4">
-          <label class="form-label" for="otp-code">Verification Code</label>
-          <input type="text" class="form-control form-control-lg text-center" id="otp-code"
-                 placeholder="000000" maxlength="6" autocomplete="one-time-code"
-                 style="letter-spacing: 0.5em; font-family: monospace;">
-        </div>
-
-        <div class="d-flex gap-2">
-          <button class="btn btn-outline-secondary" id="btn-back-to-login">Back</button>
-          <button class="btn btn-primary flex-grow-1" id="btn-verify-otp">
-            <span class="btn-text">Verify</span>
-            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Step 2: Device Selection -->
-  <div class="wizard-step" id="step-2">
-    <div class="card">
-      <div class="card-body">
-        <h5 class="card-title mb-3">Select Your Devices</h5>
-        <p class="text-muted mb-4">Choose which devices to add to HomeKit. You can customize the name for each device.</p>
-
-        <div id="device-list">
-          <!-- Devices will be inserted here -->
-        </div>
-
-        <div class="d-flex gap-2 mt-4">
-          <button class="btn btn-outline-secondary" id="btn-back-to-account">Back</button>
-          <button class="btn btn-primary flex-grow-1" id="btn-to-options">
-            Continue
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Step 3: Configuration Options -->
-  <div class="wizard-step" id="step-3">
-    <div class="card">
-      <div class="card-body">
-        <h5 class="card-title mb-3">Configure Options</h5>
-        <p class="text-muted mb-4">Customize how your devices appear in HomeKit.</p>
-
-        <div class="options-section">
-          <h6>Sensor Options</h6>
-
-          <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="opt-temperature" checked>
-            <label class="form-check-label" for="opt-temperature">Temperature Sensor</label>
-          </div>
-
-          <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="opt-humidity" checked>
-            <label class="form-check-label" for="opt-humidity">Humidity Sensor</label>
-          </div>
-
-          <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="opt-air-quality" checked>
-            <label class="form-check-label" for="opt-air-quality">Air Quality Sensor</label>
-          </div>
-        </div>
-
-        <div class="options-section">
-          <h6>Additional Controls</h6>
-
-          <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="opt-night-mode" checked>
-            <label class="form-check-label" for="opt-night-mode">Night Mode Switch</label>
-          </div>
-
-          <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="opt-jet-focus" checked>
-            <label class="form-check-label" for="opt-jet-focus">Jet Focus Switch (Diffuse/Focused)</label>
-          </div>
-
-          <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="opt-auto-mode" checked>
-            <label class="form-check-label" for="opt-auto-mode">Auto Mode Switch</label>
-          </div>
-
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="opt-filter-status">
-            <label class="form-check-label" for="opt-filter-status">Filter Status Indicator</label>
-          </div>
-        </div>
-
-        <div class="options-section">
-          <h6>Advanced</h6>
+    <!-- Step 1: Account Login -->
+    <div class="wizard-step" id="step-1">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title mb-3">Connect Your Dyson Account</h5>
+          <p class="text-muted mb-4">Enter your Dyson account credentials to discover your devices.</p>
 
           <div class="mb-3">
-            <label class="form-label" for="opt-polling">Polling Interval (seconds)</label>
-            <input type="number" class="form-control" id="opt-polling" value="60" min="10" max="300" style="max-width: 120px;">
-            <div class="form-text">How often to check device status (10-300 seconds)</div>
+            <label class="form-label" for="email">Email Address</label>
+            <input type="email" class="form-control" id="email" placeholder="your@email.com" autocomplete="email">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="password">Password</label>
+            <input type="password" class="form-control" id="password" placeholder="Your Dyson password" autocomplete="current-password">
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label" for="country">Country</label>
+            <select class="form-select country-select" id="country">
+              <optgroup label="Americas">
+                <option value="CA">Canada</option>
+                <option value="US">United States</option>
+              </optgroup>
+              <optgroup label="Asia Pacific">
+                <option value="AU">Australia</option>
+                <option value="CN">China</option>
+                <option value="HK">Hong Kong</option>
+                <option value="IN">India</option>
+                <option value="JP">Japan</option>
+                <option value="MY">Malaysia</option>
+                <option value="NZ">New Zealand</option>
+                <option value="SG">Singapore</option>
+                <option value="KR">South Korea</option>
+                <option value="TW">Taiwan</option>
+                <option value="TH">Thailand</option>
+              </optgroup>
+              <optgroup label="Europe">
+                <option value="AT">Austria</option>
+                <option value="BE">Belgium</option>
+                <option value="CZ">Czech Republic</option>
+                <option value="DK">Denmark</option>
+                <option value="FI">Finland</option>
+                <option value="FR">France</option>
+                <option value="DE">Germany</option>
+                <option value="IE">Ireland</option>
+                <option value="IT">Italy</option>
+                <option value="NL">Netherlands</option>
+                <option value="NO">Norway</option>
+                <option value="PL">Poland</option>
+                <option value="PT">Portugal</option>
+                <option value="ES">Spain</option>
+                <option value="SE">Sweden</option>
+                <option value="CH">Switzerland</option>
+                <option value="GB">United Kingdom</option>
+              </optgroup>
+              <optgroup label="Middle East">
+                <option value="SA">Saudi Arabia</option>
+                <option value="AE">United Arab Emirates</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div class="d-grid">
+            <button class="btn btn-primary" id="btn-connect">
+              <span class="btn-text">Connect Account</span>
+              <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+            </button>
           </div>
         </div>
+      </div>
+    </div>
 
-        <div class="d-flex gap-2 mt-4">
-          <button class="btn btn-outline-secondary" id="btn-back-to-devices">Back</button>
-          <button class="btn btn-success flex-grow-1" id="btn-save">
-            <span class="btn-text">Save Configuration</span>
-            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
-          </button>
+    <!-- Step 1b: 2FA Verification -->
+    <div class="wizard-step" id="step-1b">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title mb-3">Verify Your Identity</h5>
+          <p class="text-muted mb-4">We've sent a verification code to your email. Enter it below.</p>
+
+          <div class="alert alert-info d-flex align-items-center mb-4">
+            <i class="bi bi-envelope-fill alert-icon"></i>
+            <span>Check your inbox for an email from Dyson with your verification code.</span>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label" for="otp-code">Verification Code</label>
+            <input type="text" class="form-control form-control-lg text-center" id="otp-code"
+                   placeholder="000000" maxlength="6" autocomplete="one-time-code"
+                   style="letter-spacing: 0.5em; font-family: monospace;">
+          </div>
+
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" id="btn-back-to-login">Back</button>
+            <button class="btn btn-primary flex-grow-1" id="btn-verify-otp">
+              <span class="btn-text">Verify</span>
+              <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Device Selection -->
+    <div class="wizard-step" id="step-2">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title mb-3">Select Your Devices</h5>
+          <p class="text-muted mb-4">Choose which devices to add to HomeKit. You can customize the name for each device.</p>
+
+          <div id="device-list">
+            <!-- Devices will be inserted here -->
+          </div>
+
+          <div class="d-flex gap-2 mt-4">
+            <button class="btn btn-outline-secondary" id="btn-back-to-account">Back</button>
+            <button class="btn btn-primary flex-grow-1" id="btn-to-options">
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Configuration Options -->
+    <div class="wizard-step" id="step-3">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title mb-3">Configure Options</h5>
+          <p class="text-muted mb-4">Customize how your devices appear in HomeKit.</p>
+
+          <div class="options-section">
+            <h6>Sensor Options</h6>
+
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="opt-temperature" checked>
+              <label class="form-check-label" for="opt-temperature">Temperature Sensor</label>
+            </div>
+
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="opt-humidity" checked>
+              <label class="form-check-label" for="opt-humidity">Humidity Sensor</label>
+            </div>
+
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="opt-air-quality" checked>
+              <label class="form-check-label" for="opt-air-quality">Air Quality Sensor</label>
+            </div>
+          </div>
+
+          <div class="options-section">
+            <h6>Additional Controls</h6>
+
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="opt-night-mode" checked>
+              <label class="form-check-label" for="opt-night-mode">Night Mode Switch</label>
+            </div>
+
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="opt-jet-focus" checked>
+              <label class="form-check-label" for="opt-jet-focus">Jet Focus Switch (Diffuse/Focused)</label>
+            </div>
+
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="opt-auto-mode" checked>
+              <label class="form-check-label" for="opt-auto-mode">Auto Mode Switch</label>
+            </div>
+
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="opt-filter-status">
+              <label class="form-check-label" for="opt-filter-status">Filter Status Indicator</label>
+            </div>
+          </div>
+
+          <div class="options-section">
+            <h6>Advanced</h6>
+
+            <div class="mb-3">
+              <label class="form-label" for="opt-polling">Polling Interval (seconds)</label>
+              <input type="number" class="form-control" id="opt-polling" value="60" min="10" max="300" style="max-width: 120px;">
+              <div class="form-text">How often to check device status (10-300 seconds)</div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mt-4">
+            <button class="btn btn-outline-secondary" id="btn-back-to-devices">Back</button>
+            <button class="btn btn-success flex-grow-1" id="btn-save">
+              <span class="btn-text">Save Configuration</span>
+              <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success State -->
+    <div class="wizard-step" id="step-success">
+      <div class="card">
+        <div class="card-body text-center py-5">
+          <div class="success-icon mb-3"><i class="bi bi-check-lg"></i></div>
+          <h4 class="mb-3">Configuration Complete!</h4>
+          <p class="text-muted mb-4">Your Dyson devices have been configured successfully.<br>
+          Click "Save" to apply changes and restart Homebridge.</p>
+          <button class="btn btn-primary" id="btn-close">Close</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Success State -->
-  <div class="wizard-step" id="step-success">
-    <div class="card">
-      <div class="card-body text-center py-5">
-        <div class="success-icon mb-3">&#10003;</div>
-        <h4 class="mb-3">Configuration Complete!</h4>
-        <p class="text-muted mb-4">Your Dyson devices have been configured successfully.<br>
-        Click "Save" to apply changes and restart Homebridge.</p>
-        <button class="btn btn-primary" id="btn-close">Close</button>
-      </div>
-    </div>
+  <div class="mp-footer">
+    <a href="https://github.com/mp-consulting/homebridge-dyson-pure-cool" target="_blank" rel="noopener">
+      <i class="bi bi-github me-1"></i>GitHub
+    </a>
+    <a href="https://www.npmjs.com/package/@mp-consulting/homebridge-dyson-pure-cool" target="_blank" rel="noopener">
+      <i class="bi bi-npm me-1"></i>npm
+    </a>
   </div>
-</div>
 
-<script src="wizard.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="lib/kit.js"></script>
+  <script src="wizard.js"></script>
+</body>
+</html>

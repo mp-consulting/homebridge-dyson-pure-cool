@@ -39,6 +39,9 @@ tmp/
 .npm
 .eslintcache
 
+# homebridge-ui-kit build artifacts
+homebridge-ui/public/lib/
+
 # Claude Code
 .claude/
 

@@ -37,7 +37,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #6c757d;
+  color: var(--bs-secondary-color);
   transition: all 0.3s ease;
 }
 
@@ -45,9 +45,9 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #e9ecef;
-  color: #6c757d;
-  border: 2px solid #dee2e6;
+  background: var(--bs-secondary-bg);
+  color: var(--bs-secondary-color);
+  border: 2px solid var(--bs-border-color);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,7 +98,7 @@
 .step-progress .step-connector {
   width: 60px;
   height: 2px;
-  background: #dee2e6;
+  background: var(--bs-border-color);
   margin: 0 0.5rem;
   margin-bottom: 1.5rem;
   border-radius: 2px;
@@ -127,7 +127,7 @@
 
 /* Device Cards */
 .device-card {
-  border: 2px solid #dee2e6;
+  border: 2px solid var(--bs-border-color);
   border-radius: 0.5rem;
   padding: 1rem;
   margin-bottom: 0.75rem;
@@ -136,13 +136,13 @@
 }
 
 .device-card:hover {
-  border-color: #0d6efd;
-  background: #f8f9fa;
+  border-color: var(--bs-primary);
+  background: var(--bs-secondary-bg);
 }
 
 .device-card.selected {
-  border-color: #0d6efd;
-  background: rgba(13, 110, 253, 0.1);
+  border-color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), 0.1);
 }
 
 .device-card .device-icon {
@@ -160,68 +160,15 @@
   max-width: 250px;
 }
 
-.device-card .device-name-input::placeholder {
-  font-weight: 400;
-  color: #6c757d;
-}
-
 .device-card .device-type {
   font-size: 0.85rem;
-  color: #6c757d;
+  color: var(--bs-secondary-color);
 }
 
 .device-card .device-serial {
   font-size: 0.75rem;
-  color: #6c757d;
+  color: var(--bs-secondary-color);
   font-family: monospace;
-}
-
-/* Dark mode support - detected via JS from parent window or system preference */
-.dark-mode .step-progress li {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.dark-mode .step-progress li .step-number {
-  background: #343a40;
-  color: rgba(255, 255, 255, 0.7);
-  border-color: #495057;
-}
-
-.dark-mode .step-progress .step-connector {
-  background: #495057;
-}
-
-.dark-mode .device-card {
-  border-color: #495057;
-}
-
-.dark-mode .device-card:hover {
-  background: #343a40;
-}
-
-.dark-mode .device-card.selected {
-  background: rgba(13, 110, 253, 0.2);
-}
-
-.dark-mode .device-card .device-type,
-.dark-mode .device-card .device-serial {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.dark-mode .device-card .device-name-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.dark-mode .options-section {
-  background: #343a40;
-}
-
-.dark-mode .options-section h6 {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.dark-mode .loading-overlay {
-  background: rgba(33, 37, 41, 0.9);
 }
 
 /* Selection checkbox positioned at right */
@@ -275,9 +222,13 @@
   z-index: 100;
 }
 
+[data-bs-theme="dark"] .loading-overlay {
+  background: rgba(33, 37, 41, 0.9);
+}
+
 /* Options form */
 .options-section {
-  background: #f8f9fa;
+  background: var(--bs-secondary-bg);
   border-radius: 0.5rem;
   padding: 1.25rem;
   margin-bottom: 1rem;
@@ -285,7 +236,7 @@
 
 .options-section h6 {
   margin-bottom: 1rem;
-  color: #6c757d;
+  color: var(--bs-secondary-color);
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.5px;

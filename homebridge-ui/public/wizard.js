@@ -4,46 +4,6 @@
 
 (async () => {
   // =============================================================================
-  // Dark Mode Detection
-  // =============================================================================
-
-  // Detect dark mode from Homebridge parent window or system preference
-  function detectDarkMode() {
-    let isDarkMode = false;
-
-    // Method 1: Check parent window's body class
-    try {
-      if (window.parent && window.parent.document && window.parent.document.body) {
-        isDarkMode = window.parent.document.body.classList.contains('dark-mode');
-      }
-    } catch (e) {
-      // Cross-origin access blocked
-    }
-
-    // Method 2: Check URL parameter (Homebridge may pass theme info)
-    if (!isDarkMode) {
-      const urlParams = new URLSearchParams(window.location.search);
-      isDarkMode = urlParams.get('theme') === 'dark';
-    }
-
-    // Method 3: Fall back to system preference
-    if (!isDarkMode && window.matchMedia) {
-      isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark-mode');
-      document.body?.classList.add('dark-mode');
-    }
-  }
-
-  // Run immediately and also when DOM is ready
-  detectDarkMode();
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', detectDarkMode);
-  }
-
-  // =============================================================================
   // Homebridge API Wrapper
   // =============================================================================
 
@@ -207,7 +167,7 @@
     return `
       <div class="device-card ${selected ? 'selected' : ''}" ${isSelectable ? `data-serial="${device.serial}"` : ''}>
         <div class="d-flex align-items-center ${isSelectable ? 'position-relative' : ''}">
-          <div class="device-icon">&#127744;</div>
+          <div class="device-icon"><i class="bi bi-wind"></i></div>
           <div class="flex-grow-1">
             ${isSelectable
               ? `<input type="text" class="form-control form-control-sm device-name-input mb-1"
@@ -698,6 +658,18 @@
   // =============================================================================
 
   async function init() {
+    // Apply Homebridge theme setting if available
+    try {
+      const settings = await homebridge.getUserSettings?.();
+      if (settings?.theme === 'dark') {
+        document.documentElement.dataset.bsTheme = 'dark';
+      } else if (settings?.theme === 'light') {
+        document.documentElement.dataset.bsTheme = 'light';
+      }
+    } catch (e) {
+      // getUserSettings not available, keep system preference from early detection
+    }
+
     hb.disableSaveButton();
 
     // Load product types and heating capability info from device catalog
