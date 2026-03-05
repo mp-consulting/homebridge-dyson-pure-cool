@@ -147,7 +147,6 @@
 
 .device-card .device-icon {
   font-size: 2rem;
-  margin-right: 1rem;
 }
 
 .device-card .device-name {
@@ -171,23 +170,19 @@
   font-family: monospace;
 }
 
-/* Selection checkbox positioned at right */
-.device-card > .d-flex > .form-check {
-  position: absolute;
-  right: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
+/* Static (non-selectable) device cards: suppress hover highlight */
+.device-card-static {
+  cursor: default;
 }
 
-/* Form switches inside device cards should not be absolutely positioned */
-.device-card .form-switch {
-  position: static;
-  transform: none;
+.device-card-static:hover {
+  border-color: var(--bs-border-color);
+  background: transparent;
 }
 
-/* Country Select */
-.country-select {
-  max-width: 200px;
+/* Firmware version / update badge row */
+.device-meta {
+  font-size: 0.75rem;
 }
 
 /* Success Animation */

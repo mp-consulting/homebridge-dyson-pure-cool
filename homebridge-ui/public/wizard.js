@@ -22,9 +22,6 @@
         homebridge.toast[type](msg, title);
       } else {
         console[type === 'error' ? 'error' : type === 'warning' ? 'warn' : 'log'](`${type}:`, msg);
-        if (type === 'error') {
-          alert(msg);
-        }
       }
     };
 
@@ -63,10 +60,12 @@
     selectedDevices: new Set(),
     isSubmitting: false,
     existingConfig: null,
+    isResync: false,
   };
 
   let productTypes = {};
   let heatingProductTypes = [];
+  let jetFocusProductTypes = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -86,6 +85,9 @@
     password: $('password'),
     country: $('country'),
     otpCode: $('otp-code'),
+    errorLogin: $('error-login'),
+    errorOtp: $('error-otp'),
+    loginResyncHint: $('login-resync-hint'),
     options: {
       temperature: $('opt-temperature'),
       humidity: $('opt-humidity'),
@@ -100,6 +102,7 @@
       editOptions: $('btn-edit-options'),
       resync: $('btn-resync'),
       connect: $('btn-connect'),
+      togglePassword: $('btn-toggle-password'),
       backToLogin: $('btn-back-to-login'),
       verifyOtp: $('btn-verify-otp'),
       backToAccount: $('btn-back-to-account'),
@@ -128,10 +131,34 @@
     spinner?.classList.toggle('d-none', !loading);
   }
 
+  function showInlineError(errorEl, message) {
+    errorEl.textContent = message;
+    errorEl.classList.remove('d-none');
+  }
+
+  function hideInlineError(errorEl) {
+    errorEl.classList.add('d-none');
+    errorEl.textContent = '';
+  }
+
   function goToStep(step) {
     // Hide all, show target
     Object.values(el.steps).forEach((s) => s.classList.remove('active'));
     el.steps[step].classList.add('active');
+
+    // Clear inline errors when navigating
+    hideInlineError(el.errorLogin);
+    hideInlineError(el.errorOtp);
+
+    // Show/hide resync hint on step 1 based on state
+    if (step === 1) {
+      el.loginResyncHint.classList.toggle('d-none', !state.isResync);
+    }
+
+    // Update options visibility when entering step 3
+    if (step === 3) {
+      updateOptionsVisibility();
+    }
 
     // Update progress bar
     const numericStep = step === 0 || step === '1b' ? 1 : step === 'success' ? 4 : step;
@@ -151,38 +178,86 @@
   }
 
   // =============================================================================
+  // Options Visibility (filter by device capabilities)
+  // =============================================================================
+
+  function updateOptionsVisibility() {
+    const selected = state.devices.filter((d) => state.selectedDevices.has(d.serial));
+    // Jet focus: only show if at least one selected device supports it
+    const anyJetFocus = selected.some((d) => d.hasJetFocus === true);
+    el.options.jetFocus.closest('.form-check').classList.toggle('d-none', !anyJetFocus);
+  }
+
+  // =============================================================================
+  // Country Auto-Detection
+  // =============================================================================
+
+  function detectCountry() {
+    try {
+      const lang = navigator.language || '';
+      const match = lang.match(/-([A-Z]{2})$/i);
+      if (match) {
+        const code = match[1].toUpperCase();
+        if (el.country.querySelector(`option[value="${code}"]`)) {
+          return code;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }
+
+  // =============================================================================
   // Rendering
   // =============================================================================
 
-  function renderDeviceCard(device, isSelectable = false) {
+  function renderDeviceCard(device, isSelectable = false, showRemove = false) {
     const selected = state.selectedDevices.has(device.serial);
     const typeName = productTypes[device.productType] || device.productType;
     const defaultName = typeName || 'Dyson Device';
-    // Use hasHeating from device catalog (set by server from getDeviceFeatures)
     const hasHeating = device.hasHeating === true;
     const heatingServiceType = device.heatingServiceType || 'thermostat';
-    // Continuous monitoring is available on all devices
     const continuousMonitoring = device.isContinuousMonitoringEnabled === true;
 
+    const versionBadge = device.version
+      ? `<span class="badge bg-secondary fw-normal">${escapeHtml(device.version)}</span>`
+      : '';
+    const updateBadge = device.newVersionAvailable
+      ? '<span class="badge bg-warning text-dark fw-normal ms-1"><i class="bi bi-arrow-up-circle me-1"></i>Update available</span>'
+      : '';
+
+    const actionEl = showRemove
+      ? `<button class="btn btn-sm btn-outline-danger flex-shrink-0" data-remove-serial="${escapeHtml(device.serial)}" title="Remove device">
+           <i class="bi bi-trash"></i>
+         </button>`
+      : isSelectable
+        ? `<div class="form-check flex-shrink-0 ms-2 mt-1">
+             <input class="form-check-input" type="checkbox" ${selected ? 'checked' : ''}>
+           </div>`
+        : '<span class="badge bg-success flex-shrink-0">Configured</span>';
+
     return `
-      <div class="device-card ${selected ? 'selected' : ''}" ${isSelectable ? `data-serial="${device.serial}"` : ''}>
-        <div class="d-flex align-items-center ${isSelectable ? 'position-relative' : ''}">
+      <div class="device-card${selected && isSelectable && !showRemove ? ' selected' : ''}${showRemove ? ' device-card-static' : ''}"
+           ${isSelectable ? `data-serial="${escapeHtml(device.serial)}"` : ''}>
+        <div class="d-flex align-items-start gap-3">
           <div class="device-icon"><i class="bi bi-wind"></i></div>
           <div class="flex-grow-1">
             ${isSelectable
               ? `<input type="text" class="form-control form-control-sm device-name-input mb-1"
-                   data-serial="${device.serial}"
+                   data-serial="${escapeHtml(device.serial)}"
                    value="${escapeHtml(device.name || '')}"
                    placeholder="${escapeHtml(defaultName)}"
                    onclick="event.stopPropagation()">`
               : `<div class="device-name">${escapeHtml(device.name || defaultName)}</div>`}
             <div class="device-type">${escapeHtml(typeName)}</div>
-            <div class="device-serial">${escapeHtml(device.serial)}${device.ipAddress ? ` • ${escapeHtml(device.ipAddress)}` : ''}</div>
+            <div class="device-serial">${escapeHtml(device.serial)}${device.ipAddress ? ` <span class="text-muted">• ${escapeHtml(device.ipAddress)}</span>` : ''}</div>
+            ${device.version ? `<div class="device-meta mt-1">${versionBadge}${updateBadge}</div>` : ''}
             ${isSelectable ? `
               <div class="mt-2" onclick="event.stopPropagation()">
                 <div class="form-check form-switch">
                   <input class="form-check-input continuous-monitoring-check" type="checkbox" role="switch"
-                    data-serial="${device.serial}" ${continuousMonitoring ? 'checked' : ''}>
+                    data-serial="${escapeHtml(device.serial)}" ${continuousMonitoring ? 'checked' : ''}>
                   <label class="form-check-label small">
                     Continuous Monitoring
                     <span class="text-muted d-block" style="font-size: 0.75em;">Keep sensors active when off (required for HomeKit control while off)</span>
@@ -193,7 +268,7 @@
             ${hasHeating && isSelectable ? `
               <div class="mt-2" onclick="event.stopPropagation()">
                 <label class="form-label small text-muted mb-1">Heating Service</label>
-                <select class="form-select form-select-sm heating-service-select" data-serial="${device.serial}">
+                <select class="form-select form-select-sm heating-service-select" data-serial="${escapeHtml(device.serial)}">
                   <option value="thermostat" ${heatingServiceType === 'thermostat' ? 'selected' : ''}>Thermostat (Recommended)</option>
                   <option value="heater-cooler" ${heatingServiceType === 'heater-cooler' ? 'selected' : ''}>Heater Cooler</option>
                   <option value="both" ${heatingServiceType === 'both' ? 'selected' : ''}>Both</option>
@@ -201,9 +276,7 @@
               </div>
             ` : ''}
           </div>
-          ${isSelectable
-            ? `<div class="form-check"><input class="form-check-input" type="checkbox" ${selected ? 'checked' : ''}></div>`
-            : '<span class="badge bg-success">Configured</span>'}
+          ${actionEl}
         </div>
       </div>
     `;
@@ -240,12 +313,11 @@
         serial: device.serial,
         productType: device.productType,
         localCredentials: device.localCredentials,
-        ipAddress: device.ipAddress, // Use cached IP if available
+        ipAddress: device.ipAddress,
       });
       checkbox.checked = response.continuousMonitoring;
       device.isContinuousMonitoringEnabled = response.continuousMonitoring;
 
-      // Save discovered IP to device config for future use
       if (response.discoveredIp && response.discoveredIp !== device.ipAddress) {
         device.ipAddress = response.discoveredIp;
         console.log(`[Wizard] Cached IP ${response.discoveredIp} for ${device.serial}`);
@@ -253,16 +325,35 @@
       }
     } catch (error) {
       console.warn(`Failed to fetch state for ${device.serial}:`, error.message);
-      // Keep default value on error
     } finally {
       checkbox.disabled = false;
     }
   }
 
   function renderExistingDevices(devices) {
-    el.existingDeviceList.innerHTML = devices.map((d) => renderDeviceCard(d, true)).join('');
+    if (devices.length === 0) {
+      el.existingDeviceList.innerHTML = `
+        <div class="text-center text-muted py-3">
+          <i class="bi bi-wind fs-2 d-block mb-2 opacity-50"></i>
+          No devices configured. Click <strong>Re-sync</strong> to add devices.
+        </div>`;
+      return;
+    }
 
-    // Handle name input changes for existing devices (with auto-save)
+    el.existingDeviceList.innerHTML = devices.map((d) => renderDeviceCard(d, true, true)).join('');
+
+    // Handle remove button clicks
+    el.existingDeviceList.querySelectorAll('[data-remove-serial]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const serial = btn.dataset.removeSerial;
+        state.devices = state.devices.filter((d) => d.serial !== serial);
+        state.selectedDevices.delete(serial);
+        renderExistingDevices(state.devices);
+        autoSaveConfig();
+      });
+    });
+
+    // Handle name input changes
     el.existingDeviceList.querySelectorAll('.device-name-input').forEach((input) => {
       input.addEventListener('input', (e) => {
         const serial = e.target.dataset.serial;
@@ -274,13 +365,11 @@
       });
     });
 
-    // Handle continuous monitoring checkbox changes for existing devices
-    // This sends the command directly to the device via MQTT
+    // Handle continuous monitoring checkbox changes
     el.existingDeviceList.querySelectorAll('.continuous-monitoring-check').forEach((checkbox) => {
       const serial = checkbox.dataset.serial;
       const device = state.devices.find((d) => d.serial === serial);
 
-      // Fetch initial state from device
       if (device) {
         fetchDeviceContinuousMonitoring(device, checkbox);
       }
@@ -299,18 +388,16 @@
             serial: dev.serial,
             productType: dev.productType,
             localCredentials: dev.localCredentials,
-            ipAddress: dev.ipAddress, // Use cached IP if available
+            ipAddress: dev.ipAddress,
             enabled,
           });
           hb.toast.success(`Continuous monitoring ${enabled ? 'enabled' : 'disabled'}`);
 
-          // Save discovered IP to device config for future use
           if (response.discoveredIp && response.discoveredIp !== dev.ipAddress) {
             dev.ipAddress = response.discoveredIp;
             debouncedAutoSave();
           }
         } catch (error) {
-          // Revert checkbox on error
           checkbox.checked = !enabled;
           hb.toast.error(error.message || 'Failed to set continuous monitoring');
         } finally {
@@ -319,7 +406,7 @@
       });
     });
 
-    // Handle heating service type changes for existing devices (with auto-save)
+    // Handle heating service type changes
     el.existingDeviceList.querySelectorAll('.heating-service-select').forEach((select) => {
       select.addEventListener('change', (e) => {
         const serial = e.target.dataset.serial;
@@ -329,15 +416,6 @@
           autoSaveConfig();
         }
       });
-    });
-
-    // Make cards non-clickable for selection (just show as configured)
-    el.existingDeviceList.querySelectorAll('.device-card').forEach((card) => {
-      card.style.cursor = 'default';
-      const checkbox = card.querySelector('input[type="checkbox"]:not(.continuous-monitoring-check)');
-      if (checkbox) {
-        checkbox.style.display = 'none';
-      }
     });
   }
 
@@ -374,7 +452,6 @@
     });
 
     // Handle continuous monitoring checkbox changes
-    // This sends the command directly to the device via MQTT
     el.deviceList.querySelectorAll('.continuous-monitoring-check').forEach((checkbox) => {
       checkbox.addEventListener('change', async (e) => {
         const serial = e.target.dataset.serial;
@@ -391,17 +468,15 @@
             serial: device.serial,
             productType: device.productType,
             localCredentials: device.localCredentials,
-            ipAddress: device.ipAddress, // Use cached IP if available
+            ipAddress: device.ipAddress,
             enabled,
           });
           hb.toast.success(`Continuous monitoring ${enabled ? 'enabled' : 'disabled'}`);
 
-          // Save discovered IP to device config for future use
           if (response.discoveredIp && response.discoveredIp !== device.ipAddress) {
             device.ipAddress = response.discoveredIp;
           }
         } catch (error) {
-          // Revert checkbox on error
           checkbox.checked = !enabled;
           hb.toast.error(error.message || 'Failed to set continuous monitoring');
         } finally {
@@ -461,8 +536,8 @@
       state.devices = config.devices.map((d) => ({
         ...d,
         productName: productTypes[d.productType] || `Unknown (${d.productType})`,
-        // Set hasHeating from catalog for existing devices
         hasHeating: heatingProductTypes.includes(d.productType),
+        hasJetFocus: jetFocusProductTypes.includes(d.productType),
       }));
       state.selectedDevices = new Set(config.devices.map((d) => d.serial));
     }
@@ -483,15 +558,12 @@
           productType: d.productType,
           localCredentials: d.localCredentials,
         };
-        // Include cached IP address if available
         if (d.ipAddress) {
           deviceConfig.ipAddress = d.ipAddress;
         }
-        // Include continuous monitoring if enabled
         if (d.isContinuousMonitoringEnabled) {
           deviceConfig.isContinuousMonitoringEnabled = true;
         }
-        // Only include heatingServiceType for devices that support heating
         if (d.hasHeating && d.heatingServiceType) {
           deviceConfig.heatingServiceType = d.heatingServiceType;
         }
@@ -518,7 +590,7 @@
     const countryCode = el.country.value;
 
     if (!email || !password) {
-      hb.toast.error('Please enter your email and password');
+      showInlineError(el.errorLogin, 'Please enter your email and password');
       return;
     }
 
@@ -528,7 +600,6 @@
       const response = await hb.request('/authenticate', { email, password, countryCode });
 
       if (response.requires2FA) {
-        hb.toast.info('Check your email for a verification code');
         goToStep('1b');
         el.otpCode.focus();
       } else {
@@ -536,7 +607,7 @@
         await fetchDevices();
       }
     } catch (error) {
-      hb.toast.error(error.message || 'Authentication failed');
+      showInlineError(el.errorLogin, error.message || 'Authentication failed');
     } finally {
       setButtonLoading(el.buttons.connect, false);
     }
@@ -549,7 +620,7 @@
 
     const otpCode = el.otpCode.value.trim();
     if (!otpCode || otpCode.length < 6) {
-      hb.toast.error('Please enter the 6-digit verification code');
+      showInlineError(el.errorOtp, 'Please enter the 6-digit verification code');
       return;
     }
 
@@ -562,7 +633,7 @@
       hb.toast.success('Verification successful!');
       await fetchDevices();
     } catch (error) {
-      hb.toast.error(error.message || 'Verification failed');
+      showInlineError(el.errorOtp, error.message || 'Verification failed');
       el.otpCode.value = '';
       el.otpCode.focus();
     } finally {
@@ -577,6 +648,7 @@
     try {
       const response = await hb.request('/get-devices', { token: state.authToken });
       state.devices = response.devices;
+      state.isResync = false;
 
       if (state.devices.length === 0) {
         hb.toast.warning('No compatible devices found');
@@ -620,18 +692,36 @@
 
     // Step 0
     buttons.editOptions.addEventListener('click', () => goToStep(3));
-    buttons.resync.addEventListener('click', () => goToStep(1));
+    buttons.resync.addEventListener('click', () => {
+      state.isResync = true;
+      goToStep(1);
+      setTimeout(() => el.email.focus(), 50);
+    });
 
     // Step 1
     buttons.connect.addEventListener('click', handleConnect);
+    el.email.addEventListener('input', () => hideInlineError(el.errorLogin));
+    el.password.addEventListener('input', () => hideInlineError(el.errorLogin));
     el.email.addEventListener('keypress', (e) => e.key === 'Enter' && el.password.focus());
     el.password.addEventListener('keypress', (e) => e.key === 'Enter' && handleConnect());
+
+    // Password visibility toggle
+    buttons.togglePassword.addEventListener('click', () => {
+      const isPassword = el.password.type === 'password';
+      el.password.type = isPassword ? 'text' : 'password';
+      buttons.togglePassword.querySelector('i').className = isPassword ? 'bi bi-eye-slash' : 'bi bi-eye';
+    });
 
     // Step 1b
     buttons.backToLogin.addEventListener('click', () => goToStep(1));
     buttons.verifyOtp.addEventListener('click', handleVerifyOtp);
     el.otpCode.addEventListener('keypress', (e) => e.key === 'Enter' && handleVerifyOtp());
-    el.otpCode.addEventListener('input', (e) => e.target.value.length === 6 && handleVerifyOtp());
+    el.otpCode.addEventListener('input', (e) => {
+      hideInlineError(el.errorOtp);
+      if (e.target.value.length === 6) {
+        handleVerifyOtp();
+      }
+    });
 
     // Step 2
     buttons.backToAccount.addEventListener('click', () => goToStep(state.existingConfig ? 0 : 1));
@@ -672,12 +762,19 @@
 
     hb.disableSaveButton();
 
-    // Load product types and heating capability info from device catalog
+    // Auto-detect country from browser locale (may be overridden by existing config below)
+    const detectedCountry = detectCountry();
+    if (detectedCountry) {
+      el.country.value = detectedCountry;
+    }
+
+    // Load product types, heating, and jet focus capability info from device catalog
     try {
       const response = await hb.request('/get-product-types', {});
       if (response.success) {
         productTypes = response.productTypes;
         heatingProductTypes = response.heatingProductTypes || [];
+        jetFocusProductTypes = response.jetFocusProductTypes || [];
       }
     } catch (e) {
       console.warn('Failed to load product types:', e);

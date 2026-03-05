@@ -71,6 +71,7 @@ export default tseslint.config(
         clearInterval: 'readonly',
         URLSearchParams: 'readonly',
         alert: 'readonly',
+        navigator: 'readonly',
       },
     },
     rules: {

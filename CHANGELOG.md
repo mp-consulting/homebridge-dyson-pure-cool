@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.19] - 2026-03-05
+
+### Changed
+
+- **Config UI**: Inline error messages in login and OTP steps — errors persist in the card instead of disappearing with toasts
+- **Config UI**: Password visibility toggle on the password field
+- **Config UI**: Country auto-detected from browser locale (`navigator.language`) on first setup
+- **Config UI**: Re-sync button shows a hint banner and focuses the email field
+- **Config UI**: Jet Focus option in step 3 is hidden when no selected device supports it (derived from device catalog)
+- **Config UI**: Device cards show firmware version badge and "Update available" warning when `newVersionAvailable` is set
+- **Config UI**: Remove button on each device card in the existing config view (step 0)
+- **Config UI**: Country select is now full-width (removed `max-width: 200px`)
+- **Config UI**: Device card layout uses natural flex flow instead of absolutely-positioned checkbox
+- **Config UI**: `jetFocusProductTypes` added to `/get-product-types` response so jet focus capability is correctly derived for existing config devices
+
 ## [1.0.18] - 2026-03-05
 
 ### Fixed

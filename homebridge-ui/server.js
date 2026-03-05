@@ -319,12 +319,14 @@ async function handleGetDevices(payload) {
 }
 
 async function handleGetProductTypes() {
-  // Get product types with heating capability
+  const productTypeNames = getProductTypeDisplayNames();
   const heatingProductTypes = getHeatingDevices().map((d) => d.productType);
+  const jetFocusProductTypes = Object.keys(productTypeNames).filter((pt) => getDeviceFeatures(pt)?.frontAirflow === true);
   return {
     success: true,
-    productTypes: getProductTypeDisplayNames(),
+    productTypes: productTypeNames,
     heatingProductTypes,
+    jetFocusProductTypes,
   };
 }
 
