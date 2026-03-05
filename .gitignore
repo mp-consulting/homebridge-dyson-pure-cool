@@ -40,7 +40,8 @@ tmp/
 .eslintcache
 
 # homebridge-ui-kit build artifacts
-homebridge-ui/public/lib/
+homebridge-ui/public/kit.css
+homebridge-ui/public/kit.js
 
 # Claude Code
 .claude/

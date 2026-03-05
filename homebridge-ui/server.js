@@ -80,7 +80,7 @@ async function dysonRequest(endpoint, options = {}) {
     clearTimeout(timeoutId);
 
     const text = await response.text();
-    console.log(`[DysonUI] Response status: ${response.status}`);
+    console.log(`[DysonUI] Response status: ${response.status} body: ${text?.slice(0, 500)}`);
 
     if (!text?.trim()) {
       return null;
