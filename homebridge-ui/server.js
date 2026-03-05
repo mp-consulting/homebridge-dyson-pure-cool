@@ -2,7 +2,8 @@
  * Homebridge Custom UI Server
  * Handles Dyson authentication and device discovery for the wizard UI
  *
- * Authentication flow (from Android app v6.4.25500 analysis 2026-01-15):
+ * Authentication flow:
+ * 0. GET /v1/provisioningservice/application/Android/version (IP provisioning unlock)
  * 1. POST /v3/userregistration/email/userstatus (header: country)
  * 2. POST /v3/userregistration/email/auth (headers: country, culture)
  * 3. POST /v3/userregistration/email/verify (header: country)
@@ -38,11 +39,8 @@ const DECRYPT_IV = Buffer.from([
 ]);
 
 const DEFAULT_HEADERS = {
-  'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 14)',
+  'User-Agent': 'android client',
   'Accept': 'application/json',
-  'Accept-Language': 'en-GB,en;q=0.9',
-  'X-App-Version': '6.4.25500',
-  'X-Platform': 'android',
 };
 
 // =============================================================================
@@ -168,6 +166,10 @@ async function handleAuthenticate(ctx, payload) {
   console.log(`[DysonUI] Auth: country: ${countryCode}`);
 
   try {
+    // Step 0: Provision API (unlocks the client IP for subsequent auth calls)
+    console.log('[DysonUI] Step 0: Provision API');
+    await dysonRequest('/v1/provisioningservice/application/Android/version', { method: 'GET' });
+
     // Step 1: Check user status
     console.log('[DysonUI] Step 1: Check user status');
     const status = await dysonRequest('/v3/userregistration/email/userstatus', {
@@ -343,7 +345,7 @@ const MDNS_TIMEOUT = 5000;
  * @param {string} [configIp] - IP address from config (if available)
  * @returns {Promise<{ip: string, discovered: boolean}>} IP and whether it was discovered
  */
-async function getDeviceIp(ctx, serial, configIp) {
+async function getDeviceIp(_ctx, serial, configIp) {
   // Try config IP first if provided
   if (configIp) {
     console.log(`[DysonUI] Using cached IP for ${serial}`);

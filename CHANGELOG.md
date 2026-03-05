@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.18] - 2026-03-05
+
+### Fixed
+
+- **Config UI**: Fix "Unable to authenticate user" error — add provisioning step (`GET /v1/provisioningservice/application/Android/version`) before authentication to unlock the client IP on Dyson's server
+- **Config UI**: Simplified request headers to `User-Agent: android client` — remove stale `X-App-Version`, `X-Platform`, and `Accept-Language` headers that were causing auth rejection
+
 ## [1.0.17] - 2026-03-05
 
 ### Changed
