@@ -147,6 +147,9 @@
     Object.values(el.steps).forEach((s) => s.classList.remove('active'));
     el.steps[step].classList.add('active');
 
+    // Hide progress bar on step 0 (already configured)
+    el.progress.classList.toggle('d-none', step === 0);
+
     // Clear inline errors when navigating
     hideInlineError(el.errorLogin);
     hideInlineError(el.errorOtp);
