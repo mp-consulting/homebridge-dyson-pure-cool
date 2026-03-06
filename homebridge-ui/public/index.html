@@ -54,19 +54,19 @@
     <div class="wizard-step" id="step-0">
       <div class="card">
         <div class="card-body">
-          <h5 class="card-title mb-3">Your Dyson Devices</h5>
-          <p class="text-muted mb-4">Your devices are already configured. You can edit options or re-sync from the cloud.</p>
-
-          <div id="existing-device-list" class="mb-4">
-            <!-- Existing devices will be shown here -->
-          </div>
-
-          <div class="d-grid gap-2">
-            <button class="btn btn-primary" id="btn-edit-options">Edit Options</button>
-            <button class="btn btn-outline-secondary" id="btn-resync">
-              <span class="btn-text">Re-sync from Dyson Cloud</span>
+          <div class="d-flex align-items-center mb-3">
+            <h5 class="card-title mb-0 me-auto">Your Dyson Devices</h5>
+            <button class="btn btn-sm btn-outline-secondary me-1" id="btn-resync" title="Re-sync from Dyson Cloud">
+              <span class="btn-text"><i class="bi bi-arrow-repeat"></i></span>
               <span class="spinner-border spinner-border-sm d-none" role="status"></span>
             </button>
+            <button class="btn btn-sm btn-outline-primary" id="btn-edit-options" title="Edit Options">
+              <i class="bi bi-sliders"></i>
+            </button>
+          </div>
+
+          <div id="existing-device-list">
+            <!-- Existing devices will be shown here -->
           </div>
         </div>
       </div>
