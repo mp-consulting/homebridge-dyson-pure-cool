@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.24] - 2026-03-06
+
+### Fixed
+
+- **Offline device crash**: Removed all listeners before adding a no-op error handler before calling `end(true)` on the MQTT client, so orphaned internal timers (connack timeout, keepalive) can no longer fire unhandled `error` events that crash the Homebridge process
+
+### Changed
+
+- **Offline retry**: When a device is unreachable at startup or after MQTT reconnection is exhausted, the plugin now schedules an automatic retry every 5 minutes so the device reconnects as soon as it comes back online — no Homebridge restart needed
+
 ## [1.0.23] - 2026-03-06
 
 ### Changed

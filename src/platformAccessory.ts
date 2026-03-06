@@ -76,6 +76,11 @@ export class DysonPlatformAccessory {
   private device?: DysonLinkDevice;
   private accessoryHandler?: DysonLinkAccessory;
 
+  /** Retry interval when device is offline (5 minutes) */
+  private static readonly OFFLINE_RETRY_MS = 5 * 60 * 1000;
+  private offlineRetryTimer?: NodeJS.Timeout;
+  private isIntentionalDisconnect = false;
+
   constructor(
     private readonly platform: DysonPureCoolPlatform,
     private readonly accessory: PlatformAccessory,
@@ -162,6 +167,9 @@ export class DysonPlatformAccessory {
         this.device.setPollingInterval(pollingInterval);
       }
 
+      // Listen for MQTT reconnection exhaustion (device went offline mid-session)
+      this.attachDeviceErrorListener();
+
       // Connect to the device if IP address is available
       if (config.ipAddress) {
         this.connectDevice();
@@ -178,13 +186,50 @@ export class DysonPlatformAccessory {
   private static readonly MDNS_TIMEOUT = DEFAULT_DISCOVERY_TIMEOUT;
 
   /**
-   * Connect to the Dyson device
-   * If connection fails with cached IP, attempts to rediscover via mDNS
+   * Attach a listener on the device's error event to catch MQTT reconnection exhaustion.
+   * When the MQTT client gives up (device went offline mid-session), schedule a periodic retry.
+   */
+  private attachDeviceErrorListener(): void {
+    if (!this.device) {
+      return;
+    }
+    this.device.on('error', (error: Error) => {
+      if (!this.isIntentionalDisconnect && error.message.includes('Failed to reconnect')) {
+        const serial = (this.accessory.context.device as DeviceConfig).serial;
+        this.log.warn(`[${serial}] MQTT reconnection exhausted — device is offline. Will retry in 5 min.`);
+        this.scheduleOfflineRetry();
+      }
+    });
+  }
+
+  /**
+   * Schedule a connection retry after OFFLINE_RETRY_MS.
+   * Called both after a failed initial connection and after MQTT reconnection exhaustion.
+   */
+  private scheduleOfflineRetry(): void {
+    clearTimeout(this.offlineRetryTimer);
+    this.offlineRetryTimer = setTimeout(async () => {
+      if (this.isIntentionalDisconnect) {
+        return;
+      }
+      const serial = (this.accessory.context.device as DeviceConfig).serial;
+      this.log.info(`[${serial}] Retrying connection to offline device...`);
+      await this.connectDevice();
+    }, DysonPlatformAccessory.OFFLINE_RETRY_MS);
+    this.offlineRetryTimer.unref();
+  }
+
+  /**
+   * Connect to the Dyson device.
+   * If connection fails with cached IP, attempts mDNS rediscovery.
+   * If the device is truly offline, schedules a retry every 5 minutes.
    */
   private async connectDevice(): Promise<void> {
     if (!this.device) {
       return;
     }
+
+    clearTimeout(this.offlineRetryTimer);
 
     const config = this.accessory.context.device as DeviceConfig;
 
@@ -196,12 +241,7 @@ export class DysonPlatformAccessory {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.log.warn(`Failed to connect to device ${this.device.getSerial()}: ${errorMessage}`);
 
-      // Provide helpful troubleshooting guidance
-      if (errorMessage.includes('timeout') || errorMessage.includes('connack')) {
-        this.log.warn('  → Device may be offline or unreachable. Try power cycling the device.');
-      }
-
-      // If we had a cached IP, try to rediscover
+      // If we had a cached IP, try mDNS rediscovery once
       if (config.ipAddress) {
         this.log.info(`Attempting to rediscover IP for ${config.serial} via mDNS...`);
         const newIp = await this.rediscoverDeviceIp(config.serial);
@@ -209,7 +249,7 @@ export class DysonPlatformAccessory {
         if (newIp && newIp !== config.ipAddress) {
           this.log.info(`Found new IP ${newIp} for ${config.serial} (was ${config.ipAddress}). Retrying connection...`);
 
-          // Update device with new IP and retry connection
+          // Recreate device with new IP
           this.device = createDevice({
             serial: config.serial,
             productType: config.productType,
@@ -218,18 +258,19 @@ export class DysonPlatformAccessory {
             ipAddress: newIp,
           }) as DysonLinkDevice;
 
+          // Re-attach error listener on the new device instance
+          this.attachDeviceErrorListener();
+
           try {
             await this.device.connect();
             this.log.info(`Connected to ${this.device.getSerial()} at new IP ${newIp}`);
 
-            // Update config context with new IP for future restarts
+            // Persist new IP for future restarts
             config.ipAddress = newIp;
             this.accessory.context.device = config;
 
-            // Clean up old accessory handler before recreating
+            // Recreate accessory handler with the new device
             this.accessoryHandler?.destroy();
-
-            // Recreate the accessory handler with the new device
             this.accessoryHandler = new DysonLinkAccessory({
               accessory: this.accessory,
               device: this.device,
@@ -237,15 +278,21 @@ export class DysonPlatformAccessory {
               log: this.log,
               options: this.extractDeviceOptions(config),
             });
+            return; // Connected successfully
           } catch (retryError) {
-            this.log.error(`Failed to connect to ${config.serial} at new IP ${newIp}:`, retryError);
+            const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
+            this.log.warn(`Failed to connect to ${config.serial} at new IP ${newIp}: ${retryMsg}`);
           }
         } else if (newIp === config.ipAddress) {
-          this.log.error(`Device ${config.serial} still at same IP ${config.ipAddress} but not responding`);
+          this.log.warn(`Device ${config.serial} found at same IP ${config.ipAddress} but not responding`);
         } else {
-          this.log.error(`Could not find device ${config.serial} on network`);
+          this.log.warn(`Device ${config.serial} not found on network — it may be offline`);
         }
       }
+
+      // Device is unreachable — schedule a retry so it reconnects when powered back on
+      this.log.info(`[${config.serial}] Will retry connection in 5 min`);
+      this.scheduleOfflineRetry();
     }
   }
 
@@ -290,6 +337,9 @@ export class DysonPlatformAccessory {
    * Disconnect from the Dyson device
    */
   async disconnect(): Promise<void> {
+    this.isIntentionalDisconnect = true;
+    clearTimeout(this.offlineRetryTimer);
+
     if (this.device) {
       try {
         await this.device.disconnect();

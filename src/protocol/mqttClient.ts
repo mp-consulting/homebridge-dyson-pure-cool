@@ -476,14 +476,15 @@ export class DysonMqttClient extends EventEmitter {
       this.reconnectAttempts++;
 
       // Clean up existing client before reconnecting.
-      // Must call end() to stop keepalive timers, otherwise a
-      // keepalive timeout can fire on the old client after listeners
-      // are removed, causing an unhandled error that crashes the process.
+      // Must call removeAllListeners() first, then add a no-op error handler,
+      // then end() — so that orphaned internal timers (connack timeout, keepalive)
+      // cannot fire unhandled 'error' events that crash the process.
       if (this.client) {
         const oldClient = this.client;
         this.client = null;
-        oldClient.end(true);
         oldClient.removeAllListeners();
+        oldClient.on('error', () => {}); // absorb any errors from orphaned internal timers
+        oldClient.end(true);
       }
 
       // Attempt to reconnect
@@ -544,8 +545,9 @@ export class DysonMqttClient extends EventEmitter {
     if (this.client) {
       const oldClient = this.client;
       this.client = null;
-      oldClient.end(true);
       oldClient.removeAllListeners();
+      oldClient.on('error', () => {}); // absorb any errors from orphaned internal timers
+      oldClient.end(true);
     }
     this.connected = false;
     this.isReconnecting = false;
