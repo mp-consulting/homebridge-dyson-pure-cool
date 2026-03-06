@@ -268,6 +268,11 @@
               <option value="heater-cooler" ${heatingServiceType === 'heater-cooler' ? 'selected' : ''}>Heater Cooler</option>
               <option value="both" ${heatingServiceType === 'both' ? 'selected' : ''}>Both</option>
             </select>
+            <ul class="form-text list-unstyled mb-0 mt-1">
+              <li><strong>Thermostat</strong> — single tile with temperature control</li>
+              <li><strong>Heater Cooler</strong> — separate heating &amp; cooling tiles</li>
+              <li><strong>Both</strong> — show both tiles in HomeKit</li>
+            </ul>
           ` : ''}
         </div>
       </div>
