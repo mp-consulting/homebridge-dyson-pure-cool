@@ -40,8 +40,6 @@ tmp/
 .eslintcache
 
 # homebridge-ui-kit build artifacts
-homebridge-ui/public/kit.css
-homebridge-ui/public/kit.js
 
 # Claude Code
 .claude/
@@ -49,3 +47,4 @@ homebridge-ui/public/kit.js
 # BMad agent files
 _bmad/
 _bmad-output/
+homebridge-ui/public/lib/
