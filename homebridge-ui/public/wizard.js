@@ -88,6 +88,7 @@
     errorLogin: $('error-login'),
     errorOtp: $('error-otp'),
     loginResyncHint: $('login-resync-hint'),
+    cancelResync: $('btn-cancel-resync'),
     options: {
       temperature: $('opt-temperature'),
       humidity: $('opt-humidity'),
@@ -150,9 +151,17 @@
     hideInlineError(el.errorLogin);
     hideInlineError(el.errorOtp);
 
-    // Show/hide resync hint on step 1 based on state
+    // Show/hide resync hint and cancel button on step 1 based on state
     if (step === 1) {
       el.loginResyncHint.classList.toggle('d-none', !state.isResync);
+      el.cancelResync.classList.toggle('d-none', !state.isResync);
+      if (state.isResync) {
+        el.buttons.connect.classList.remove('flex-grow-1');
+        el.buttons.connect.classList.add('ms-2');
+      } else {
+        el.buttons.connect.classList.add('flex-grow-1');
+        el.buttons.connect.classList.remove('ms-2');
+      }
     }
 
     // Update options visibility when entering step 3
@@ -709,6 +718,10 @@
     });
 
     // Step 1
+    el.cancelResync.addEventListener('click', () => {
+      state.isResync = false;
+      goToStep(0);
+    });
     buttons.connect.addEventListener('click', handleConnect);
     el.email.addEventListener('input', () => hideInlineError(el.errorLogin));
     el.password.addEventListener('input', () => hideInlineError(el.errorLogin));
