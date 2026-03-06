@@ -219,6 +219,7 @@
     const hasHeating = device.hasHeating === true;
     const heatingServiceType = device.heatingServiceType || 'thermostat';
     const continuousMonitoring = device.isContinuousMonitoringEnabled === true;
+    const collapseId = `device-settings-${device.serial.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
     const versionBadge = device.version
       ? `<span class="badge bg-secondary fw-normal">${escapeHtml(device.version)}</span>`
@@ -232,17 +233,40 @@
            <i class="bi bi-trash"></i>
          </button>`
       : isSelectable
-        ? `<div class="form-check flex-shrink-0 ms-2 mt-1">
+        ? `<div class="form-check flex-shrink-0">
              <input class="form-check-input" type="checkbox" ${selected ? 'checked' : ''}>
            </div>`
         : '<span class="badge bg-success flex-shrink-0">Configured</span>';
 
+    const settingsPanel = isSelectable ? `
+      <div class="collapse" id="${collapseId}" onclick="event.stopPropagation()">
+        <div class="border-top mt-2 pt-2">
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input continuous-monitoring-check" type="checkbox" role="switch"
+              data-serial="${escapeHtml(device.serial)}" ${continuousMonitoring ? 'checked' : ''}>
+            <label class="form-check-label small">
+              Continuous Monitoring
+              <span class="text-muted d-block" style="font-size: 0.75em;">Keep sensors active when off (required for HomeKit control while off)</span>
+            </label>
+          </div>
+          ${hasHeating ? `
+            <label class="form-label small text-muted mb-1">Heating Service</label>
+            <select class="form-select form-select-sm heating-service-select" data-serial="${escapeHtml(device.serial)}">
+              <option value="thermostat" ${heatingServiceType === 'thermostat' ? 'selected' : ''}>Thermostat (Recommended)</option>
+              <option value="heater-cooler" ${heatingServiceType === 'heater-cooler' ? 'selected' : ''}>Heater Cooler</option>
+              <option value="both" ${heatingServiceType === 'both' ? 'selected' : ''}>Both</option>
+            </select>
+          ` : ''}
+        </div>
+      </div>
+    ` : '';
+
     return `
       <div class="device-card${selected && isSelectable && !showRemove ? ' selected' : ''}${showRemove ? ' device-card-static' : ''}"
            ${isSelectable ? `data-serial="${escapeHtml(device.serial)}"` : ''}>
-        <div class="d-flex align-items-start gap-3">
-          <div class="device-icon"><i class="bi bi-wind"></i></div>
-          <div class="flex-grow-1">
+        <div class="d-flex align-items-center gap-3">
+          <div class="device-icon flex-shrink-0"><i class="bi bi-wind"></i></div>
+          <div class="flex-grow-1 min-w-0">
             ${isSelectable
               ? `<input type="text" class="form-control form-control-sm device-name-input mb-1"
                    data-serial="${escapeHtml(device.serial)}"
@@ -253,31 +277,17 @@
             <div class="device-type">${escapeHtml(typeName)}</div>
             <div class="device-serial">${escapeHtml(device.serial)}${device.ipAddress ? ` <span class="text-muted">• ${escapeHtml(device.ipAddress)}</span>` : ''}</div>
             ${device.version ? `<div class="device-meta mt-1">${versionBadge}${updateBadge}</div>` : ''}
-            ${isSelectable ? `
-              <div class="mt-2" onclick="event.stopPropagation()">
-                <div class="form-check form-switch">
-                  <input class="form-check-input continuous-monitoring-check" type="checkbox" role="switch"
-                    data-serial="${escapeHtml(device.serial)}" ${continuousMonitoring ? 'checked' : ''}>
-                  <label class="form-check-label small">
-                    Continuous Monitoring
-                    <span class="text-muted d-block" style="font-size: 0.75em;">Keep sensors active when off (required for HomeKit control while off)</span>
-                  </label>
-                </div>
-              </div>
-            ` : ''}
-            ${hasHeating && isSelectable ? `
-              <div class="mt-2" onclick="event.stopPropagation()">
-                <label class="form-label small text-muted mb-1">Heating Service</label>
-                <select class="form-select form-select-sm heating-service-select" data-serial="${escapeHtml(device.serial)}">
-                  <option value="thermostat" ${heatingServiceType === 'thermostat' ? 'selected' : ''}>Thermostat (Recommended)</option>
-                  <option value="heater-cooler" ${heatingServiceType === 'heater-cooler' ? 'selected' : ''}>Heater Cooler</option>
-                  <option value="both" ${heatingServiceType === 'both' ? 'selected' : ''}>Both</option>
-                </select>
-              </div>
-            ` : ''}
           </div>
+          ${isSelectable ? `
+            <button class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                    data-bs-toggle="collapse" data-bs-target="#${collapseId}"
+                    onclick="event.stopPropagation()" title="Device settings">
+              <i class="bi bi-gear"></i>
+            </button>
+          ` : ''}
           ${actionEl}
         </div>
+        ${settingsPanel}
       </div>
     `;
   }
