@@ -18,7 +18,7 @@ This is a Homebridge plugin for Dyson Pure Cool air purifiers and fans. It provi
   - `devices/` - Device abstraction layer (DysonLinkDevice, DeviceManager)
   - `discovery/` - mDNS device discovery
   - `protocol/` - MQTT message encoding/decoding
-- `homebridge-ui/` - Custom Homebridge Config UI wizard
+- `homebridge-ui/` - Uses Homebridge custom UI framework for plugin configuration management (pairing wizard & config)
   - `public/` - Frontend HTML/JS/CSS
   - `server.ts` - Backend API for the UI
 - `test/` - Jest test suites
