@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.29] - 2026-04-17
+
+### Changed
+
+- **Dependencies**: Updated all dependencies to latest versions, including major bumps for `@homebridge/plugin-ui-utils` (1→2), `homebridge-lib` (7→8), `eslint` (9→10), `typescript` (5→6), and `@types/node` (24→25)
+
 ## [1.0.28] - 2026-04-04
 
 ### Changed
