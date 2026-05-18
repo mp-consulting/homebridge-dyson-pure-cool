@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.30] - 2026-05-18
+
+### Added
+
+- **Config UI**: "Sensor Calibration" controls are now available in each device's settings panel — Temperature offset (°C), Humidity offset (%), and Use Fahrenheit (logs only). These per-device settings were already supported in `config.json` but were not surfaced in the custom UI wizard, so users had to edit JSON directly to use them.
+
+### Tests
+
+- Added unit coverage for `temperatureOffset`, `humidityOffset`, and `useFahrenheit` in `TemperatureService` and `HumidityService` — including negative/positive offsets, humidity clamping at 0% / 100%, offset applied to the sensor-unavailable default, the Fahrenheit log format, and confirmation that HomeKit GET still returns Celsius regardless of the Fahrenheit toggle.
+
+### Changed
+
+- **Dependencies**: Updated all dependencies to latest compatible versions.
+
 ## [1.0.29] - 2026-04-17
 
 ### Changed
