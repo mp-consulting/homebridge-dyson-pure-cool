@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.31] - 2026-05-18
+
+### Fixed
+
+- **MQTT `Connection refused: Identifier rejected`**: Some Dyson firmware (notably the Big+Quiet BP02/BP03/BP04 series) rejects the historical CONNECT shape at CONNACK, leaving the plugin unable to talk to the device. The client now tries a small ladder of CONNECT variants — short clientId, persistent session, MQTT 5, MQTT 3.1 — only escalating on CONNACK-level rejections (`Identifier rejected`, `Unacceptable protocol version`, `Bad username or password`, `Not authorized`). Transient errors (timeouts, `ECONNREFUSED`) still fail fast as before. The variant that worked is cached for subsequent reconnects, and surfaced in the connect log when a fallback was needed.
+
 ## [1.0.30] - 2026-05-18
 
 ### Added
