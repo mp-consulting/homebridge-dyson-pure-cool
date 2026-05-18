@@ -4,7 +4,12 @@
 
 import { vi, type Mock } from 'vitest';
 
-import { DysonMqttClient } from '../../../src/protocol/mqttClient.js';
+import {
+  DysonMqttClient,
+  MQTT_CONNECT_VARIANTS,
+  buildClientId,
+  isRecoverableConnackError,
+} from '../../../src/protocol/mqttClient.js';
 import type { MqttConnectFn } from '../../../src/protocol/mqttClient.js';
 import type { MqttClient as MqttClientType, IClientOptions } from 'mqtt';
 
@@ -707,6 +712,172 @@ describe('DysonMqttClient', () => {
 
     it('should return reconnecting state', () => {
       expect(client.isReconnectingState()).toBe(false);
+    });
+  });
+
+  describe('connect variant fallback', () => {
+    /**
+     * Returns a mqttConnect factory that hands out a fresh mock client on each
+     * call, so tests can target events at a specific variant attempt.
+     */
+    function makeConnectSequence() {
+      const clients: ReturnType<typeof createMockMqttClient>[] = [];
+      const optionsLog: IClientOptions[] = [];
+      const connectFn = vi.fn((_brokerUrl: string, options: IClientOptions) => {
+        optionsLog.push(options);
+        const c = createMockMqttClient();
+        clients.push(c);
+        return c as unknown as MqttClientType;
+      });
+      return { connectFn: connectFn as unknown as MqttConnectFn, clients, optionsLog };
+    }
+
+    it('uses the default variant on first success and does not escalate', async () => {
+      const { connectFn, clients, optionsLog } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+
+      const promise = c.connect();
+      clients[0]._emit('connect');
+      await promise;
+
+      expect(clients.length).toBe(1);
+      expect(optionsLog[0].clientId).toContain('homebridge_ABC-AB-12345678_');
+      expect(optionsLog[0].protocolVersion).toBe(4);
+      expect(optionsLog[0].clean).toBe(true);
+      expect(c.getActiveVariant()?.label).toBe('default');
+    });
+
+    it('escalates to the next variant when CONNACK returns Identifier rejected', async () => {
+      const { connectFn, clients, optionsLog } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+
+      const promise = c.connect();
+      // First variant rejected by the broker
+      clients[0]._emit('error', new Error('Connection refused: Identifier rejected'));
+      // Wait for the ladder to advance to the next variant
+      await vi.advanceTimersByTimeAsync(0);
+      // Second variant succeeds
+      clients[1]._emit('connect');
+      await promise;
+
+      expect(clients.length).toBe(2);
+      // Second variant should be the short-id one
+      expect(optionsLog[1].clientId).toBe('ABC-AB-12345678');
+      expect(optionsLog[1].protocolVersion).toBe(4);
+      expect(optionsLog[1].clean).toBe(true);
+      expect(c.getActiveVariant()?.label).toBe('short-id');
+    });
+
+    it('does not escalate on a non-CONNACK error (timeout)', async () => {
+      const { connectFn, clients } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+
+      const promise = c.connect();
+      vi.advanceTimersByTime(10001);
+
+      await expect(promise).rejects.toThrow('Connection timeout after 10000ms');
+      expect(clients.length).toBe(1); // No second attempt
+      expect(c.getActiveVariant()).toBeNull();
+    });
+
+    it('does not escalate on a generic network error (ECONNREFUSED)', async () => {
+      const { connectFn, clients } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+
+      const promise = c.connect();
+      clients[0]._emit('error', new Error('connect ECONNREFUSED 192.168.1.100:1883'));
+
+      await expect(promise).rejects.toThrow(/ECONNREFUSED/);
+      expect(clients.length).toBe(1);
+      expect(c.getActiveVariant()).toBeNull();
+    });
+
+    it('exhausts the full ladder when every variant is rejected at CONNACK', async () => {
+      const { connectFn, clients } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+
+      const promise = c.connect();
+      // Reject each variant in turn
+      for (let i = 0; i < MQTT_CONNECT_VARIANTS.length; i++) {
+        // Wait for the i-th client to exist, then reject it
+        while (clients.length < i + 1) {
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        clients[i]._emit('error', new Error('Connection refused: Identifier rejected'));
+      }
+
+      await expect(promise).rejects.toThrow(/Identifier rejected/);
+      expect(clients.length).toBe(MQTT_CONNECT_VARIANTS.length);
+      expect(c.getActiveVariant()).toBeNull();
+    });
+
+    it('reconnects start from the cached successful variant (sticky cache)', async () => {
+      const { connectFn, clients, optionsLog } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+
+      // Initial connect: default rejects, short-id succeeds
+      const first = c.connect();
+      clients[0]._emit('error', new Error('Connection refused: Identifier rejected'));
+      await vi.advanceTimersByTimeAsync(0);
+      clients[1]._emit('connect');
+      await first;
+      expect(c.getActiveVariant()?.label).toBe('short-id');
+
+      // Simulate a transient disconnect (cleanup() happens internally) by tearing
+      // down the connection state without an intentional disconnect.
+      clients[1]._emit('close');
+
+      // Trigger a fresh connect — the cache should make us try short-id first
+      // (no need to re-discover that 'default' is rejected).
+      const second = c.connect();
+      // No more await needed before _emit because the loop kicks off mqttConnect
+      // synchronously inside the first iteration.
+      clients[2]._emit('connect');
+      await second;
+
+      // 3 connections total: default(fail), short-id(succeed), short-id(succeed)
+      expect(clients.length).toBe(3);
+      expect(optionsLog[2].clientId).toBe('ABC-AB-12345678');
+      expect(c.getActiveVariant()?.label).toBe('short-id');
+    });
+  });
+
+  describe('isRecoverableConnackError', () => {
+    it('matches "Identifier rejected"', () => {
+      expect(isRecoverableConnackError(new Error('Connection refused: Identifier rejected'))).toBe(true);
+    });
+
+    it('matches "Unacceptable protocol version"', () => {
+      expect(isRecoverableConnackError(new Error('Connection refused: Unacceptable protocol version'))).toBe(true);
+    });
+
+    it('matches "Bad username or password"', () => {
+      expect(isRecoverableConnackError(new Error('Connection refused: Bad username or password'))).toBe(true);
+    });
+
+    it('matches "Not authorized"', () => {
+      expect(isRecoverableConnackError(new Error('Connection refused: Not authorized'))).toBe(true);
+    });
+
+    it('does not match a bare "Connection refused"', () => {
+      // This is what ECONNREFUSED at the socket layer typically looks like —
+      // it is NOT a CONNACK rejection and should not escalate the ladder.
+      expect(isRecoverableConnackError(new Error('connect ECONNREFUSED 192.168.1.100:1883'))).toBe(false);
+    });
+
+    it('does not match timeout errors', () => {
+      expect(isRecoverableConnackError(new Error('Connection timeout after 10000ms'))).toBe(false);
+    });
+  });
+
+  describe('buildClientId', () => {
+    it('default strategy includes a timestamp', () => {
+      const id = buildClientId('default', 'ABC-AB-12345678');
+      expect(id).toMatch(/^homebridge_ABC-AB-12345678_\d+$/);
+    });
+
+    it('short strategy is just the serial', () => {
+      expect(buildClientId('short', 'ABC-AB-12345678')).toBe('ABC-AB-12345678');
     });
   });
 });

@@ -8,7 +8,7 @@
 import { EventEmitter } from 'events';
 
 import { DysonMqttClient } from '../protocol/mqttClient.js';
-import type { MqttMessage, MqttConnectFn } from '../protocol/mqttClient.js';
+import type { ConnectVariant, MqttMessage, MqttConnectFn } from '../protocol/mqttClient.js';
 import { MessageCodec } from '../protocol/messageCodec.js';
 
 import type {
@@ -264,6 +264,16 @@ export abstract class DysonDevice extends EventEmitter {
    */
   getSerial(): string {
     return this.deviceInfo.serial;
+  }
+
+  /**
+   * Get the MQTT CONNECT variant that produced the active connection, or
+   * `null` if not connected. Useful for diagnostics when a device required a
+   * fallback variant (e.g., Big+Quiet firmware that rejects the default
+   * clientId).
+   */
+  getActiveVariant(): ConnectVariant | null {
+    return this.mqttClient?.getActiveVariant() ?? null;
   }
 
   /**

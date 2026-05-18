@@ -79,10 +79,71 @@ const DEFAULT_TIMEOUT = 10000;
 const DEFAULT_KEEPALIVE = 30;
 
 /**
- * MQTT protocol version (4 = MQTT 3.1.1)
- * @see https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html
+ * A single CONNECT-time configuration the client may try.
+ *
+ * Some Dyson firmware (notably the Big+Quiet BP02/BP03/BP04 series) rejects
+ * the historical clientId / protocol-version / clean-session combination at
+ * CONNACK with `Connection refused: Identifier rejected`. The fallback ladder
+ * lets the client try alternate combinations on those specific recoverable
+ * errors without changing behavior for devices that already work.
  */
-const MQTT_PROTOCOL_VERSION = 4;
+export interface ConnectVariant {
+  /** Human-readable label, used by `getActiveVariant()` and logs */
+  label: string;
+  /** How to build the MQTT clientId */
+  clientIdStrategy: 'default' | 'short';
+  /** MQTT protocol version: 3 = MQTT 3.1, 4 = MQTT 3.1.1, 5 = MQTT 5 */
+  protocolVersion: 3 | 4 | 5;
+  /** clean session flag */
+  clean: boolean;
+}
+
+/**
+ * Connect-variant ladder, tried in order on CONNACK-level recoverable errors.
+ *
+ * Variant 0 is the historical default — devices that already work see no change.
+ * Later variants address common Big+Quiet firmware quirks: oversized clientIds,
+ * MQTT-5-only brokers, brokers that refuse clean sessions, or legacy 3.1 brokers.
+ */
+export const MQTT_CONNECT_VARIANTS: readonly ConnectVariant[] = [
+  { label: 'default', clientIdStrategy: 'default', protocolVersion: 4, clean: true },
+  { label: 'short-id', clientIdStrategy: 'short', protocolVersion: 4, clean: true },
+  { label: 'short-id-persistent', clientIdStrategy: 'short', protocolVersion: 4, clean: false },
+  { label: 'mqtt5-short-id', clientIdStrategy: 'short', protocolVersion: 5, clean: true },
+  { label: 'mqtt3.1-short-id', clientIdStrategy: 'short', protocolVersion: 3, clean: true },
+] as const;
+
+/**
+ * CONNACK rejection reasons that mean "wrong CONNECT shape, try a different one."
+ * Anything not in this list (timeout, ECONNREFUSED, socket error) is treated as
+ * a transient/unreachable condition and does NOT escalate the ladder.
+ */
+const RECOVERABLE_CONNACK_PATTERNS = [
+  /identifier rejected/i,
+  /unacceptable protocol/i,
+  /bad user ?name or password/i,
+  /not authorized/i,
+];
+
+/**
+ * @internal exported for tests
+ */
+export function isRecoverableConnackError(error: Error): boolean {
+  return RECOVERABLE_CONNACK_PATTERNS.some((pattern) => pattern.test(error.message));
+}
+
+/**
+ * @internal exported for tests
+ */
+export function buildClientId(strategy: ConnectVariant['clientIdStrategy'], serial: string): string {
+  switch (strategy) {
+    case 'short':
+      return serial;
+    case 'default':
+    default:
+      return `homebridge_${serial}_${Date.now()}`;
+  }
+}
 
 /**
  * MQTT Client wrapper for Dyson device communication
@@ -114,6 +175,8 @@ export class DysonMqttClient extends EventEmitter {
   private isReconnecting = false;
   private intentionalDisconnect = false;
   private reconnectAbortController?: AbortController;
+  private lastSuccessfulVariantIndex: number | null = null;
+  private activeVariant: ConnectVariant | null = null;
 
   constructor(options: MqttClientOptions, mqttConnect: MqttConnectFn = defaultMqttConnect) {
     super();
@@ -131,27 +194,63 @@ export class DysonMqttClient extends EventEmitter {
   }
 
   /**
-   * Connect to the Dyson device MQTT broker
+   * Connect to the Dyson device MQTT broker.
    *
-   * @throws {Error} If connection fails or times out
+   * Tries the variants in `MQTT_CONNECT_VARIANTS` in order, starting from the
+   * variant that worked last time (if any) so reconnects skip the ladder.
+   * Only CONNACK-level recoverable rejections (see `isRecoverableConnackError`)
+   * escalate to the next variant; transient errors (timeout, network) reject
+   * immediately as before.
+   *
+   * @throws {Error} If all variants are exhausted or a non-recoverable error occurs
    */
   async connect(): Promise<void> {
     if (this.connected && this.client) {
       return;
     }
 
+    const startIndex = this.lastSuccessfulVariantIndex ?? 0;
+    let lastError: Error | null = null;
+
+    for (let offset = 0; offset < MQTT_CONNECT_VARIANTS.length; offset++) {
+      const idx = (startIndex + offset) % MQTT_CONNECT_VARIANTS.length;
+      const variant = MQTT_CONNECT_VARIANTS[idx];
+
+      try {
+        await this.connectWithVariant(variant);
+        this.lastSuccessfulVariantIndex = idx;
+        this.activeVariant = variant;
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (!isRecoverableConnackError(lastError)) {
+          throw lastError;
+        }
+        // Recoverable CONNACK error — try the next variant
+      }
+    }
+
+    throw lastError ?? new Error('All MQTT connect variants exhausted');
+  }
+
+  /**
+   * Attempt a single CONNECT with the given variant. Returns once the broker
+   * sends CONNACK with success, or rejects with the CONNACK / timeout / network
+   * error from this attempt only.
+   */
+  private connectWithVariant(variant: ConnectVariant): Promise<void> {
     return new Promise((resolve, reject) => {
       const brokerUrl = `mqtt://${this.options.host}:${DYSON_MQTT_PORT}`;
 
       const mqttOptions: IClientOptions = {
         username: this.options.serial,
         password: this.options.credentials,
-        clientId: `homebridge_${this.options.serial}_${Date.now()}`,
+        clientId: buildClientId(variant.clientIdStrategy, this.options.serial),
         keepalive: this.options.keepalive,
         connectTimeout: this.options.timeout,
         reconnectPeriod: 0, // We handle reconnection manually
-        clean: true,
-        protocolVersion: MQTT_PROTOCOL_VERSION,
+        clean: variant.clean,
+        protocolVersion: variant.protocolVersion,
       };
 
       this.client = this.mqttConnect(brokerUrl, mqttOptions);
@@ -238,6 +337,15 @@ export class DysonMqttClient extends EventEmitter {
         }
       });
     });
+  }
+
+  /**
+   * Return the variant that produced the active connection, or `null` if not
+   * connected. Useful for diagnostics: callers can log this to record which
+   * fallback combination worked for a given device firmware.
+   */
+  getActiveVariant(): ConnectVariant | null {
+    return this.activeVariant;
   }
 
   /**
@@ -551,11 +659,14 @@ export class DysonMqttClient extends EventEmitter {
     }
     this.connected = false;
     this.isReconnecting = false;
+    this.activeVariant = null;
     // Note: subscribedTopics is preserved for reconnection
-    // It's only cleared on intentional disconnect
+    // It's only cleared on intentional disconnect. Likewise the variant cache
+    // — reconnects within a session should skip the ladder.
     if (this.intentionalDisconnect) {
       this.subscribedTopics.clear();
       this.reconnectAttempts = 0;
+      this.lastSuccessfulVariantIndex = null;
     }
   }
 }

@@ -236,7 +236,15 @@ export class DysonPlatformAccessory {
     try {
       this.log.debug(`Connecting to device ${this.device.getSerial()}...`);
       await this.device.connect();
-      this.log.info(`Connected to ${this.device.getSerial()}`);
+      const variant = this.device.getActiveVariant();
+      if (variant && variant.label !== 'default') {
+        this.log.info(
+          `Connected to ${this.device.getSerial()} using fallback variant '${variant.label}' ` +
+          `(protocolVersion=${variant.protocolVersion}, clean=${variant.clean})`,
+        );
+      } else {
+        this.log.info(`Connected to ${this.device.getSerial()}`);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.log.warn(`Failed to connect to device ${this.device.getSerial()}: ${errorMessage}`);
