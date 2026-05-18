@@ -355,4 +355,105 @@ describe('HumidityService', () => {
       expect(result).toBe(100);
     });
   });
+
+  describe('humidityOffset', () => {
+    it('applies a negative offset to a live reading', () => {
+      service = new HumidityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        humidityOffset: -5,
+      });
+
+      device.updateState({ humidity: 50 });
+
+      expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentRelativeHumidity',
+        45,
+      );
+    });
+
+    it('applies a positive offset to a live reading', () => {
+      service = new HumidityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        humidityOffset: 5,
+      });
+
+      device.updateState({ humidity: 60 });
+
+      expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentRelativeHumidity',
+        65,
+      );
+    });
+
+    it('clamps to 0% when offset drives the reading below the minimum', () => {
+      service = new HumidityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        humidityOffset: -20,
+      });
+
+      device.updateState({ humidity: 10 });
+
+      expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentRelativeHumidity',
+        0,
+      );
+    });
+
+    it('clamps to 100% when offset drives the reading above the maximum', () => {
+      service = new HumidityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        humidityOffset: 20,
+      });
+
+      device.updateState({ humidity: 95 });
+
+      expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentRelativeHumidity',
+        100,
+      );
+    });
+
+    it('applies the offset to the 50% default when sensor data is unavailable', () => {
+      service = new HumidityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        humidityOffset: -10,
+      });
+
+      const humidityChar = mockApi._mockHumidityService._getCharacteristics().get('CurrentRelativeHumidity');
+      const handler = humidityChar!.onGet.mock.calls[0][0] as () => number;
+
+      expect(handler()).toBe(40); // 50 + (-10)
+    });
+
+    it('defaults to no offset when not provided', () => {
+      service = new HumidityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      device.updateState({ humidity: 50 });
+
+      expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentRelativeHumidity',
+        50,
+      );
+    });
+  });
 });

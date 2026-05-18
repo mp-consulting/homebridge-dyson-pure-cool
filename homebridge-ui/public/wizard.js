@@ -231,6 +231,9 @@
     const hasHeating = device.hasHeating === true;
     const heatingServiceType = device.heatingServiceType || 'thermostat';
     const continuousMonitoring = device.isContinuousMonitoringEnabled === true;
+    const temperatureOffset = typeof device.temperatureOffset === 'number' ? device.temperatureOffset : 0;
+    const humidityOffset = typeof device.humidityOffset === 'number' ? device.humidityOffset : 0;
+    const useFahrenheit = device.useFahrenheit === true;
     const collapseId = `device-settings-${device.serial.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
     const versionBadge = device.version
@@ -259,6 +262,31 @@
             <label class="form-check-label small">
               Continuous Monitoring
               <span class="text-muted d-block" style="font-size: 0.75em;">Keep sensors active when off (required for HomeKit control while off)</span>
+            </label>
+          </div>
+          <div class="row g-2 mb-1">
+            <div class="col-6">
+              <label class="form-label small text-muted mb-1">Temperature offset (°C)</label>
+              <input type="number" class="form-control form-control-sm temperature-offset-input"
+                data-serial="${escapeHtml(device.serial)}"
+                value="${temperatureOffset}" step="0.5" min="-10" max="10"
+                onclick="event.stopPropagation()">
+            </div>
+            <div class="col-6">
+              <label class="form-label small text-muted mb-1">Humidity offset (%)</label>
+              <input type="number" class="form-control form-control-sm humidity-offset-input"
+                data-serial="${escapeHtml(device.serial)}"
+                value="${humidityOffset}" step="1" min="-20" max="20"
+                onclick="event.stopPropagation()">
+            </div>
+          </div>
+          <div class="form-text mb-2" style="font-size: 0.75em;">Adjust if your device reads consistently high or low.</div>
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input use-fahrenheit-check" type="checkbox" role="switch"
+              data-serial="${escapeHtml(device.serial)}" ${useFahrenheit ? 'checked' : ''}>
+            <label class="form-check-label small">
+              Use Fahrenheit
+              <span class="text-muted d-block" style="font-size: 0.75em;">Log temperatures in °F (HomeKit display follows your iOS settings)</span>
             </label>
           </div>
           ${hasHeating ? `
@@ -444,6 +472,51 @@
         }
       });
     });
+
+    bindOffsetInputs(el.existingDeviceList, debouncedAutoSave);
+  }
+
+  function bindOffsetInputs(container, onChange) {
+    container.querySelectorAll('.temperature-offset-input').forEach((input) => {
+      input.addEventListener('input', (e) => {
+        const device = state.devices.find((d) => d.serial === e.target.dataset.serial);
+        if (!device) {
+          return;
+        }
+        const value = parseFloat(e.target.value);
+        device.temperatureOffset = Number.isFinite(value) ? value : 0;
+        if (onChange) {
+          onChange();
+        }
+      });
+    });
+
+    container.querySelectorAll('.humidity-offset-input').forEach((input) => {
+      input.addEventListener('input', (e) => {
+        const device = state.devices.find((d) => d.serial === e.target.dataset.serial);
+        if (!device) {
+          return;
+        }
+        const value = parseInt(e.target.value, 10);
+        device.humidityOffset = Number.isFinite(value) ? value : 0;
+        if (onChange) {
+          onChange();
+        }
+      });
+    });
+
+    container.querySelectorAll('.use-fahrenheit-check').forEach((checkbox) => {
+      checkbox.addEventListener('change', (e) => {
+        const device = state.devices.find((d) => d.serial === e.target.dataset.serial);
+        if (!device) {
+          return;
+        }
+        device.useFahrenheit = e.target.checked;
+        if (onChange) {
+          onChange();
+        }
+      });
+    });
   }
 
   function renderDeviceList() {
@@ -522,6 +595,8 @@
         }
       });
     });
+
+    bindOffsetInputs(el.deviceList);
   }
 
   // =============================================================================
@@ -593,6 +668,15 @@
         }
         if (d.hasHeating && d.heatingServiceType) {
           deviceConfig.heatingServiceType = d.heatingServiceType;
+        }
+        if (typeof d.temperatureOffset === 'number' && d.temperatureOffset !== 0) {
+          deviceConfig.temperatureOffset = d.temperatureOffset;
+        }
+        if (typeof d.humidityOffset === 'number' && d.humidityOffset !== 0) {
+          deviceConfig.humidityOffset = d.humidityOffset;
+        }
+        if (d.useFahrenheit === true) {
+          deviceConfig.useFahrenheit = true;
         }
         return deviceConfig;
       }),

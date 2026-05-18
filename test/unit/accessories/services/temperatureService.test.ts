@@ -327,4 +327,138 @@ describe('TemperatureService', () => {
       expect(result).toBe(20);
     });
   });
+
+  describe('temperatureOffset', () => {
+    it('applies a negative offset to a live reading', () => {
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        temperatureOffset: -2,
+      });
+
+      // 2950 → 21.85°C, then -2 → 19.85 → rounded to 19.9
+      device.updateState({ temperature: 2950 });
+
+      expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentTemperature',
+        expect.closeTo(19.9, 0.05),
+      );
+    });
+
+    it('applies a positive offset to a live reading', () => {
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        temperatureOffset: 1.5,
+      });
+
+      // 2950 → 21.85°C, then +1.5 → 23.35 → rounded to 23.4
+      device.updateState({ temperature: 2950 });
+
+      expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentTemperature',
+        expect.closeTo(23.4, 0.05),
+      );
+    });
+
+    it('applies the offset to the 20°C default when sensor data is unavailable', () => {
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        temperatureOffset: -3,
+      });
+
+      const tempChar = mockApi._mockTempService._getCharacteristics().get('CurrentTemperature');
+      const handler = tempChar!.onGet.mock.calls[0][0] as () => number;
+
+      // state.temperature undefined → 20 + (-3) = 17
+      expect(handler()).toBe(17);
+    });
+
+    it('defaults to no offset when not provided', () => {
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      device.updateState({ temperature: 2950 });
+
+      expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentTemperature',
+        expect.closeTo(21.9, 0.05),
+      );
+    });
+  });
+
+  describe('useFahrenheit', () => {
+    it('logs in °F when enabled', () => {
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        useFahrenheit: true,
+      });
+
+      const tempChar = mockApi._mockTempService._getCharacteristics().get('CurrentTemperature');
+      const handler = tempChar!.onGet.mock.calls[0][0] as () => number;
+
+      device.state.temperature = 2950; // ~21.85°C ≈ 71.3°F
+      handler();
+
+      expect(mockLog.debug).toHaveBeenCalledWith(
+        'Get Temperature ->',
+        expect.any(Number),
+        '°F',
+      );
+      const fCall = mockLog.debug.mock.calls.find((c) => c[2] === '°F');
+      expect(fCall?.[1] as number).toBeCloseTo(71.4, 0.5);
+    });
+
+    it('logs in °C by default', () => {
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      const tempChar = mockApi._mockTempService._getCharacteristics().get('CurrentTemperature');
+      const handler = tempChar!.onGet.mock.calls[0][0] as () => number;
+
+      device.state.temperature = 2950;
+      handler();
+
+      expect(mockLog.debug).toHaveBeenCalledWith(
+        'Get Temperature ->',
+        expect.any(Number),
+        '°C',
+      );
+    });
+
+    it('still returns Celsius from GET when Fahrenheit logging is enabled (HomeKit is always °C)', () => {
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        useFahrenheit: true,
+      });
+
+      const tempChar = mockApi._mockTempService._getCharacteristics().get('CurrentTemperature');
+      const handler = tempChar!.onGet.mock.calls[0][0] as () => number;
+
+      device.state.temperature = 2950;
+      const result = handler();
+      expect(result).toBeCloseTo(21.9, 0.05);
+    });
+  });
 });
