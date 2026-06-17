@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.32] - 2026-06-17
+
+### Fixed
+
+- **Blank configuration screen**: The config UI could render completely blank for returning users whose saved config contained a device entry without a valid `serial` (e.g. a hand-edited `config.json`, a partially-added device, or a config from an older field layout). `renderDeviceCard` called `serial.replace(...)` unconditionally, throwing during the wizard's startup render and aborting before any step was shown. The serial is now guarded, malformed device entries are filtered out on load, and the initial render is wrapped so a single bad entry falls back to fresh setup instead of blanking the whole screen.
+
 ## [1.0.31] - 2026-05-18
 
 ### Fixed
