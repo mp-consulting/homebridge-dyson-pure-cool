@@ -234,7 +234,8 @@
     const temperatureOffset = typeof device.temperatureOffset === 'number' ? device.temperatureOffset : 0;
     const humidityOffset = typeof device.humidityOffset === 'number' ? device.humidityOffset : 0;
     const useFahrenheit = device.useFahrenheit === true;
-    const collapseId = `device-settings-${device.serial.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    const serial = typeof device.serial === 'string' ? device.serial : '';
+    const collapseId = `device-settings-${serial.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
     const versionBadge = device.version
       ? `<span class="badge bg-secondary fw-normal">${escapeHtml(device.version)}</span>`
@@ -635,13 +636,19 @@
     }
 
     if (config.devices) {
-      state.devices = config.devices.map((d) => ({
+      // Drop malformed entries (e.g. hand-edited config or older field layouts)
+      // missing a string serial — they would otherwise crash the device card render.
+      const validDevices = config.devices.filter((d) => d && typeof d.serial === 'string');
+      if (validDevices.length !== config.devices.length) {
+        console.warn('[Wizard] Ignored config device entries without a valid serial');
+      }
+      state.devices = validDevices.map((d) => ({
         ...d,
         productName: productTypes[d.productType] || `Unknown (${d.productType})`,
         hasHeating: heatingProductTypes.includes(d.productType),
         hasJetFocus: jetFocusProductTypes.includes(d.productType),
       }));
-      state.selectedDevices = new Set(config.devices.map((d) => d.serial));
+      state.selectedDevices = new Set(validDevices.map((d) => d.serial));
     }
   }
 
@@ -898,10 +905,18 @@
     // Load existing config
     const configs = await hb.getPluginConfig();
     if (configs.length > 0 && configs[0].devices?.length > 0) {
-      state.existingConfig = configs[0];
-      loadExistingConfig(configs[0]);
-      renderExistingDevices(state.devices);
-      goToStep(0);
+      // Guard the existing-device render: a single bad device entry must never
+      // leave the whole config screen blank (see issue #6). Fall back to the
+      // fresh-setup step so the UI always renders something usable.
+      try {
+        state.existingConfig = configs[0];
+        loadExistingConfig(configs[0]);
+        renderExistingDevices(state.devices);
+        goToStep(0);
+      } catch (e) {
+        console.error('[Wizard] Failed to render existing devices, starting fresh setup:', e);
+        goToStep(1);
+      }
     } else {
       goToStep(1);
     }
