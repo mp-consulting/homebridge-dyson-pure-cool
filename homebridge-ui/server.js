@@ -4,9 +4,9 @@
  *
  * Authentication flow:
  * 0. GET /v1/provisioningservice/application/Android/version (IP provisioning unlock)
- * 1. POST /v3/userregistration/email/userstatus (header: country)
- * 2. POST /v3/userregistration/email/auth (headers: country, culture)
- * 3. POST /v3/userregistration/email/verify (header: country)
+ * 1. POST /v3/userregistration/email/userstatus?country=XX
+ * 2. POST /v3/userregistration/email/auth?country=XX&culture=en-XX
+ * 3. POST /v3/userregistration/email/verify?country=XX
  *
  * Device retrieval:
  * - GET /v2/provisioningservice/manifest - Get devices with LocalCredentials
@@ -171,11 +171,14 @@ async function handleAuthenticate(ctx, payload) {
     await dysonRequest('/v1/provisioningservice/application/Android/version', { method: 'GET' });
 
     // Step 1: Check user status
+    // country/culture are query params (matching the Dyson Android app); the API
+    // ignores them as headers, which mints the challenge under the wrong market.
     console.log('[DysonUI] Step 1: Check user status');
-    const status = await dysonRequest('/v3/userregistration/email/userstatus', {
+    const country = encodeURIComponent(countryCode);
+    const culture = encodeURIComponent(`en-${countryCode}`);
+    const status = await dysonRequest(`/v3/userregistration/email/userstatus?country=${country}`, {
       method: 'POST',
       body: JSON.stringify({ email }),
-      headers: { country: countryCode },
     });
 
     if (status?.accountStatus !== 'ACTIVE') {
@@ -184,10 +187,9 @@ async function handleAuthenticate(ctx, payload) {
 
     // Step 2: Request OTP
     console.log('[DysonUI] Step 2: Request OTP');
-    const auth = await dysonRequest('/v3/userregistration/email/auth', {
+    const auth = await dysonRequest(`/v3/userregistration/email/auth?country=${country}&culture=${culture}`, {
       method: 'POST',
       body: JSON.stringify({ email }),
-      headers: { country: countryCode, culture: `en-${countryCode}` },
     });
 
     if (auth?.challengeId) {
@@ -227,10 +229,9 @@ async function handleVerifyOtp(ctx, payload) {
   console.log('[DysonUI] Verify OTP');
 
   try {
-    const response = await dysonRequest('/v3/userregistration/email/verify', {
+    const response = await dysonRequest(`/v3/userregistration/email/verify?country=${encodeURIComponent(countryCode)}`, {
       method: 'POST',
       body: JSON.stringify({ email, password, challengeId: ctx.challengeId, otpCode }),
-      headers: { country: countryCode },
     });
 
     console.log('[DysonUI] Verify success');
