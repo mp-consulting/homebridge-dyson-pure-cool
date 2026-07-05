@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.33] - 2026-07-05
+
+### Fixed
+
+- **2FA verification code rejected during cloud pairing**: The setup wizard sent `country` (and `culture`) as HTTP headers on the `userstatus` / `email/auth` / `email/verify` calls. The Dyson API expects these as URL query parameters, so it ignored the headers and processed every request under a default market. For accounts in other markets, the OTP challenge was created in one market and verified in another, and the emailed code came back as unverifiable — blocking 2FA setup (#6). Country and culture are now sent as query parameters on all three auth calls, matching the Dyson app. Verified end-to-end against a live 2FA account.
+
 ## [1.0.32] - 2026-06-17
 
 ### Fixed
