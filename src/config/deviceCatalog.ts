@@ -17,7 +17,8 @@ export type DeviceSeries =
   | 'hot-cool-link'       // HP02 (older Link series)
   | 'hot-cool'            // HP04, HP06, HP07, HP09, HP11
   | 'humidify-cool'       // PH01, PH02, PH03, PH04, PH05
-  | 'big-quiet';          // BP02, BP03, BP04, BP06
+  | 'big-quiet'           // BP02, BP03, BP04, BP06
+  | 'cool';               // CF1 (plain fan, no sensors)
 
 /**
  * Device model definition
@@ -155,6 +156,19 @@ const FEATURES_BIG_QUIET: DeviceFeatures = {
   oscillation: false,
   frontAirflow: false,
   no2Sensor: true,
+};
+
+/**
+ * Cool series (plain fan: oscillation + speed only, no sensors/filters).
+ * Uses the modern (non-Link) protocol path: fmod/fnsp/oson.
+ */
+const FEATURES_COOL_FAN: DeviceFeatures = {
+  ...DEFAULT_FEATURES,
+  fan: true,
+  oscillation: true,
+  autoMode: false,
+  nightMode: false,
+  continuousMonitoring: false,
 };
 
 // ============================================================================
@@ -358,6 +372,16 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
     modelCode: 'BP06',
     series: 'big-quiet',
     features: FEATURES_BIG_QUIET,
+    formaldehyde: false,
+  },
+
+  // Cool Series (plain fan, no sensors)
+  {
+    productType: '739',
+    modelName: 'Dyson Cool',
+    modelCode: 'CF1',
+    series: 'cool',
+    features: FEATURES_COOL_FAN,
     formaldehyde: false,
   },
 ] as const;

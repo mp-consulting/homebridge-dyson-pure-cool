@@ -159,6 +159,7 @@ export class DysonLinkAccessory extends DysonAccessory {
       api: this.api,
       log: this.log,
       deviceName,
+      supportsAutoMode: features.autoMode,
     });
 
     // Get the primary service for linking secondary services
