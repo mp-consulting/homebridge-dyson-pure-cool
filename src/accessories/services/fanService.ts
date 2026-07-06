@@ -29,6 +29,12 @@ export interface FanServiceConfig {
   log: Logging;
   /** Device name to display in HomeKit */
   deviceName: string;
+  /**
+   * Whether the device supports auto mode. When false (e.g. plain fans with
+   * no air-quality sensor), the required TargetAirPurifierState characteristic
+   * is pinned to MANUAL so HomeKit does not offer a non-functional Auto toggle.
+   */
+  supportsAutoMode?: boolean;
 }
 
 /**
@@ -114,9 +120,15 @@ export class FanService {
 
     // Set up TargetAirPurifierState characteristic (required)
     // 0 = MANUAL, 1 = AUTO
-    this.service.getCharacteristic(Characteristic.TargetAirPurifierState)
+    const targetState = this.service.getCharacteristic(Characteristic.TargetAirPurifierState)
       .onGet(this.handleTargetStateGet.bind(this))
       .onSet(this.handleTargetStateSet.bind(this));
+    // Devices without auto mode (plain fans) can only ever be MANUAL. Restrict
+    // the allowed values so HomeKit hides the Auto option instead of showing a
+    // toggle that would send an unsupported command to the device.
+    if (config.supportsAutoMode === false) {
+      targetState.setProps({ validValues: [TargetAirPurifierState.MANUAL] });
+    }
 
     // Set up RotationSpeed characteristic (optional but we want it)
     this.service.getCharacteristic(Characteristic.RotationSpeed)
