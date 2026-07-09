@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-07-09
+
+### Fixed
+
+- **CF1 (product type 739) power on/off did nothing**: The CF1 fan only honours the dedicated `fpwr` power field and silently ignores the legacy `fmod` power+mode field. Because `739` wasn't flagged as an `fpwr` device, `setFanPower` sent `fmod: FAN`/`fmod: OFF`, so HomeKit's on/off toggle had no effect and reverted to the fan's real state, while speed (`fnsp`) and oscillation (`oson`) kept working (#7). The fan power command protocol is now catalog-driven: a new `powerProtocol` field on each device model (defaulting to `fmod`) selects the field, with `739` and the Pure Cool Link models (475/469) set to `fpwr`. All other models are unchanged. Confirmed against the MyDyson app, where the `fmod` group is exactly `{455, 455C, 475, 469}` and every newer machine — including the CF1 — uses `fpwr`.
+
+## [1.1.0] - 2026-07-06
+
+### Added
+
+- **Dyson Cool (CF1, product type 739)**: Fan-only support — power, speed (0–10), and oscillation on/off. No air-quality/temperature/humidity sensors and no auto toggle, matching the hardware (#7).
+
 ## [1.0.33] - 2026-07-05
 
 ### Fixed
