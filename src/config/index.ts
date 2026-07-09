@@ -17,11 +17,13 @@ export {
 export {
   type DeviceSeries,
   type DeviceModel,
+  type PowerProtocol,
   DEVICE_CATALOG,
   getDeviceByProductType,
   isProductTypeSupported,
   getSupportedProductTypes,
   getDeviceFeatures,
+  getPowerProtocol,
   getDeviceModelName,
   getProductTypeDisplayNames,
   getDevicesBySeries,

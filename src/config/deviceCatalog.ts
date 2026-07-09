@@ -21,6 +21,19 @@ export type DeviceSeries =
   | 'cool';               // CF1 (plain fan, no sensors)
 
 /**
+ * MQTT protocol used for the fan power (on/off) command.
+ *
+ * - `fmod`: legacy field carrying power *and* mode (`OFF`/`FAN`/`AUTO`).
+ *   Accepted by most purifier models.
+ * - `fpwr`: dedicated power field (`ON`/`OFF`), with `auto`/`fnsp` carrying
+ *   mode/speed separately. Used by the Pure Cool Link series and by newer
+ *   fans (e.g. CF1) that do NOT honour `fmod` for power.
+ *
+ * Defaults to `fmod` when unspecified — see {@link getPowerProtocol}.
+ */
+export type PowerProtocol = 'fmod' | 'fpwr';
+
+/**
  * Device model definition
  */
 export interface DeviceModel {
@@ -36,6 +49,11 @@ export interface DeviceModel {
   features: DeviceFeatures;
   /** Whether this is a formaldehyde-detecting model */
   formaldehyde: boolean;
+  /**
+   * Fan power command protocol. Defaults to `fmod` when omitted.
+   * Set to `fpwr` for devices that only respond to the dedicated power field.
+   */
+  powerProtocol?: PowerProtocol;
 }
 
 // ============================================================================
@@ -187,6 +205,7 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
     series: 'pure-cool-link',
     features: FEATURES_PURE_COOL_LINK,
     formaldehyde: false,
+    powerProtocol: 'fpwr',
   },
   {
     productType: '469',
@@ -195,6 +214,7 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
     series: 'pure-cool-link',
     features: FEATURES_PURE_COOL_LINK,
     formaldehyde: false,
+    powerProtocol: 'fpwr',
   },
 
   // Pure Cool Series
@@ -383,6 +403,8 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
     series: 'cool',
     features: FEATURES_COOL_FAN,
     formaldehyde: false,
+    // CF1 ignores `fmod` for power; it only responds to the dedicated `fpwr` field.
+    powerProtocol: 'fpwr',
   },
 ] as const;
 
@@ -432,6 +454,17 @@ export function getSupportedProductTypes(): string[] {
  */
 export function getDeviceFeatures(productType: string): DeviceFeatures {
   return productTypeMap.get(productType)?.features ?? DEFAULT_FEATURES;
+}
+
+/**
+ * Get the fan power command protocol by product type.
+ *
+ * @param productType - Dyson product type code
+ * @returns `'fpwr'` for devices that require the dedicated power field,
+ *          otherwise `'fmod'` (the default for unspecified / unknown types)
+ */
+export function getPowerProtocol(productType: string): PowerProtocol {
+  return productTypeMap.get(productType)?.powerProtocol ?? 'fmod';
 }
 
 /**

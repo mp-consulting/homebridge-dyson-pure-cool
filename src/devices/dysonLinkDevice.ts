@@ -10,7 +10,7 @@ import type { DeviceFeatures, DeviceInfo } from './types.js';
 import { MessageCodec, FAN_SPEED, HEATING_TEMP, HUMIDITY, PROTOCOL, FORMAT, TEMPERATURE } from '../protocol/messageCodec.js';
 import type { MqttClientFactory } from './dysonDevice.js';
 import type { MqttConnectFn } from '../protocol/mqttClient.js';
-import { getDeviceFeatures } from '../config/index.js';
+import { getDeviceFeatures, getPowerProtocol } from '../config/index.js';
 
 // ============================================================================
 // DysonLinkDevice
@@ -33,8 +33,11 @@ export class DysonLinkDevice extends DysonDevice {
   /** Features supported by this device */
   readonly supportedFeatures: DeviceFeatures;
 
-  /** Whether this is a Link series device (uses different protocol) */
-  private readonly isLinkSeries: boolean;
+  /**
+   * Whether this device uses the dedicated `fpwr` power field instead of the
+   * legacy `fmod` field. Derived from the device catalog (see PowerProtocol).
+   */
+  private readonly usesFpwrProtocol: boolean;
 
   /** Pending command fields to be batched and sent */
   private pendingCommandFields: Record<string, string> = {};
@@ -61,10 +64,11 @@ export class DysonLinkDevice extends DysonDevice {
     this.productType = deviceInfo.productType;
     this.supportedFeatures = getDeviceFeatures(deviceInfo.productType);
 
-    // Check if this is a Pure Cool Link device (TP02, DP01) - uses fpwr/auto protocol
-    // Note: HP02 (455) is called "Hot+Cool Link" but uses fmod like newer devices
-    // Only TP02 (475) and DP01 (469) use the older fpwr/auto protocol
-    this.isLinkSeries = deviceInfo.productType === '475' || deviceInfo.productType === '469';
+    // Power command protocol is catalog-driven. Most models use the legacy
+    // `fmod` field (power + mode combined); a subset — the Pure Cool Link
+    // series (TP02/DP01) and newer fans like the CF1 (739) — only honour the
+    // dedicated `fpwr` field for power, with `auto`/`fnsp` for mode/speed.
+    this.usesFpwrProtocol = getPowerProtocol(deviceInfo.productType) === 'fpwr';
   }
 
   /**
@@ -105,7 +109,9 @@ export class DysonLinkDevice extends DysonDevice {
   /**
    * Set fan power on or off
    *
-   * Uses fmod command for newer models, fpwr/auto/fnsp for Link series.
+   * Uses the dedicated `fpwr` field (with `auto`/`fnsp`) for devices whose
+   * catalog entry declares `powerProtocol: 'fpwr'`, otherwise the legacy
+   * `fmod` field. See {@link getPowerProtocol}.
    *
    * @param on - True to turn on, false to turn off
    */
@@ -118,7 +124,7 @@ export class DysonLinkDevice extends DysonDevice {
         return;
       }
 
-      if (this.isLinkSeries) {
+      if (this.usesFpwrProtocol) {
         if (this.state.autoMode) {
           this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
         } else {
@@ -141,7 +147,7 @@ export class DysonLinkDevice extends DysonDevice {
       this.turningOff = true;
       this.pendingCommandFields = {};
       try {
-        if (this.isLinkSeries) {
+        if (this.usesFpwrProtocol) {
           await this.sendCommand({ fpwr: PROTOCOL.OFF });
         } else {
           await this.sendCommand({ fmod: PROTOCOL.OFF });
@@ -161,7 +167,7 @@ export class DysonLinkDevice extends DysonDevice {
     if (this.turningOff) {
       return;
     }
-    if (this.isLinkSeries) {
+    if (this.usesFpwrProtocol) {
       if (speed < 0) {
         this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
       } else {
@@ -208,7 +214,7 @@ export class DysonLinkDevice extends DysonDevice {
     if (this.turningOff) {
       return;
     }
-    if (this.isLinkSeries) {
+    if (this.usesFpwrProtocol) {
       if (on) {
         this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
       } else {

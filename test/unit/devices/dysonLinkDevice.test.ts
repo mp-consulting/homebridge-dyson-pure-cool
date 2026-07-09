@@ -138,6 +138,40 @@ describe('DysonLinkDevice', () => {
     });
   });
 
+  describe('setFanPower for CF1 (739, fpwr protocol)', () => {
+    let cf1Device: DysonLinkDevice;
+    let cf1MqttClient: ReturnType<typeof createMockMqttClient>;
+
+    beforeEach(async () => {
+      cf1MqttClient = createMockMqttClient();
+      cf1Device = new DysonLinkDevice(
+        { ...defaultDeviceInfo, productType: '739' },
+        vi.fn().mockReturnValue(cf1MqttClient),
+      );
+      await cf1Device.connect();
+    });
+
+    it('should send fpwr ON (not fmod) when turning on', async () => {
+      await cf1Device.setFanPower(true);
+      await flushMicrotasks();
+
+      const command = cf1MqttClient.publishCommand.mock.calls[0][0];
+      expect(command.data).toMatchObject({ fpwr: 'ON' });
+      expect(command.data).not.toHaveProperty('fmod');
+    });
+
+    it('should send fpwr OFF (not fmod) when turning off', async () => {
+      await cf1Device.setFanPower(false);
+      await flushMicrotasks();
+
+      expect(cf1MqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { fpwr: 'OFF' },
+        }),
+      );
+    });
+  });
+
   describe('setFanSpeed', () => {
     beforeEach(async () => {
       await device.connect();
