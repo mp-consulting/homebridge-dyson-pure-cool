@@ -115,6 +115,12 @@ describe('Device Catalog', () => {
       expect(features.frontAirflow).toBe(false);
     });
 
+    it('should support night mode for CF1', () => {
+      const features = getDeviceFeatures('739');
+      expect(features.fan).toBe(true);
+      expect(features.nightMode).toBe(true);
+    });
+
     it('should return DEFAULT_FEATURES for unknown product type', () => {
       const features = getDeviceFeatures('999');
       expect(features).toEqual(DEFAULT_FEATURES);
