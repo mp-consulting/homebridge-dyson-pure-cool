@@ -185,7 +185,7 @@ const FEATURES_COOL_FAN: DeviceFeatures = {
   fan: true,
   oscillation: true,
   autoMode: false,
-  nightMode: false,
+  nightMode: true,
   continuousMonitoring: false,
 };
 
