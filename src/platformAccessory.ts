@@ -52,6 +52,12 @@ interface DeviceConfig {
   heatingServiceType?: 'thermostat' | 'heater-cooler' | 'both';
   /** Enable full humidity range (0-100%) */
   fullRangeHumidity?: boolean;
+  /** Enable auto mode automatically when the device is turned on */
+  enableAutoModeWhenActivating?: boolean;
+  /** Enable oscillation automatically when the device is turned on */
+  enableOscillationWhenActivating?: boolean;
+  /** Enable night mode automatically when the device is turned on */
+  enableNightModeWhenActivating?: boolean;
   /** Enable night mode switch */
   isNightModeEnabled?: boolean;
   /** Enable jet focus switch */
@@ -333,6 +339,9 @@ export class DysonPlatformAccessory {
       isHeatingDisabled: config.isHeatingDisabled,
       heatingServiceType: config.heatingServiceType,
       fullRangeHumidity: config.fullRangeHumidity,
+      enableAutoModeWhenActivating: config.enableAutoModeWhenActivating,
+      enableOscillationWhenActivating: config.enableOscillationWhenActivating,
+      enableNightModeWhenActivating: config.enableNightModeWhenActivating,
       isNightModeEnabled: config.isNightModeEnabled,
       isJetFocusEnabled: config.isJetFocusEnabled,
       isContinuousMonitoringEnabled: config.isContinuousMonitoringEnabled,

@@ -177,8 +177,10 @@ const FEATURES_BIG_QUIET: DeviceFeatures = {
 };
 
 /**
- * Cool series (plain fan: oscillation + speed only, no sensors/filters).
- * Uses the modern (non-Link) protocol path: fmod/fnsp/oson.
+ * Cool series (plain fan: no air-quality sensors, no filters).
+ *
+ * Currently CF1 only, which takes power via the dedicated `fpwr` field rather
+ * than `fmod` — see the `powerProtocol` on its catalog entry.
  */
 const FEATURES_COOL_FAN: DeviceFeatures = {
   ...DEFAULT_FEATURES,

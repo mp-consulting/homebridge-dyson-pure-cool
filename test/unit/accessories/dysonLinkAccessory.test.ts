@@ -468,6 +468,27 @@ describe('DysonLinkAccessory', () => {
       expect(accessory.getNightModeService()).toBeUndefined();
     });
 
+    it('should pass activation defaults to the device', () => {
+      const setActivationDefaults = vi.spyOn(device, 'setActivationDefaults');
+
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: {
+          enableAutoModeWhenActivating: true,
+          enableNightModeWhenActivating: true,
+        },
+      });
+
+      expect(setActivationDefaults).toHaveBeenCalledWith({
+        autoMode: true,
+        oscillation: undefined,
+        nightMode: true,
+      });
+    });
+
     it('should enable continuous monitoring when isContinuousMonitoringEnabled is true', () => {
       accessory = new DysonLinkAccessory({
         accessory: mockAccessory,
