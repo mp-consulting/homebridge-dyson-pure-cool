@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-05
+
+### Added
+
+- **Night Mode for the Dyson Cool (CF1, product type 739)**: The CF1 supports Sleep/Quiet Mode through the standard `nmod` field, but its catalog entry declared `nightMode: false`, so the HomeKit Night Mode switch was never created even with `enableNightMode` turned on. The command, state decoding and switch were all already in place and are not model-specific — only the catalog flag was missing. Confirmed on a CF1: `nmod: ON` activates Sleep/Quiet Mode, `nmod: OFF` disables it, and the switch follows the state reported by the fan (#10).
+- **The `enable*WhenActivating` options now work**: `enableAutoModeWhenActivating`, `enableOscillationWhenActivating` and `enableNightModeWhenActivating` were offered per device in the Homebridge UI but had no implementation — setting them did nothing. Each selected mode is now switched on whenever the device goes from off to on, covering all power-on paths (the HomeKit power toggle, moving the speed slider up from zero, and turning on heating). Modes the model does not support are skipped rather than sent, so auto mode is never pushed to a plain fan, and all the commands travel in a single MQTT message alongside the power command (#11).
+
 ## [1.1.1] - 2026-07-09
 
 ### Fixed
