@@ -17,6 +17,22 @@ import { getDeviceFeatures, getPowerProtocol } from '../config/index.js';
 // ============================================================================
 
 /**
+ * Modes to switch on automatically whenever the device is activated.
+ *
+ * Each flag mirrors an `enable*WhenActivating` option in the plugin config.
+ * Flags are additionally gated by the device's catalog features, so a mode is
+ * never sent to a model that does not support it.
+ */
+export interface ActivationDefaults {
+  /** Enable auto mode when the device is turned on */
+  autoMode?: boolean;
+  /** Enable oscillation when the device is turned on */
+  oscillation?: boolean;
+  /** Enable night mode when the device is turned on */
+  nightMode?: boolean;
+}
+
+/**
  * Dyson Link Device implementation
  *
  * Handles fan control for all Dyson purifier devices.
@@ -47,6 +63,9 @@ export class DysonLinkDevice extends DysonDevice {
 
   /** Whether a power-off is in progress (prevents concurrent commands from overriding OFF) */
   private turningOff = false;
+
+  /** Modes to switch on automatically on the next off -> on transition */
+  private activationDefaults: ActivationDefaults = {};
 
   /**
    * Create a new DysonLinkDevice
@@ -139,6 +158,8 @@ export class DysonLinkDevice extends DysonDevice {
           this.queueCommand({ fmod: PROTOCOL.FAN });
         }
       }
+
+      await this.applyActivationDefaults();
     } else {
       // Power off: send directly to prevent concurrent mode changes
       // (e.g. TargetAirPurifierState) from overwriting the OFF command
@@ -156,6 +177,47 @@ export class DysonLinkDevice extends DysonDevice {
         this.turningOff = false;
       }
     }
+  }
+
+  /**
+   * Configure modes to switch on automatically whenever the device is activated.
+   *
+   * Applied only on an off -> on transition, and only for modes the device
+   * supports. Passing an empty object clears any previously set defaults.
+   *
+   * @param defaults - Modes to enable on activation
+   */
+  setActivationDefaults(defaults: ActivationDefaults): void {
+    this.activationDefaults = defaults;
+  }
+
+  /**
+   * Queue the configured activation modes alongside a power-on command.
+   *
+   * These are queued from the same tick as the power command, so they merge
+   * into a single MQTT message instead of racing it. Modes the device does not
+   * support are skipped rather than sent and ignored by the device.
+   */
+  private async applyActivationDefaults(): Promise<void> {
+    const { autoMode, oscillation, nightMode } = this.activationDefaults;
+    const queued: Promise<void>[] = [];
+
+    // Collected rather than awaited one by one: each `await` would yield to the
+    // microtask queue and let the pending flush run, splitting what should be a
+    // single MQTT message into one per mode.
+    if (autoMode && this.supportedFeatures.autoMode) {
+      queued.push(this.setAutoMode(true));
+    }
+
+    if (oscillation && this.supportedFeatures.oscillation) {
+      queued.push(this.setOscillation(true));
+    }
+
+    if (nightMode && this.supportedFeatures.nightMode) {
+      queued.push(this.setNightMode(true));
+    }
+
+    await Promise.all(queued);
   }
 
   /**

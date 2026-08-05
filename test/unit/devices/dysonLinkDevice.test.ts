@@ -172,6 +172,113 @@ describe('DysonLinkDevice', () => {
     });
   });
 
+  describe('activation defaults', () => {
+    beforeEach(async () => {
+      await device.connect();
+    });
+
+    it('should not send extra fields when no defaults are configured', async () => {
+      await device.setFanPower(true);
+      await flushMicrotasks();
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { fmod: 'FAN' },
+        }),
+      );
+    });
+
+    it('should enable configured modes in the same command as power on', async () => {
+      device.setActivationDefaults({ autoMode: true, oscillation: true, nightMode: true });
+
+      await device.setFanPower(true);
+      await flushMicrotasks();
+
+      // All queued in one tick, so they merge into a single MQTT message.
+      // Auto mode wins over the FAN value queued by setFanPower.
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { fmod: 'AUTO', oson: 'ON', nmod: 'ON' },
+        }),
+      );
+    });
+
+    it('should apply only the modes that are enabled', async () => {
+      device.setActivationDefaults({ oscillation: true });
+
+      await device.setFanPower(true);
+      await flushMicrotasks();
+
+      const command = mockMqttClient.publishCommand.mock.calls[0][0];
+      expect(command.data).toMatchObject({ oson: 'ON' });
+      expect(command.data).not.toHaveProperty('nmod');
+    });
+
+    it('should skip modes the device does not support', async () => {
+      const cf1MqttClient = createMockMqttClient();
+      const cf1Device = new DysonLinkDevice(
+        { ...defaultDeviceInfo, productType: '739' },
+        vi.fn().mockReturnValue(cf1MqttClient),
+      );
+      await cf1Device.connect();
+
+      // CF1 is a plain fan with no auto mode; oscillation is supported.
+      cf1Device.setActivationDefaults({ autoMode: true, oscillation: true });
+
+      await cf1Device.setFanPower(true);
+      await flushMicrotasks();
+
+      const command = cf1MqttClient.publishCommand.mock.calls[0][0];
+      expect(command.data).toMatchObject({ fpwr: 'ON', oson: 'ON' });
+      expect(command.data).toMatchObject({ auto: 'OFF' });
+    });
+
+    it('should not re-apply defaults when the device is already on', async () => {
+      device.setActivationDefaults({ nightMode: true });
+
+      // Device reports itself as already running
+      const message: MqttMessage = {
+        topic: '438/ABC-AB-12345678/status/current',
+        payload: Buffer.from('{}'),
+        data: {
+          msg: 'CURRENT-STATE',
+          'product-state': { fmod: 'FAN', fnsp: '0005', nmod: 'OFF' },
+        },
+      };
+      mockMqttClient._emit('message', message);
+
+      await device.setFanPower(true);
+      await flushMicrotasks();
+
+      expect(mockMqttClient.publishCommand).not.toHaveBeenCalled();
+    });
+
+    it('should not apply defaults when powering off', async () => {
+      device.setActivationDefaults({ nightMode: true, oscillation: true });
+
+      await device.setFanPower(false);
+      await flushMicrotasks();
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { fmod: 'OFF' },
+        }),
+      );
+    });
+
+    it('should clear previously configured defaults', async () => {
+      device.setActivationDefaults({ nightMode: true });
+      device.setActivationDefaults({});
+
+      await device.setFanPower(true);
+      await flushMicrotasks();
+
+      const command = mockMqttClient.publishCommand.mock.calls[0][0];
+      expect(command.data).not.toHaveProperty('nmod');
+    });
+  });
+
   describe('setFanSpeed', () => {
     beforeEach(async () => {
       await device.connect();

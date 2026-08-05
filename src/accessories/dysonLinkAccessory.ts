@@ -64,6 +64,14 @@ export interface DeviceOptions {
   /** Enable full humidity range (0-100%) for humidifier */
   fullRangeHumidity?: boolean;
 
+  // Activation behaviour
+  /** Enable auto mode automatically when the device is turned on */
+  enableAutoModeWhenActivating?: boolean;
+  /** Enable oscillation automatically when the device is turned on */
+  enableOscillationWhenActivating?: boolean;
+  /** Enable night mode automatically when the device is turned on */
+  enableNightModeWhenActivating?: boolean;
+
   // Service toggles
   /** Enable night mode switch */
   isNightModeEnabled?: boolean;
@@ -151,6 +159,15 @@ export class DysonLinkAccessory extends DysonAccessory {
     // they're available even though setupServices() is called during construction
     const opts: DeviceOptions = (this.accessory.context._deviceOptions as DeviceOptions) ?? this.options ?? {};
     const deviceName = this.accessory.displayName;
+
+    // Modes to switch on automatically whenever the device is activated.
+    // The device layer applies these on off -> on transitions only, and gates
+    // each one on the model's catalog features.
+    linkDevice.setActivationDefaults({
+      autoMode: opts.enableAutoModeWhenActivating,
+      oscillation: opts.enableOscillationWhenActivating,
+      nightMode: opts.enableNightModeWhenActivating,
+    });
 
     // Create FanService for fan control (all devices) - this is the primary service
     this.fanService = new FanService({
