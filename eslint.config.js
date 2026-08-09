@@ -4,7 +4,9 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   // Ignores
   {
-    ignores: ['dist/**', 'node_modules/**', 'homebridge-ui/public/lib/**'],
+    // `tmp/` is gitignored, but the flat config does not read .gitignore, so it has to
+    // be listed here too or a stale local scratch directory fails the lint run
+    ignores: ['dist/**', 'node_modules/**', 'homebridge-ui/public/lib/**', 'tmp/**'],
   },
   // Base recommended configs
   eslint.configs.recommended,
