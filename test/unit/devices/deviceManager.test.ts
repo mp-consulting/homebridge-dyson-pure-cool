@@ -411,13 +411,6 @@ describe('DeviceManager', () => {
 
   describe('device without IP address', () => {
     it('should warn and skip device without IP address', async () => {
-      // Use a device that relies on mDNS but mDNS returns no IP
-      vi.mock('../../../src/discovery/mdnsDiscovery.js', () => ({
-        MdnsDiscovery: vi.fn().mockImplementation(() => ({
-          discover: vi.fn().mockResolvedValue(new Map()), // No IPs found
-        })),
-      }));
-
       // Re-import to get mocked version
       const { DeviceManager: FreshDeviceManager } = await import('../../../src/devices/deviceManager.js');
 
