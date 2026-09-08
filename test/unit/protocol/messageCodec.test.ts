@@ -180,6 +180,23 @@ describe('MessageCodec', () => {
       expect(state.oscillationAngleEnd).toBe(270);
     });
 
+    it('should ignore invalid oscillation angles', () => {
+      const message: DysonMessage = {
+        msg: 'CURRENT-STATE',
+        'product-state': {
+          oson: 'ON',
+          oscs: 'INVALID',
+          osce: '',
+        },
+      };
+
+      const state = MessageCodec.decodeState(message);
+
+      expect(state.oscillation).toBe(true);
+      expect(state.oscillationAngleStart).toBeUndefined();
+      expect(state.oscillationAngleEnd).toBeUndefined();
+    });
+
     it('should decode temperature sensor', () => {
       const message: DysonMessage = {
         msg: 'CURRENT-STATE',
@@ -299,6 +316,21 @@ describe('MessageCodec', () => {
       expect(state.targetTemperature).toBe(2950);
     });
 
+    it('should ignore invalid target temperature', () => {
+      const message: DysonMessage = {
+        msg: 'CURRENT-STATE',
+        'product-state': {
+          hmod: 'HEAT',
+          hmax: 'OFF',
+        },
+      };
+
+      const state = MessageCodec.decodeState(message);
+
+      expect(state.heatingEnabled).toBe(true);
+      expect(state.targetTemperature).toBeUndefined();
+    });
+
     it('should decode humidifier mode', () => {
       const message: DysonMessage = {
         msg: 'CURRENT-STATE',
@@ -312,6 +344,21 @@ describe('MessageCodec', () => {
 
       expect(state.humidifierEnabled).toBe(true);
       expect(state.targetHumidity).toBe(55);
+    });
+
+    it('should ignore invalid target humidity', () => {
+      const message: DysonMessage = {
+        msg: 'CURRENT-STATE',
+        'product-state': {
+          hume: 'AUTO',
+          humt: '----',
+        },
+      };
+
+      const state = MessageCodec.decodeState(message);
+
+      expect(state.humidifierEnabled).toBe(true);
+      expect(state.targetHumidity).toBeUndefined();
     });
 
     it('should decode fan mode AUTO', () => {

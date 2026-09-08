@@ -332,11 +332,17 @@ export class MessageCodec {
     // Oscillation angles
     const oscs = MessageCodec.extractValue(raw.oscs);
     if (oscs !== undefined) {
-      state.oscillationAngleStart = parseInt(oscs, 10);
+      const angle = parseInt(oscs, 10);
+      if (!isNaN(angle)) {
+        state.oscillationAngleStart = angle;
+      }
     }
     const osce = MessageCodec.extractValue(raw.osce);
     if (osce !== undefined) {
-      state.oscillationAngleEnd = parseInt(osce, 10);
+      const angle = parseInt(osce, 10);
+      if (!isNaN(angle)) {
+        state.oscillationAngleEnd = angle;
+      }
     }
 
     // Night mode
@@ -504,7 +510,10 @@ export class MessageCodec {
     }
     const hmax = MessageCodec.extractValue(raw.hmax);
     if (hmax !== undefined) {
-      state.targetTemperature = parseInt(hmax, 10);
+      const temperature = parseInt(hmax, 10);
+      if (!isNaN(temperature)) {
+        state.targetTemperature = temperature;
+      }
     }
     const hsta = MessageCodec.extractValue(raw.hsta);
     if (hsta !== undefined) {
@@ -522,7 +531,10 @@ export class MessageCodec {
     }
     const humt = MessageCodec.extractValue(raw.humt);
     if (humt !== undefined) {
-      state.targetHumidity = parseInt(humt, 10);
+      const humidity = parseInt(humt, 10);
+      if (!isNaN(humidity)) {
+        state.targetHumidity = humidity;
+      }
     }
   }
 
