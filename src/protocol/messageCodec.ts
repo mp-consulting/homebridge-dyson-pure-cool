@@ -471,17 +471,26 @@ export class MessageCodec {
   private static parseFilterData(raw: RawStateData, state: Partial<DeviceState>): void {
     const filf = MessageCodec.extractValue(raw.filf);
     if (filf !== undefined) {
-      state.hepaFilterLife = parseInt(filf, 10);
+      const hours = parseInt(filf, 10);
+      if (!isNaN(hours)) {
+        state.hepaFilterLife = hours;
+      }
     }
+
     const fltf = MessageCodec.extractValue(raw.fltf);
     if (fltf !== undefined) {
       const percent = parseInt(fltf, 10);
-      state.hepaFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
+      if (!isNaN(percent)) {
+        state.hepaFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
+      }
     }
+
     const cflr = MessageCodec.extractValue(raw.cflr);
     if (cflr !== undefined) {
       const percent = parseInt(cflr, 10);
-      state.carbonFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
+      if (!isNaN(percent)) {
+        state.carbonFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
+      }
     }
   }
 

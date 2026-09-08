@@ -266,6 +266,24 @@ describe('MessageCodec', () => {
       expect(state.hepaFilterLife).toBe(2150); // 50% of 4300
     });
 
+    it('should ignore invalid filter telemetry instead of producing NaN', () => {
+      const message: DysonMessage = {
+        msg: 'CURRENT-STATE',
+        'product-state': {
+          filf: 'INVALID',
+          fltf: '----',
+          cflr: '',
+        },
+      };
+
+      const state = MessageCodec.decodeState(message);
+
+      expect(state.hepaFilterLife).toBeUndefined();
+      expect(state.carbonFilterLife).toBeUndefined();
+      expect(Number.isNaN(state.hepaFilterLife)).toBe(false);
+      expect(Number.isNaN(state.carbonFilterLife)).toBe(false);
+    });
+
     it('should decode heating mode', () => {
       const message: DysonMessage = {
         msg: 'CURRENT-STATE',

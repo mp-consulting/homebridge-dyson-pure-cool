@@ -110,8 +110,12 @@ export class FilterService {
    * @returns Percentage (0-100)
    */
   private calculateFilterLifePercent(hoursRemaining: number | undefined): number {
-    if (hoursRemaining === undefined || hoursRemaining < 0) {
-      return 100; // Assume full if unknown
+    if (
+      hoursRemaining === undefined ||
+      !Number.isFinite(hoursRemaining) ||
+      hoursRemaining < 0
+    ) {
+      return 100; // Assume full if unknown or invalid
     }
 
     const percent = Math.round((hoursRemaining / MAX_FILTER_LIFE_HOURS) * 100);
