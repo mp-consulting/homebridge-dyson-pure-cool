@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-09-10
+
+### Fixed
+
+- **`characteristic value expected valid finite number and received "NaN"` warnings from invalid filter telemetry** ([#15](https://github.com/mp-consulting/homebridge-dyson-pure-cool/pull/15)): some devices return filter life values that cannot be parsed as a number. `parseInt` produced `NaN`, which was assigned straight to `hepaFilterLife` / `carbonFilterLife` and eventually reached HomeKit's `FilterLifeLevel` characteristic, where Homebridge rejected it with a warning on every update. The values are now parsed and checked before being assigned.
+- **The same unguarded parse remained for four more fields** ([#16](https://github.com/mp-consulting/homebridge-dyson-pure-cool/issues/16)): `oscs`, `osce`, `hmax` and `humt` had the identical pattern, so a device returning a non-numeric value for any of them wrote `NaN` into device state and produced the same warning. All four now follow the parse-check-assign pattern already used for `sltm` and the filter fields — invalid telemetry leaves the previous known-good value in place instead of overwriting it.
+
+### Changed
+
+- **Dependencies**: Updated all dependencies to latest compatible versions, including `homebridge-lib` ^8.1.5, `mqtt` ^5.15.2, `bonjour-service` ^1.4.4 and `@homebridge/plugin-ui-utils` ^2.2.6, plus dev-only major bumps for `vitest` (4→5) and `@types/node` (25→26).
+
 ## [1.2.3] - 2026-08-10
 
 ### Fixed
