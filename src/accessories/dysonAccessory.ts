@@ -24,6 +24,8 @@ export interface DysonAccessoryConfig {
   device: DysonDevice;
   api: API;
   log: Logging;
+  /** Firmware version reported by the Dyson cloud, if known */
+  firmwareVersion?: string;
 }
 
 /**
@@ -59,7 +61,7 @@ export abstract class DysonAccessory {
     this.log = config.log;
 
     // Set up AccessoryInformation service
-    this.setupAccessoryInformation();
+    this.setupAccessoryInformation(config.firmwareVersion);
 
     // Subscribe to device state changes (store bound refs for cleanup)
     this.boundHandleStateChange = this.handleStateChange.bind(this);
@@ -72,17 +74,15 @@ export abstract class DysonAccessory {
     this.device.on('disconnect', this.boundHandleDisconnect);
     this.device.on('debug', this.boundHandleDebug);
 
-    // Set up device-specific services
-    this.setupServices();
-
     this.log.debug('DysonAccessory initialized for', this.accessory.displayName);
   }
 
   /**
    * Set up device-specific services
    *
-   * Must be implemented by subclasses to add the appropriate
-   * HomeKit services for the device type.
+   * Must be implemented by subclasses to add the appropriate HomeKit
+   * services for the device type. Subclasses call it at the end of their
+   * constructor, once their own fields are initialised.
    */
   protected abstract setupServices(): void;
 
@@ -147,9 +147,10 @@ export abstract class DysonAccessory {
   /**
    * Set up the AccessoryInformation service
    *
-   * Sets manufacturer, model, serial number, and firmware version.
+   * Sets manufacturer, model, serial number, and firmware version (only when
+   * known; otherwise Homebridge's default is left in place).
    */
-  private setupAccessoryInformation(): void {
+  private setupAccessoryInformation(firmwareVersion?: string): void {
     const Characteristic = this.api.hap.Characteristic;
 
     const informationService = this.accessory.getService(this.api.hap.Service.AccessoryInformation);
@@ -158,8 +159,10 @@ export abstract class DysonAccessory {
       informationService
         .setCharacteristic(Characteristic.Manufacturer, 'Dyson')
         .setCharacteristic(Characteristic.Model, this.getModelName())
-        .setCharacteristic(Characteristic.SerialNumber, this.device.getSerial())
-        .setCharacteristic(Characteristic.FirmwareRevision, '1.0.0');
+        .setCharacteristic(Characteristic.SerialNumber, this.device.getSerial());
+      if (firmwareVersion) {
+        informationService.setCharacteristic(Characteristic.FirmwareRevision, firmwareVersion);
+      }
     }
   }
 

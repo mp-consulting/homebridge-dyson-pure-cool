@@ -209,6 +209,11 @@ export class DysonMqttClient extends EventEmitter {
       return;
     }
 
+    // A fresh connect() re-enables auto-reconnect after an earlier disconnect()
+    if (!this.isReconnecting) {
+      this.intentionalDisconnect = false;
+    }
+
     const startIndex = this.lastSuccessfulVariantIndex ?? 0;
     let lastError: Error | null = null;
 
@@ -266,13 +271,15 @@ export class DysonMqttClient extends EventEmitter {
       this.client.on('connect', () => {
         clearTimeout(timeoutId);
         this.connected = true;
-        const wasReconnecting = this.isReconnecting;
         this.reconnectAttempts = 0;
         this.isReconnecting = false;
         this.emit('connect');
 
-        // Re-subscribe to topics after reconnection
-        if (wasReconnecting && this.subscribedTopics.size > 0) {
+        // Re-subscribe to topics after reconnection. Topics are only recorded
+        // after a successful subscribe and cleared on intentional disconnect,
+        // so a non-empty set means this is a reconnect, even if the variant
+        // ladder ran cleanup() in between (which resets isReconnecting).
+        if (this.subscribedTopics.size > 0) {
           this.resubscribeToTopics().catch((error) => {
             this.emit('error', error instanceof Error ? error : new Error(String(error)));
           });
@@ -321,10 +328,6 @@ export class DysonMqttClient extends EventEmitter {
         }
       });
 
-      this.client.on('reconnect', () => {
-        // This is the mqtt library's internal reconnect event - we handle our own
-      });
-
       this.client.on('offline', () => {
         const wasConnected = this.connected;
         this.connected = false;
@@ -354,14 +357,21 @@ export class DysonMqttClient extends EventEmitter {
    * @param intentional - Whether this is an intentional disconnect (prevents auto-reconnect)
    */
   async disconnect(intentional = true): Promise<void> {
-    if (!this.client) {
-      return;
-    }
-
+    // Must run before the client check: between reconnect attempts the client
+    // is null, and the pending attempt still has to be cancelled.
     if (intentional) {
       this.intentionalDisconnect = true;
       // Cancel any pending reconnection sleep
       this.reconnectAbortController?.abort();
+    }
+
+    if (!this.client) {
+      if (intentional) {
+        this.subscribedTopics.clear();
+        this.reconnectAttempts = 0;
+        this.lastSuccessfulVariantIndex = null;
+      }
+      return;
     }
 
     return new Promise((resolve) => {
@@ -598,7 +608,11 @@ export class DysonMqttClient extends EventEmitter {
       // Attempt to reconnect
       this.connect()
         .then(() => {
-          // Reconnection successful - handled by connect event
+          // Reconnection successful - handled by connect event. If disconnect()
+          // was requested while the attempt was in flight, drop the connection.
+          if (this.intentionalDisconnect) {
+            void this.disconnect();
+          }
         })
         .catch(() => {
           // Connection failed, try again if attempts remain

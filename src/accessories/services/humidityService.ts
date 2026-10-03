@@ -2,43 +2,31 @@
  * Humidity Service Handler
  *
  * Implements the HomeKit HumiditySensor service for Dyson devices.
- * Humidity is reported directly as a percentage (no conversion needed).
+ * Reports relative humidity percentage.
  */
 
-import type {
-  API,
-  CharacteristicValue,
-  Logging,
-  PlatformAccessory,
-  Service,
-} from 'homebridge';
+import type { CharacteristicValue } from 'homebridge';
 
 import type { DysonDevice } from '../../devices/dysonDevice.js';
 import type { DeviceState } from '../../devices/types.js';
+import { BaseService } from './baseService.js';
+import type { BaseServiceConfig } from './baseService.js';
 
 /**
- * Humidity characteristic range and defaults
+ * Humidity range constants
  */
 const HUMIDITY = {
   MIN: 0,
   MAX: 100,
   STEP: 1,
-  /** Default value when sensor data is unavailable */
-  DEFAULT_FALLBACK: 50,
 } as const;
 
 /**
  * Configuration for HumidityService
  */
-export interface HumidityServiceConfig {
-  accessory: PlatformAccessory;
-  device: DysonDevice;
-  api: API;
-  log: Logging;
-  /** Humidity offset (can be positive or negative) */
+export interface HumidityServiceConfig extends BaseServiceConfig<DysonDevice> {
+  /** Humidity offset percentage (can be positive or negative) */
   humidityOffset?: number;
-  /** Primary service to link this service to */
-  primaryService?: Service;
 }
 
 /**
@@ -47,33 +35,19 @@ export interface HumidityServiceConfig {
  * Maps HomeKit characteristics to Dyson device state:
  * - CurrentRelativeHumidity (0-100%) ↔ humidity (0-100%)
  */
-export class HumidityService {
-  private readonly service: Service;
-  private readonly device: DysonDevice;
-  private readonly log: Logging;
-  private readonly api: API;
+export class HumidityService extends BaseService<DysonDevice> {
   private readonly humidityOffset: number;
-  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   constructor(config: HumidityServiceConfig) {
-    this.device = config.device;
-    this.log = config.log;
-    this.api = config.api;
+    super(config, {
+      type: config.api.hap.Service.HumiditySensor,
+      name: 'Humidity',
+      subtype: 'humidity-sensor',
+    });
     this.humidityOffset = config.humidityOffset ?? 0;
 
-    const Service = this.api.hap.Service;
-    const Characteristic = this.api.hap.Characteristic;
-
-    // Get or create the HumiditySensor service with name
-    this.service = config.accessory.getService('humidity-sensor') ||
-      config.accessory.addService(Service.HumiditySensor, 'Humidity', 'humidity-sensor');
-
-    // Set ConfiguredName for better HomeKit display
-    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
-    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Humidity');
-
     // Set up CurrentRelativeHumidity characteristic (required)
-    this.service.getCharacteristic(Characteristic.CurrentRelativeHumidity)
+    this.service.getCharacteristic(this.api.hap.Characteristic.CurrentRelativeHumidity)
       .onGet(this.handleHumidityGet.bind(this))
       .setProps({
         minValue: HUMIDITY.MIN,
@@ -81,76 +55,39 @@ export class HumidityService {
         minStep: HUMIDITY.STEP,
       });
 
-    // Link to primary service if provided
-    if (config.primaryService) {
-      config.primaryService.addLinkedService(this.service);
-    }
-
-    // Subscribe to device state changes
-    this.boundHandleStateChange = this.handleStateChange.bind(this);
-    this.device.on('stateChange', this.boundHandleStateChange);
-
     this.log.debug('HumidityService initialized for', config.accessory.displayName);
   }
 
   /**
-   * Get the underlying HomeKit service
-   */
-  getService(): Service {
-    return this.service;
-  }
-
-  /**
-   * Clean up event listeners
-   */
-  destroy(): void {
-    this.device.off('stateChange', this.boundHandleStateChange);
-  }
-
-  /**
-   * Handle CurrentRelativeHumidity GET request
-   * Returns humidity as percentage
+   * Handle CurrentRelativeHumidity GET request.
+   * Returns the last value HomeKit has while the sensor has no reading.
    */
   private handleHumidityGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const humidity = this.getHumidity(state.humidity);
+    this.assertConnected();
+    const humidity = this.getHumidity(this.device.getState().humidity);
+    if (humidity === undefined) {
+      return this.cachedValue(this.api.hap.Characteristic.CurrentRelativeHumidity);
+    }
     this.log.debug('Get Humidity ->', humidity, '%');
     return humidity;
   }
 
   /**
-   * Get humidity value with offset and default fallback
-   *
-   * @param humidity - Humidity percentage from device
-   * @returns Humidity percentage (0-100) with offset applied, or default if unavailable
+   * Apply the offset and clamp to 0-100. Undefined if there is no valid reading.
    */
-  private getHumidity(humidity: number | undefined): number {
-    if (humidity === undefined || humidity < HUMIDITY.MIN || humidity > HUMIDITY.MAX) {
-      // Return a sensible default when sensor data unavailable
-      return Math.max(HUMIDITY.MIN, Math.min(HUMIDITY.MAX, HUMIDITY.DEFAULT_FALLBACK + this.humidityOffset));
+  private getHumidity(humidity: number | undefined): number | undefined {
+    if (humidity === undefined || !Number.isFinite(humidity) || humidity < HUMIDITY.MIN || humidity > HUMIDITY.MAX) {
+      return undefined;
     }
-    // Apply offset and clamp to valid range
     return Math.max(HUMIDITY.MIN, Math.min(HUMIDITY.MAX, humidity + this.humidityOffset));
   }
 
-  /**
-   * Handle device state changes
-   * Updates HomeKit characteristic to reflect current device state
-   */
-  private handleStateChange(state: DeviceState): void {
+  protected handleStateChange(state: DeviceState): void {
     const humidity = this.getHumidity(state.humidity);
+    if (humidity === undefined) {
+      return;
+    }
     this.log.debug('Humidity state changed ->', humidity, '%');
-
-    const Characteristic = this.api.hap.Characteristic;
-    this.service.updateCharacteristic(Characteristic.CurrentRelativeHumidity, humidity);
-  }
-
-  /**
-   * Update characteristic from current device state
-   * Call this after connecting to sync HomeKit with device
-   */
-  updateFromState(): void {
-    const state = this.device.getState();
-    this.handleStateChange(state);
+    this.update(this.api.hap.Characteristic.CurrentRelativeHumidity, humidity);
   }
 }

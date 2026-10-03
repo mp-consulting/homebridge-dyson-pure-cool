@@ -1,0 +1,23 @@
+{
+  "bridge": {
+    "name": "Homebridge Dyson Dev",
+    "username": "0E:12:34:56:78:9A",
+    "port": 51826,
+    "pin": "031-45-154"
+  },
+  "platforms": [
+    {
+      "platform": "DysonPureCool",
+      "name": "Dyson Pure Cool",
+      "devices": [
+        {
+          "serial": "XXX-XX-XXXXXXXX",
+          "name": "Living Room",
+          "productType": "438",
+          "localCredentials": "<local MQTT password from the setup wizard>",
+          "ipAddress": "192.168.1.100"
+        }
+      ]
+    }
+  ]
+}

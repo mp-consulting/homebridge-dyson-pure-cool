@@ -7,120 +7,35 @@ import { vi, type Mocked } from 'vitest';
 import { FilterService } from '../../../../src/accessories/services/filterService.js';
 import { DysonLinkDevice } from '../../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../../src/devices/index.js';
-import type { DysonMqttClient } from '../../../../src/protocol/mqttClient.js';
-import type { API, Logging, PlatformAccessory, Service, Characteristic } from 'homebridge';
+import type { API, Logging, PlatformAccessory } from 'homebridge';
+import { HapStatusError, createMockHapApi, createMockLog, createMockMqttClient, createMockService } from '../../../helpers/mocks.js';
+import { emitProductState, setDeviceState } from '../../../helpers/device.js';
 
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
-
-// Create mock characteristic
-function createMockCharacteristic() {
-  const characteristic = {
-    onGet: vi.fn().mockReturnThis(),
-    onSet: vi.fn().mockReturnThis(),
-    setProps: vi.fn().mockReturnThis(),
-    updateValue: vi.fn().mockReturnThis(),
-    value: 0,
-  };
-  return characteristic as unknown as Mocked<Characteristic>;
-}
-
-// Create mock service
-function createMockService() {
-  const characteristics = new Map<string, ReturnType<typeof createMockCharacteristic>>();
-
-  const service = {
-    setCharacteristic: vi.fn().mockReturnThis(),
-    getCharacteristic: vi.fn((char: unknown) => {
-      const key = String(char);
-      if (!characteristics.has(key)) {
-        characteristics.set(key, createMockCharacteristic());
-      }
-      return characteristics.get(key)!;
-    }),
-    updateCharacteristic: vi.fn().mockReturnThis(),
-    addOptionalCharacteristic: vi.fn().mockReturnThis(),
-    addLinkedService: vi.fn().mockReturnThis(),
-    _getCharacteristics: () => characteristics,
-  };
-
-  return service as unknown as Mocked<Service> & {
-    _getCharacteristics: () => Map<string, ReturnType<typeof createMockCharacteristic>>;
-  };
-}
+// Characteristic types (keyed by UUID in the mock service)
+const C = {
+  Name: { UUID: 'Name' },
+  FilterLifeLevel: { UUID: 'FilterLifeLevel' },
+  FilterChangeIndication: { UUID: 'FilterChangeIndication' },
+  ConfiguredName: { UUID: 'ConfiguredName' },
+};
 
 // Create mock API
 function createMockApi() {
-  const mockFilterService = createMockService();
-
-  return {
-    hap: {
-      Service: {
-        FilterMaintenance: 'FilterMaintenance',
-      },
-      Characteristic: {
-        Name: 'Name',
-        FilterLifeLevel: 'FilterLifeLevel',
-        FilterChangeIndication: 'FilterChangeIndication',
-        ConfiguredName: 'ConfiguredName',
-      },
-    },
-    _mockFilterService: mockFilterService,
-  } as unknown as Mocked<API> & {
-    _mockFilterService: ReturnType<typeof createMockService>;
-  };
+  return createMockHapApi(
+    { Service: { FilterMaintenance: { UUID: 'FilterMaintenance' } }, Characteristic: C },
+    { _mockFilterService: createMockService(100) },
+  );
 }
 
 // Create mock accessory
-function createMockAccessory(api: ReturnType<typeof createMockApi>) {
+function createMockAccessory(api: ReturnType<typeof createMockApi>, existing = false) {
   return {
     displayName: 'Test Dyson',
     UUID: 'test-uuid',
-    getService: vi.fn((serviceType: unknown) => {
-      if (serviceType === 'filter-maintenance') {
-        return api._mockFilterService;
-      }
-      return undefined;
-    }),
+    getServiceById: vi.fn(() => (existing ? api._mockFilterService : undefined)),
     addService: vi.fn(() => api._mockFilterService),
     context: {},
   } as unknown as Mocked<PlatformAccessory>;
-}
-
-// Create mock logger
-function createMockLog(): Mocked<Logging> {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    log: vi.fn(),
-    success: vi.fn(),
-  } as unknown as Mocked<Logging>;
 }
 
 describe('FilterService', () => {
@@ -140,7 +55,7 @@ describe('FilterService', () => {
     ipAddress: '192.168.1.100',
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockMqttClient = createMockMqttClient();
     mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     mockApi = createMockApi();
@@ -148,6 +63,8 @@ describe('FilterService', () => {
     mockLog = createMockLog();
 
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
+    // GET handlers require a connected device
+    await device.connect();
   });
 
   afterEach(() => {
@@ -163,7 +80,28 @@ describe('FilterService', () => {
         log: mockLog,
       });
 
-      expect(mockAccessory.getService).toHaveBeenCalledWith('filter-maintenance');
+      expect(mockAccessory.getServiceById).toHaveBeenCalledWith(
+        mockApi.hap.Service.FilterMaintenance, 'filter-maintenance',
+      );
+      expect(mockAccessory.addService).toHaveBeenCalledWith(
+        mockApi.hap.Service.FilterMaintenance, 'Filter', 'filter-maintenance',
+      );
+    });
+
+    it('should not overwrite ConfiguredName of an existing service', () => {
+      const existingAccessory = createMockAccessory(mockApi, true);
+      service = new FilterService({
+        accessory: existingAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      expect(existingAccessory.addService).not.toHaveBeenCalled();
+      expect(mockApi._mockFilterService.addOptionalCharacteristic).not.toHaveBeenCalled();
+      expect(mockApi._mockFilterService.updateCharacteristic).not.toHaveBeenCalledWith(
+        C.ConfiguredName, expect.anything(),
+      );
     });
 
     it('should set configured name', () => {
@@ -175,10 +113,10 @@ describe('FilterService', () => {
       });
 
       expect(mockApi._mockFilterService.addOptionalCharacteristic).toHaveBeenCalledWith(
-        'ConfiguredName',
+        C.ConfiguredName,
       );
       expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith(
-        'ConfiguredName',
+        C.ConfiguredName,
         'Filter',
       );
     });
@@ -223,41 +161,73 @@ describe('FilterService', () => {
       filterLifeGetHandler = filterLifeChar!.onGet.mock.calls[0][0] as () => number;
     });
 
-    it('should return 100% when filter life is undefined', () => {
-      device.state.hepaFilterLife = undefined;
-      device.state.carbonFilterLife = undefined;
-      expect(filterLifeGetHandler()).toBe(100);
+    it('should return the cached HomeKit value when filter life is unknown', () => {
+      mockApi._mockFilterService._getCharacteristics().get('FilterLifeLevel')!.value = 63;
+      setDeviceState(device, { hepaFilterLife: undefined });
+      setDeviceState(device, { carbonFilterLife: undefined });
+      expect(filterLifeGetHandler()).toBe(63);
     });
 
-    it('should return 100% when filter is new (4300 hours)', () => {
-      device.state.hepaFilterLife = 4300;
+    it('should return 100% when filter is new', () => {
+      setDeviceState(device, { hepaFilterLife: 100 });
       expect(filterLifeGetHandler()).toBe(100);
     });
 
     it('should return 50% when filter is half used', () => {
-      device.state.hepaFilterLife = 2150;
+      setDeviceState(device, { hepaFilterLife: 50 });
       expect(filterLifeGetHandler()).toBe(50);
     });
 
     it('should return 10% when filter is nearly depleted', () => {
-      device.state.hepaFilterLife = 430;
+      setDeviceState(device, { hepaFilterLife: 10 });
       expect(filterLifeGetHandler()).toBe(10);
     });
 
     it('should return 0% when filter is depleted', () => {
-      device.state.hepaFilterLife = 0;
+      setDeviceState(device, { hepaFilterLife: 0 });
       expect(filterLifeGetHandler()).toBe(0);
     });
 
     it('should use carbon filter as fallback', () => {
-      device.state.hepaFilterLife = undefined;
-      device.state.carbonFilterLife = 2150;
+      setDeviceState(device, { hepaFilterLife: undefined });
+      setDeviceState(device, { carbonFilterLife: 50 });
       expect(filterLifeGetHandler()).toBe(50);
     });
 
-    it('should clamp to 0% for negative values', () => {
-      device.state.hepaFilterLife = -100;
-      expect(filterLifeGetHandler()).toBe(100); // Negative treated as unknown
+    it('should report the most worn of the HEPA and carbon filters', () => {
+      setDeviceState(device, { hepaFilterLife: 80 });
+      setDeviceState(device, { carbonFilterLife: 35 });
+      expect(filterLifeGetHandler()).toBe(35);
+
+      setDeviceState(device, { hepaFilterLife: 20 });
+      setDeviceState(device, { carbonFilterLife: 90 });
+      expect(filterLifeGetHandler()).toBe(20);
+    });
+
+    it('should ignore an invalid filter value and use the other one', () => {
+      setDeviceState(device, { hepaFilterLife: -1 });
+      setDeviceState(device, { carbonFilterLife: 40 });
+      expect(filterLifeGetHandler()).toBe(40);
+    });
+
+    it('should treat negative values as unknown (cached value)', () => {
+      mockApi._mockFilterService._getCharacteristics().get('FilterLifeLevel')!.value = 77;
+      setDeviceState(device, { hepaFilterLife: -100 });
+      expect(filterLifeGetHandler()).toBe(77);
+    });
+
+    it('should round and clamp to 100%', () => {
+      setDeviceState(device, { hepaFilterLife: 42.6 });
+      expect(filterLifeGetHandler()).toBe(43);
+
+      setDeviceState(device, { hepaFilterLife: 150 });
+      expect(filterLifeGetHandler()).toBe(100);
+    });
+
+    it('should throw HapStatusError when the device is disconnected', () => {
+      mockMqttClient.isConnected.mockReturnValue(false);
+      setDeviceState(device, { hepaFilterLife: 50 });
+      expect(() => filterLifeGetHandler()).toThrow(HapStatusError);
     });
   });
 
@@ -277,32 +247,45 @@ describe('FilterService', () => {
     });
 
     it('should return 0 (no change needed) when filter is new', () => {
-      device.state.hepaFilterLife = 4300;
+      setDeviceState(device, { hepaFilterLife: 100 });
       expect(filterChangeGetHandler()).toBe(0);
     });
 
     it('should return 0 when filter is at 50%', () => {
-      device.state.hepaFilterLife = 2150;
+      setDeviceState(device, { hepaFilterLife: 50 });
       expect(filterChangeGetHandler()).toBe(0);
     });
 
     it('should return 0 when filter is at 11%', () => {
-      device.state.hepaFilterLife = 473; // ~11%
+      setDeviceState(device, { hepaFilterLife: 11 });
       expect(filterChangeGetHandler()).toBe(0);
     });
 
     it('should return 1 (change needed) when filter is at 10%', () => {
-      device.state.hepaFilterLife = 430; // 10%
+      setDeviceState(device, { hepaFilterLife: 10 });
       expect(filterChangeGetHandler()).toBe(1);
     });
 
     it('should return 1 when filter is at 5%', () => {
-      device.state.hepaFilterLife = 215;
+      setDeviceState(device, { hepaFilterLife: 5 });
       expect(filterChangeGetHandler()).toBe(1);
     });
 
     it('should return 1 when filter is depleted', () => {
-      device.state.hepaFilterLife = 0;
+      setDeviceState(device, { hepaFilterLife: 0 });
+      expect(filterChangeGetHandler()).toBe(1);
+    });
+
+    it('should use the most worn filter', () => {
+      setDeviceState(device, { hepaFilterLife: 90 });
+      setDeviceState(device, { carbonFilterLife: 8 });
+      expect(filterChangeGetHandler()).toBe(1);
+    });
+
+    it('should return the cached HomeKit value when filter life is unknown', () => {
+      mockApi._mockFilterService._getCharacteristics().get('FilterChangeIndication')!.value = 1;
+      setDeviceState(device, { hepaFilterLife: undefined });
+      setDeviceState(device, { carbonFilterLife: undefined });
       expect(filterChangeGetHandler()).toBe(1);
     });
   });
@@ -318,17 +301,34 @@ describe('FilterService', () => {
     });
 
     it('should update characteristics on state change', () => {
-      device.updateState({ hepaFilterLife: 2150 });
+      emitProductState(mockMqttClient, { fltf: '0050' });
 
-      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith('FilterLifeLevel', 50);
-      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith('FilterChangeIndication', 0);
+      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith(C.FilterLifeLevel, 50);
+      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith(C.FilterChangeIndication, 0);
     });
 
     it('should indicate change needed when filter is low', () => {
-      device.updateState({ hepaFilterLife: 200 });
+      emitProductState(mockMqttClient, { fltf: '0005' });
 
-      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith('FilterLifeLevel', 5);
-      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith('FilterChangeIndication', 1);
+      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith(C.FilterLifeLevel, 5);
+      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith(C.FilterChangeIndication, 1);
+    });
+
+    it('should push the minimum of HEPA and carbon', () => {
+      emitProductState(mockMqttClient, { fltf: '0060', cflr: '0025' });
+
+      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith(C.FilterLifeLevel, 25);
+    });
+
+    it('should not push any update when filter life is unknown', () => {
+      setDeviceState(device, { hepaFilterLife: undefined });
+      setDeviceState(device, { carbonFilterLife: undefined });
+      mockApi._mockFilterService.updateCharacteristic.mockClear();
+
+      service.updateFromState();
+      setDeviceState(device, { hepaFilterLife: -1 }, { emit: true });
+
+      expect(mockApi._mockFilterService.updateCharacteristic).not.toHaveBeenCalled();
     });
   });
 
@@ -341,13 +341,13 @@ describe('FilterService', () => {
         log: mockLog,
       });
 
-      device.state.hepaFilterLife = 3225; // 75%
+      setDeviceState(device, { hepaFilterLife: 75 });
 
       mockApi._mockFilterService.updateCharacteristic.mockClear();
       service.updateFromState();
 
-      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith('FilterLifeLevel', 75);
-      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith('FilterChangeIndication', 0);
+      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith(C.FilterLifeLevel, 75);
+      expect(mockApi._mockFilterService.updateCharacteristic).toHaveBeenCalledWith(C.FilterChangeIndication, 0);
     });
   });
 });

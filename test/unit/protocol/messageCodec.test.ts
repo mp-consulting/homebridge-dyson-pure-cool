@@ -1,118 +1,17 @@
 /**
  * MessageCodec Unit Tests
  */
-
-
-
 import { MessageCodec } from '../../../src/protocol/messageCodec.js';
 import type { DysonMessage } from '../../../src/protocol/messageCodec.js';
+import type { DeviceState } from '../../../src/devices/types.js';
+
+/** Mirrors how the device layer extracts the raw state from a message */
+function rawStateOf(message: DysonMessage) {
+  return MessageCodec.parseRawState(message['product-state'] ?? message.data ?? {});
+}
 
 describe('MessageCodec', () => {
-  describe('encodeCommand', () => {
-    it('should encode fan power command', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ fanPower: true }));
-
-      expect(result.msg).toBe('STATE-SET');
-      expect(result['mode-reason']).toBe('LAPP');
-      expect(result.data.fpwr).toBe('ON');
-      expect(result.time).toBeDefined();
-    });
-
-    it('should encode fan power off', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ fanPower: false }));
-      expect(result.data.fpwr).toBe('OFF');
-    });
-
-    it('should encode fan speed', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ fanSpeed: 5 }));
-      expect(result.data.fnsp).toBe('0005');
-    });
-
-    it('should encode fan speed 10', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ fanSpeed: 10 }));
-      expect(result.data.fnsp).toBe('0010');
-    });
-
-    it('should encode auto fan speed', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ fanSpeed: -1 }));
-      expect(result.data.fnsp).toBe('AUTO');
-    });
-
-    it('should encode fan mode', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ fanMode: 'AUTO' }));
-      expect(result.data.fmod).toBe('AUTO');
-    });
-
-    it('should encode oscillation on', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ oscillation: true }));
-      expect(result.data.oson).toBe('ON');
-    });
-
-    it('should encode oscillation off', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ oscillation: false }));
-      expect(result.data.oson).toBe('OFF');
-    });
-
-    it('should encode oscillation angles', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({
-        oscillationAngleStart: 45,
-        oscillationAngleEnd: 180,
-      }));
-      expect(result.data.oscs).toBe('0045');
-      expect(result.data.osce).toBe('0180');
-    });
-
-    it('should encode night mode', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ nightMode: true }));
-      expect(result.data.nmod).toBe('ON');
-    });
-
-    it('should encode continuous monitoring', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ continuousMonitoring: true }));
-      expect(result.data.rhtm).toBe('ON');
-    });
-
-    it('should encode front airflow', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ frontAirflow: true }));
-      expect(result.data.ffoc).toBe('ON');
-    });
-
-    it('should encode heating mode', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ heatingMode: true }));
-      expect(result.data.hmod).toBe('HEAT');
-    });
-
-    it('should encode target temperature', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ targetTemperature: 22 }));
-      // 22°C = 295.15K * 10 = 2952 (rounded)
-      expect(result.data.hmax).toBe('2952');
-    });
-
-    it('should encode humidifier mode', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ humidifierMode: true }));
-      expect(result.data.hume).toBe('ON');
-    });
-
-    it('should encode target humidity', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ targetHumidity: 50 }));
-      expect(result.data.humt).toBe('0050');
-    });
-
-    it('should encode multiple commands at once', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({
-        fanPower: true,
-        fanSpeed: 7,
-        oscillation: true,
-        nightMode: false,
-      }));
-      expect(result.data.fpwr).toBe('ON');
-      expect(result.data.fnsp).toBe('0007');
-      expect(result.data.oson).toBe('ON');
-      expect(result.data.nmod).toBe('OFF');
-    });
-  });
-
-  describe('decodeState', () => {
+  describe('parseRawState', () => {
     it('should decode CURRENT-STATE message from Buffer', () => {
       const message: DysonMessage = {
         msg: 'CURRENT-STATE',
@@ -125,7 +24,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(Buffer.from(JSON.stringify(message)));
+      const state = rawStateOf(message);
 
       expect(state.isOn).toBe(true);
       expect(state.fanSpeed).toBe(5);
@@ -143,7 +42,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.isOn).toBe(true); // fmod: 'AUTO' sets isOn: true
       expect(state.fanSpeed).toBe(-1);
@@ -159,7 +58,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.isOn).toBe(true);
       expect(state.fanSpeed).toBe(3);
@@ -174,7 +73,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.oscillationAngleStart).toBe(45);
       expect(state.oscillationAngleEnd).toBe(270);
@@ -190,7 +89,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.oscillation).toBe(true);
       expect(state.oscillationAngleStart).toBeUndefined();
@@ -205,7 +104,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.temperature).toBe(2950);
     });
@@ -218,7 +117,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.temperature).toBeUndefined();
     });
@@ -231,7 +130,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.humidity).toBe(45);
     });
@@ -247,7 +146,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.pm25).toBe(12);
       expect(state.pm10).toBe(8);
@@ -264,13 +163,15 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
-      expect(state.hepaFilterLife).toBe(2500);
-      expect(state.carbonFilterLife).toBe(3440); // 80% of 4300
+      // filf is hours remaining: round(2500 / 4300 * 100) = 58%
+      expect(state.hepaFilterLife).toBe(58);
+      // cflr is already a percentage
+      expect(state.carbonFilterLife).toBe(80);
     });
 
-    it('should decode filter percentage to hours', () => {
+    it('should keep fltf filter percentage as a percentage', () => {
       const message: DysonMessage = {
         msg: 'CURRENT-STATE',
         'product-state': {
@@ -278,9 +179,33 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
-      expect(state.hepaFilterLife).toBe(2150); // 50% of 4300
+      expect(state.hepaFilterLife).toBe(50);
+    });
+
+    it('should convert filf hours to a rounded percentage', () => {
+      expect(MessageCodec.parseRawState({ filf: '4300' }).hepaFilterLife).toBe(100);
+      expect(MessageCodec.parseRawState({ filf: '0' }).hepaFilterLife).toBe(0);
+      // 1000 / 4300 * 100 = 23.26 -> 23
+      expect(MessageCodec.parseRawState({ filf: '1000' }).hepaFilterLife).toBe(23);
+      // 2172 / 4300 * 100 = 50.51 -> 51
+      expect(MessageCodec.parseRawState({ filf: '2172' }).hepaFilterLife).toBe(51);
+    });
+
+    it('should clamp filf hours beyond the rated life to 100%', () => {
+      expect(MessageCodec.parseRawState({ filf: '9999' }).hepaFilterLife).toBe(100);
+      expect(MessageCodec.parseRawState({ filf: '-5' }).hepaFilterLife).toBe(0);
+    });
+
+    it('should clamp fltf and cflr percentages to 0-100', () => {
+      const high = MessageCodec.parseRawState({ fltf: '0150', cflr: '0101' });
+      expect(high.hepaFilterLife).toBe(100);
+      expect(high.carbonFilterLife).toBe(100);
+
+      const low = MessageCodec.parseRawState({ fltf: '-1', cflr: '-20' });
+      expect(low.hepaFilterLife).toBe(0);
+      expect(low.carbonFilterLife).toBe(0);
     });
 
     it('should ignore invalid filter telemetry instead of producing NaN', () => {
@@ -293,7 +218,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.hepaFilterLife).toBeUndefined();
       expect(state.carbonFilterLife).toBeUndefined();
@@ -310,7 +235,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.heatingEnabled).toBe(true);
       expect(state.targetTemperature).toBe(2950);
@@ -325,7 +250,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.heatingEnabled).toBe(true);
       expect(state.targetTemperature).toBeUndefined();
@@ -340,10 +265,29 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.humidifierEnabled).toBe(true);
+      expect(state.humidifierAuto).toBe(true);
       expect(state.targetHumidity).toBe(55);
+    });
+
+    it('should set humidifierAuto false for manual humidifier ON', () => {
+      const state = MessageCodec.parseRawState({ hume: 'ON' });
+      expect(state.humidifierEnabled).toBe(true);
+      expect(state.humidifierAuto).toBe(false);
+    });
+
+    it('should set humidifierEnabled and humidifierAuto false when humidifier OFF', () => {
+      const state = MessageCodec.parseRawState({ hume: 'OFF' });
+      expect(state.humidifierEnabled).toBe(false);
+      expect(state.humidifierAuto).toBe(false);
+    });
+
+    it('should not set humidifierAuto when hume is absent', () => {
+      const state = MessageCodec.parseRawState({ humt: '0050' });
+      expect(state.humidifierAuto).toBeUndefined();
+      expect(state.humidifierEnabled).toBeUndefined();
     });
 
     it('should ignore invalid target humidity', () => {
@@ -355,7 +299,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.humidifierEnabled).toBe(true);
       expect(state.targetHumidity).toBeUndefined();
@@ -369,7 +313,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.autoMode).toBe(true);
     });
@@ -382,7 +326,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.isOn).toBe(false);
     });
@@ -395,21 +339,16 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
 
       expect(state.frontAirflow).toBe(true);
-    });
-
-    it('should return empty object for invalid buffer', () => {
-      const state = MessageCodec.decodeState(Buffer.from('not valid json'));
-      expect(state).toEqual({});
     });
 
     it('should return empty object for message without state data', () => {
       const message: DysonMessage = {
         msg: 'UNKNOWN',
       };
-      const state = MessageCodec.decodeState(message);
+      const state = rawStateOf(message);
       expect(state).toEqual({});
     });
 
@@ -424,7 +363,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message as DysonMessage);
+      const state = rawStateOf(message as DysonMessage);
 
       expect(state.isOn).toBe(true);
       expect(state.fanSpeed).toBe(7);
@@ -442,7 +381,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message as DysonMessage);
+      const state = rawStateOf(message as DysonMessage);
 
       expect(state.autoMode).toBe(true);
       expect(state.nightMode).toBe(true);
@@ -459,7 +398,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message as DysonMessage);
+      const state = rawStateOf(message as DysonMessage);
 
       expect(state.temperature).toBe(2950);
       expect(state.humidity).toBe(55);
@@ -476,7 +415,7 @@ describe('MessageCodec', () => {
         },
       };
 
-      const state = MessageCodec.decodeState(message as DysonMessage);
+      const state = rawStateOf(message as DysonMessage);
 
       expect(state.heatingEnabled).toBe(true);
       expect(state.targetTemperature).toBe(2950);
@@ -577,22 +516,6 @@ describe('MessageCodec', () => {
     });
   });
 
-  describe('encodeAngle', () => {
-    it('should encode angle with padding', () => {
-      expect(MessageCodec.encodeAngle(45)).toBe('0045');
-      expect(MessageCodec.encodeAngle(180)).toBe('0180');
-      expect(MessageCodec.encodeAngle(355)).toBe('0355');
-    });
-
-    it('should clamp angle below 45', () => {
-      expect(MessageCodec.encodeAngle(30)).toBe('0045');
-    });
-
-    it('should clamp angle above 355', () => {
-      expect(MessageCodec.encodeAngle(400)).toBe('0355');
-    });
-  });
-
   describe('temperature conversion', () => {
     it('should encode 20°C correctly', () => {
       // 20°C = 293.15K * 10 = 2932 (rounded)
@@ -614,19 +537,53 @@ describe('MessageCodec', () => {
     });
   });
 
-  describe('encodeRequestState', () => {
-    it('should create valid request message', () => {
-      const result = JSON.parse(MessageCodec.encodeRequestState());
+  describe('parseEnvironmentalData', () => {
+    it('should parse advanced sensor readings', () => {
+      const state: Partial<DeviceState> = {};
+      MessageCodec.parseEnvironmentalData({ tact: '2950', hact: '0045', p25r: '0012', p10r: '0020', va10: '0030', noxl: '0010' }, state);
+      expect(state).toMatchObject({ temperature: 2950, humidity: 45, pm25: 12, pm10: 20, vocIndex: 30, no2Index: 10 });
+    });
 
-      expect(result.msg).toBe('REQUEST-CURRENT-STATE');
-      expect(result.time).toBeDefined();
+    it('should use the basic pact/vact indices when no p25r/va10 is present', () => {
+      const state: Partial<DeviceState> = {};
+      MessageCodec.parseEnvironmentalData({ pact: '0004', vact: '0008' }, state);
+      expect(state).toMatchObject({ pm25: 4, vocIndex: 8 });
+    });
+
+    it('should not let pact/vact overwrite p25r/va10 from the same message', () => {
+      const state: Partial<DeviceState> = {};
+      MessageCodec.parseEnvironmentalData({ p25r: '0035', pact: '0003', va10: '0050', vact: '0002' }, state);
+      expect(state.pm25).toBe(35);
+      expect(state.vocIndex).toBe(50);
+    });
+
+    it('should skip INIT and OFF readings', () => {
+      const state: Partial<DeviceState> = {};
+      MessageCodec.parseEnvironmentalData({ tact: 'OFF', p25r: 'INIT', va10: 'OFF' }, state);
+      expect(state).toEqual({});
     });
   });
 
-  describe('static methods', () => {
-    it('should work correctly as static calls', () => {
-      const result = JSON.parse(MessageCodec.encodeCommand({ fanPower: true }));
-      expect(result.data.fpwr).toBe('ON');
+  describe('decodeCelsius', () => {
+    it('should convert Kelvin x 10 to Celsius rounded to 0.1', () => {
+      // 2950 / 10 - 273.15 = 21.85 -> 21.9 (floating point: 21.850000000000023)
+      expect(MessageCodec.decodeCelsius(2950)).toBe(21.9);
+      expect(MessageCodec.decodeCelsius(2932)).toBe(20.1);
+      expect(MessageCodec.decodeCelsius(2730)).toBe(-0.1);
+    });
+
+    it('should return undefined for undefined', () => {
+      expect(MessageCodec.decodeCelsius(undefined)).toBeUndefined();
+    });
+
+    it('should return undefined for NaN and non-finite values', () => {
+      expect(MessageCodec.decodeCelsius(NaN)).toBeUndefined();
+      expect(MessageCodec.decodeCelsius(Infinity)).toBeUndefined();
+    });
+
+    it('should return undefined for zero or negative readings', () => {
+      expect(MessageCodec.decodeCelsius(0)).toBeUndefined();
+      expect(MessageCodec.decodeCelsius(-10)).toBeUndefined();
     });
   });
 });

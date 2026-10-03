@@ -5,83 +5,29 @@
 import { vi, type Mocked } from 'vitest';
 
 import { DysonLinkAccessory } from '../../../src/accessories/dysonLinkAccessory.js';
+import { BaseService } from '../../../src/accessories/services/baseService.js';
 import { DysonLinkDevice } from '../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../src/devices/index.js';
-import type { DysonMqttClient } from '../../../src/protocol/mqttClient.js';
-import type { API, Logging, PlatformAccessory, Service, Characteristic } from 'homebridge';
+import type { API, Logging, PlatformAccessory, Service } from 'homebridge';
+import { createMockHapApi, createMockLog, createMockMqttClient, createMockService } from '../../helpers/mocks.js';
 
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
+function createCharacteristicProxy(): Record<string, { UUID: string }> {
+  const cache = new Map<string, { UUID: string }>();
+  return new Proxy({}, {
+    get: (_target, prop) => {
+      const name = String(prop);
+      if (!cache.has(name)) {
+        cache.set(name, { UUID: `${name}-uuid` });
       }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
+      return cache.get(name);
     },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
-
-// Create mock characteristic
-function createMockCharacteristic() {
-  const characteristic = {
-    onGet: vi.fn().mockReturnThis(),
-    onSet: vi.fn().mockReturnThis(),
-    setProps: vi.fn().mockReturnThis(),
-    updateValue: vi.fn().mockReturnThis(),
-    value: 0,
-  };
-  return characteristic as unknown as Mocked<Characteristic>;
-}
-
-// Create mock service
-function createMockService() {
-  const characteristics = new Map<string, ReturnType<typeof createMockCharacteristic>>();
-
-  const service = {
-    setCharacteristic: vi.fn().mockReturnThis(),
-    getCharacteristic: vi.fn((char: unknown) => {
-      const key = String(char);
-      if (!characteristics.has(key)) {
-        characteristics.set(key, createMockCharacteristic());
-      }
-      return characteristics.get(key)!;
-    }),
-    updateCharacteristic: vi.fn().mockReturnThis(),
-    addOptionalCharacteristic: vi.fn().mockReturnThis(),
-    addLinkedService: vi.fn().mockReturnThis(),
-    _getCharacteristics: () => characteristics,
-  };
-
-  return service as unknown as Mocked<Service> & {
-    _getCharacteristics: () => Map<string, ReturnType<typeof createMockCharacteristic>>;
-  };
+  });
 }
 
 // Create mock API
 function createMockApi() {
-  const mockFanService = createMockService();
-  const mockInfoService = createMockService();
-  const mockTempService = createMockService();
-  const mockHumidityService = createMockService();
-
-  return {
-    hap: {
+  return createMockHapApi(
+    {
       Service: {
         Fanv2: 'Fanv2',
         AccessoryInformation: 'AccessoryInformation',
@@ -94,50 +40,16 @@ function createMockApi() {
         HumidifierDehumidifier: 'HumidifierDehumidifier',
         HeaterCooler: 'HeaterCooler',
       },
-      Characteristic: {
-        Name: 'Name',
-        Active: 'Active',
-        RotationSpeed: 'RotationSpeed',
-        SwingMode: 'SwingMode',
-        Manufacturer: 'Manufacturer',
-        Model: 'Model',
-        SerialNumber: 'SerialNumber',
-        FirmwareRevision: 'FirmwareRevision',
-        CurrentTemperature: 'CurrentTemperature',
-        CurrentRelativeHumidity: 'CurrentRelativeHumidity',
-        On: 'On',
-        AirQuality: 'AirQuality',
-        PM2_5Density: 'PM2_5Density',
-        PM10Density: 'PM10Density',
-        VOCDensity: 'VOCDensity',
-        NitrogenDioxideDensity: 'NitrogenDioxideDensity',
-        FilterLifeLevel: 'FilterLifeLevel',
-        FilterChangeIndication: 'FilterChangeIndication',
-        CurrentHeatingCoolingState: 'CurrentHeatingCoolingState',
-        TargetHeatingCoolingState: 'TargetHeatingCoolingState',
-        TargetTemperature: 'TargetTemperature',
-        TemperatureDisplayUnits: 'TemperatureDisplayUnits',
-        CurrentHumidifierDehumidifierState: 'CurrentHumidifierDehumidifierState',
-        TargetHumidifierDehumidifierState: 'TargetHumidifierDehumidifierState',
-        RelativeHumidityHumidifierThreshold: 'RelativeHumidityHumidifierThreshold',
-        WaterLevel: 'WaterLevel',
-        TargetFanState: 'TargetFanState',
-        CurrentFanState: 'CurrentFanState',
-        CurrentHeaterCoolerState: 'CurrentHeaterCoolerState',
-        TargetHeaterCoolerState: 'TargetHeaterCoolerState',
-        HeatingThresholdTemperature: 'HeatingThresholdTemperature',
-      },
+      // Any characteristic name resolves to a stable { UUID } object
+      Characteristic: createCharacteristicProxy(),
     },
-    _mockFanService: mockFanService,
-    _mockInfoService: mockInfoService,
-    _mockTempService: mockTempService,
-    _mockHumidityService: mockHumidityService,
-  } as unknown as Mocked<API> & {
-    _mockFanService: ReturnType<typeof createMockService>;
-    _mockInfoService: ReturnType<typeof createMockService>;
-    _mockTempService: ReturnType<typeof createMockService>;
-    _mockHumidityService: ReturnType<typeof createMockService>;
-  };
+    {
+      _mockFanService: createMockService(0),
+      _mockInfoService: createMockService(0),
+      _mockTempService: createMockService(0),
+      _mockHumidityService: createMockService(0),
+    },
+  );
 }
 
 // Create mock accessory
@@ -173,20 +85,10 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
       }
       return createMockService();
     }),
+    services: [] as Service[],
+    removeService: vi.fn(),
     context: {},
   } as unknown as Mocked<PlatformAccessory>;
-}
-
-// Create mock logger
-function createMockLog(): Mocked<Logging> {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    log: vi.fn(),
-    success: vi.fn(),
-  } as unknown as Mocked<Logging>;
 }
 
 describe('DysonLinkAccessory', () => {
@@ -243,7 +145,7 @@ describe('DysonLinkAccessory', () => {
       });
 
       expect(mockAccessory.getService).toHaveBeenCalledWith('AccessoryInformation');
-      expect(mockApi._mockInfoService.setCharacteristic).toHaveBeenCalledWith('Manufacturer', 'Dyson');
+      expect(mockApi._mockInfoService.setCharacteristic).toHaveBeenCalledWith(mockApi.hap.Characteristic.Manufacturer, 'Dyson');
     });
 
     it('should log initialization', () => {
@@ -406,6 +308,8 @@ describe('DysonLinkAccessory', () => {
         expect.stringContaining('Device disconnected'),
         expect.any(String),
       );
+      // The extra "HomeKit will show Not Responding" warning was dropped
+      expect(mockLog.warn).not.toHaveBeenCalledWith(expect.stringContaining('Not Responding'));
     });
   });
 
@@ -568,10 +472,7 @@ describe('DysonLinkAccessory', () => {
       expect(accessory.getHeaterCoolerService()).toBeDefined();
     });
 
-    it('should pass options correctly when set before super() call', () => {
-      // This test verifies the fix for the constructor ordering bug.
-      // Previously, options were set AFTER super() which meant setupServices()
-      // would see an empty options object.
+    it('should read options from config.options without writing to accessory.context', () => {
       accessory = new DysonLinkAccessory({
         accessory: mockAccessory,
         device,
@@ -593,6 +494,143 @@ describe('DysonLinkAccessory', () => {
 
       // Fan service should always be present
       expect(accessory.getFanService()).toBeDefined();
+
+      // Options are no longer smuggled through the accessory context
+      expect(mockAccessory.context._deviceOptions).toBeUndefined();
+      expect(Object.keys(mockAccessory.context)).toHaveLength(0);
+    });
+  });
+
+  describe('firmware version', () => {
+    it('should set FirmwareRevision from config.firmwareVersion', () => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        firmwareVersion: '438MPF.00.01.003',
+      });
+
+      expect(mockApi._mockInfoService.setCharacteristic).toHaveBeenCalledWith(mockApi.hap.Characteristic.FirmwareRevision, '438MPF.00.01.003');
+    });
+
+    it('should not set FirmwareRevision when firmwareVersion is unknown', () => {
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      expect(mockApi._mockInfoService.setCharacteristic).not.toHaveBeenCalledWith(mockApi.hap.Characteristic.FirmwareRevision, expect.anything());
+    });
+  });
+
+  describe('removal of disabled cached services', () => {
+    function cachedService(subtype: string | undefined, displayName: string): Service {
+      return { subtype, displayName } as unknown as Service;
+    }
+
+    it('should remove a cached jet-focus service when jet focus is disabled', () => {
+      const cachedJetFocus = cachedService('jet-focus', 'Jet Focus');
+      (mockAccessory as unknown as { services: Service[] }).services = [cachedJetFocus];
+
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { isJetFocusEnabled: false },
+      });
+
+      expect(mockAccessory.removeService).toHaveBeenCalledWith(cachedJetFocus);
+      expect(mockLog.info).toHaveBeenCalledWith('Removing disabled service "Jet Focus" from', 'Test Dyson');
+    });
+
+    it('should remove a cached night-mode service when night mode is disabled', () => {
+      const cachedNightMode = cachedService('night-mode', 'Night Mode');
+      (mockAccessory as unknown as { services: Service[] }).services = [cachedNightMode];
+
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { isNightModeEnabled: false },
+      });
+
+      expect(mockAccessory.removeService).toHaveBeenCalledWith(cachedNightMode);
+    });
+
+    it('should keep a cached optional service that is still active', () => {
+      const cachedJetFocus = Object.assign(createMockService(), { subtype: 'jet-focus', displayName: 'Jet Focus' });
+      (mockAccessory as unknown as { services: Service[] }).services = [cachedJetFocus as unknown as Service];
+      mockAccessory.getServiceById.mockImplementation(((type: unknown, subtype: string) =>
+        type === 'Switch' && subtype === 'jet-focus' ? cachedJetFocus : undefined) as never);
+
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      expect(accessory.getJetFocusService()?.getService()).toBe(cachedJetFocus);
+      expect(mockAccessory.removeService).not.toHaveBeenCalled();
+    });
+
+    it('should leave non-optional and unknown-subtype services alone', () => {
+      const infoService = cachedService(undefined, 'Accessory Information');
+      const unknownSubtype = cachedService('something-else', 'Custom');
+      (mockAccessory as unknown as { services: Service[] }).services = [infoService, unknownSubtype];
+
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: {
+          isJetFocusEnabled: false,
+          isNightModeEnabled: false,
+          isTemperatureIgnored: true,
+          isHumidityIgnored: true,
+        },
+      });
+
+      expect(mockAccessory.removeService).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleConnect state sync', () => {
+    it('should call updateFromState on every service handler', async () => {
+      const hp04Device = new DysonLinkDevice(
+        { ...defaultDeviceInfo, productType: '527' },
+        mockMqttClientFactory,
+      );
+      accessory = new DysonLinkAccessory({
+        accessory: mockAccessory,
+        device: hp04Device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        options: { heatingServiceType: 'both', isContinuousMonitoringEnabled: true },
+      });
+
+      const handlers = (accessory as unknown as { getServiceHandlers(): BaseService[] }).getServiceHandlers();
+      expect(handlers.length).toBeGreaterThan(5);
+
+      await hp04Device.connect();
+      const updateSpy = vi.spyOn(BaseService.prototype, 'updateFromState');
+      try {
+        mockMqttClient._emit('connect');
+
+        const synced = new Set(updateSpy.mock.contexts);
+        for (const handler of handlers) {
+          expect(synced.has(handler)).toBe(true);
+        }
+        expect(updateSpy).toHaveBeenCalledTimes(handlers.length);
+      } finally {
+        updateSpy.mockRestore();
+      }
     });
   });
 });

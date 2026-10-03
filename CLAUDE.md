@@ -12,16 +12,15 @@ This is a Homebridge plugin for Dyson Pure Cool air purifiers and fans. It provi
 
 - `src/` - Main TypeScript source code
   - `accessories/` - HomeKit accessory handlers
-    - `services/` - Individual HomeKit service implementations (FanService, TemperatureService, etc.)
-  - `api/` - Dyson Cloud API client (authentication, device discovery)
+    - `services/` - Individual HomeKit service implementations (FanService, TemperatureService, etc.), all extending `BaseService`
   - `config/` - Device catalog and configuration constants
-  - `devices/` - Device abstraction layer (DysonLinkDevice, DeviceManager)
-  - `discovery/` - mDNS device discovery
+  - `devices/` - Device abstraction layer (DysonDevice, DysonLinkDevice, deviceFactory)
+  - `discovery/` - Dyson Cloud API client and mDNS device discovery
   - `protocol/` - MQTT message encoding/decoding
 - `homebridge-ui/` - Uses Homebridge custom UI framework for plugin configuration management (pairing wizard & config)
   - `public/` - Frontend HTML/JS/CSS
-  - `server.ts` - Backend API for the UI
-- `test/` - Jest test suites
+  - `server.js` - Backend API for the UI
+- `test/` - Vitest test suites
 - `scripts/` - Development and testing scripts
 
 ### Key Components
@@ -59,15 +58,17 @@ npx tsx scripts/test-connection.ts
 # Lint code
 npm run lint
 
-# Type check
+# Type check (src, then tests via tsconfig.test.json)
 npm run typecheck
 ```
 
 ## Testing
 
-- Tests use Jest with ES modules (`--experimental-vm-modules`)
-- Test config is in `test/hbConfig/config.json` (not committed, contains credentials)
-- Mock files are in `test/unit/` directories alongside test files
+- Tests use Vitest (`vitest.config.mts`); `vi.mock()` calls must be at the top level of a file
+- `test/unit/homebridge-ui/server.test.ts` imports the compiled `dist/` modules, so run `npm run build` first
+- Local Homebridge test config lives in `test/hbConfig/` (gitignored, contains credentials); copy `test/hbConfig/config.sample.json` to `config.json` to start
+- `scripts/discover-dyson.ts` lists Dyson devices advertising on the LAN via mDNS
+- Shared Homebridge/HAP mocks are in `test/helpers/`
 
 ## Configuration
 
@@ -91,8 +92,8 @@ Key config options:
 
 ### Adding a New HomeKit Service
 
-1. Create service class in `src/accessories/services/`
-2. Add to `DysonLinkAccessory.setupServices()`
+1. Create a service class extending `BaseService` in `src/accessories/services/`
+2. Add to `DysonLinkAccessory.setupServices()`, `getServiceHandlers()` and, if optional, `OPTIONAL_SERVICE_SUBTYPES`
 3. Add config option to `config.schema.json` and `homebridge-ui/`
 4. Add tests
 

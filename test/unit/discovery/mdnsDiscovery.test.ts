@@ -4,7 +4,7 @@
 
 import { vi } from 'vitest';
 
-import { MdnsDiscovery } from '../../../src/discovery/mdnsDiscovery.js';
+import { MdnsDiscovery, isLocalNetworkAddress } from '../../../src/discovery/mdnsDiscovery.js';
 import type { BonjourFactory } from '../../../src/discovery/mdnsDiscovery.js';
 
 // Create mock Bonjour implementation
@@ -264,6 +264,119 @@ describe('MdnsDiscovery', () => {
 
       expect(devices.size).toBe(1);
       expect(devices.get('ABC-AB-12345678')).toBe('192.168.1.100');
+    });
+  });
+
+  describe('local network filtering', () => {
+    /** Emit one service and return what discover() resolved with */
+    async function discoverWith(service: Record<string, unknown>) {
+      const discoverPromise = discovery.discover({ timeout: 1000 });
+      await Promise.resolve();
+      mockBonjour._emitService({
+        name: 'ABC-AB-12345678',
+        host: 'device.local',
+        port: 1883,
+        ...service,
+      });
+      vi.advanceTimersByTime(1000);
+      return discoverPromise;
+    }
+
+    it('should ignore a service that only advertises a public IPv4 address', async () => {
+      const devices = await discoverWith({ addresses: ['8.8.8.8'] });
+      expect(devices.size).toBe(0);
+    });
+
+    it('should ignore a service that only advertises a public IPv6 address', async () => {
+      const devices = await discoverWith({ addresses: ['2001:4860:4860::8888'] });
+      expect(devices.size).toBe(0);
+    });
+
+    it('should skip public addresses and use the private one', async () => {
+      const devices = await discoverWith({ addresses: ['203.0.113.7', '10.0.0.42'] });
+      expect(devices.get('ABC-AB-12345678')).toBe('10.0.0.42');
+    });
+
+    it('should fall back to a local IPv6 address when no private IPv4 exists', async () => {
+      const devices = await discoverWith({ addresses: ['8.8.8.8', 'fe80::1234'] });
+      expect(devices.get('ABC-AB-12345678')).toBe('fe80::1234');
+    });
+
+    it('should ignore a public referer address', async () => {
+      const devices = await discoverWith({ addresses: [], referer: { address: '1.2.3.4' } });
+      expect(devices.size).toBe(0);
+    });
+
+    it('should ignore public addresses in discoverDetailed', async () => {
+      const discoverPromise = discovery.discoverDetailed({ timeout: 1000 });
+      await Promise.resolve();
+      mockBonjour._emitService({
+        name: 'ABC-AB-12345678',
+        host: 'device.local',
+        port: 1883,
+        addresses: ['8.8.4.4'],
+      });
+      vi.advanceTimersByTime(1000);
+
+      expect(await discoverPromise).toEqual([]);
+    });
+  });
+
+  describe('isLocalNetworkAddress', () => {
+    it.each([
+      '10.0.0.1',
+      '10.255.255.255',
+      '172.16.0.1',
+      '172.31.255.254',
+      '192.168.0.1',
+      '192.168.1.100',
+    ])('should accept private IPv4 %s', (address) => {
+      expect(isLocalNetworkAddress(address)).toBe(true);
+    });
+
+    it.each([
+      '8.8.8.8',
+      '1.1.1.1',
+      '172.15.0.1',
+      '172.32.0.1',
+      '192.167.1.1',
+      '192.169.1.1',
+      '11.0.0.1',
+      '127.0.0.1',
+      '169.254.1.1',
+      '0.0.0.0',
+    ])('should reject non-RFC1918 IPv4 %s', (address) => {
+      expect(isLocalNetworkAddress(address)).toBe(false);
+    });
+
+    it.each([
+      'fe80::1',
+      'FE80::ABCD',
+      'febf::1',
+      'fc00::1',
+      'fd12:3456:789a::1',
+    ])('should accept link-local / unique-local IPv6 %s', (address) => {
+      expect(isLocalNetworkAddress(address)).toBe(true);
+    });
+
+    it.each([
+      '::1',
+      '2001:db8::1',
+      'fec0::1',
+      'fe00::1',
+      'ff02::1',
+    ])('should reject other IPv6 %s', (address) => {
+      expect(isLocalNetworkAddress(address)).toBe(false);
+    });
+
+    it.each([
+      '',
+      'not-an-ip',
+      'device.local',
+      '192.168.1',
+      '192.168.1.256',
+    ])('should reject invalid address %j', (address) => {
+      expect(isLocalNetworkAddress(address)).toBe(false);
     });
   });
 

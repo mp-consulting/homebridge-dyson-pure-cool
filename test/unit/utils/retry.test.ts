@@ -68,6 +68,14 @@ describe('Retry Utilities', () => {
       expect(calculateBackoff(5, 1000, 10000)).toBe(10000);
     });
 
+    it('should take its defaults from RECONNECT_DEFAULTS', () => {
+      expect(calculateBackoff(0)).toBe(RECONNECT_DEFAULTS.baseDelay);
+      expect(calculateBackoff(100)).toBe(RECONNECT_DEFAULTS.maxDelay);
+      expect(calculateBackoff(3)).toBe(
+        calculateBackoff(3, RECONNECT_DEFAULTS.baseDelay, RECONNECT_DEFAULTS.maxDelay),
+      );
+    });
+
     it('should handle edge case where baseDelay exceeds maxDelay', () => {
       expect(calculateBackoff(0, 5000, 1000)).toBe(1000);
     });

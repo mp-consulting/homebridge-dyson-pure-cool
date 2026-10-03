@@ -118,10 +118,14 @@
   // UI Helpers
   // =============================================================================
 
+  // String-based so it is also safe inside attribute values (escapes both quote styles)
+  const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
   function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (text === null || text === undefined) {
+      return '';
+    }
+    return String(text).replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
   }
 
   function setButtonLoading(button, loading) {
@@ -669,6 +673,9 @@
         };
         if (d.ipAddress) {
           deviceConfig.ipAddress = d.ipAddress;
+        }
+        if (d.version) {
+          deviceConfig.firmwareVersion = d.version;
         }
         if (d.isContinuousMonitoringEnabled) {
           deviceConfig.isContinuousMonitoringEnabled = true;

@@ -20,12 +20,6 @@ export const FAN_SPEED = {
   AUTO: -1,
 } as const;
 
-/** Oscillation angle limits */
-export const OSCILLATION_ANGLE = {
-  MIN: 45,
-  MAX: 355,
-} as const;
-
 /** Temperature conversion constants */
 export const TEMPERATURE = {
   /** Kelvin to Celsius offset */
@@ -80,38 +74,6 @@ export const PERCENT = {
   /** Conversion factor for speed (10% per speed level) */
   PER_SPEED_LEVEL: 10,
 } as const;
-
-/**
- * Command data that can be sent to a Dyson device
- */
-export interface CommandData {
-  /** Fan power (ON/OFF) */
-  fanPower?: boolean;
-  /** Fan speed (1-10, or -1 for AUTO) */
-  fanSpeed?: number;
-  /** Fan mode (OFF, FAN, AUTO) */
-  fanMode?: 'OFF' | 'FAN' | 'AUTO';
-  /** Oscillation enabled */
-  oscillation?: boolean;
-  /** Oscillation start angle (45-355) */
-  oscillationAngleStart?: number;
-  /** Oscillation end angle (45-355) */
-  oscillationAngleEnd?: number;
-  /** Night mode enabled */
-  nightMode?: boolean;
-  /** Continuous monitoring enabled */
-  continuousMonitoring?: boolean;
-  /** Jet focus / front airflow enabled */
-  frontAirflow?: boolean;
-  /** Heating mode enabled (HP models) */
-  heatingMode?: boolean;
-  /** Target temperature in Celsius (HP models) */
-  targetTemperature?: number;
-  /** Humidifier enabled (PH models) */
-  humidifierMode?: boolean;
-  /** Target humidity percentage (PH models) */
-  targetHumidity?: number;
-}
 
 /**
  * Raw Dyson protocol state data
@@ -183,103 +145,6 @@ export class MessageCodec {
       return value[1]; // Return the new value
     }
     return value;
-  }
-
-  /**
-   * Encode a command to send to the device
-   *
-   * @param data - Command data to encode
-   * @returns JSON string to publish to command topic
-   */
-  static encodeCommand(data: Partial<CommandData>): string {
-    const encodedData: Record<string, string> = {};
-
-    if (data.fanPower !== undefined) {
-      encodedData.fpwr = data.fanPower ? PROTOCOL.ON : PROTOCOL.OFF;
-    }
-
-    if (data.fanSpeed !== undefined) {
-      encodedData.fnsp = MessageCodec.encodeFanSpeed(data.fanSpeed);
-    }
-
-    if (data.fanMode !== undefined) {
-      encodedData.fmod = data.fanMode;
-    }
-
-    if (data.oscillation !== undefined) {
-      encodedData.oson = data.oscillation ? PROTOCOL.ON : PROTOCOL.OFF;
-    }
-
-    if (data.oscillationAngleStart !== undefined) {
-      encodedData.oscs = MessageCodec.encodeAngle(data.oscillationAngleStart);
-    }
-    if (data.oscillationAngleEnd !== undefined) {
-      encodedData.osce = MessageCodec.encodeAngle(data.oscillationAngleEnd);
-    }
-
-    if (data.nightMode !== undefined) {
-      encodedData.nmod = data.nightMode ? PROTOCOL.ON : PROTOCOL.OFF;
-    }
-
-    if (data.continuousMonitoring !== undefined) {
-      encodedData.rhtm = data.continuousMonitoring ? PROTOCOL.ON : PROTOCOL.OFF;
-    }
-
-    if (data.frontAirflow !== undefined) {
-      encodedData.ffoc = data.frontAirflow ? PROTOCOL.ON : PROTOCOL.OFF;
-    }
-
-    if (data.heatingMode !== undefined) {
-      encodedData.hmod = data.heatingMode ? PROTOCOL.HEAT : PROTOCOL.OFF;
-    }
-
-    if (data.targetTemperature !== undefined) {
-      encodedData.hmax = MessageCodec.encodeTemperature(data.targetTemperature);
-    }
-
-    if (data.humidifierMode !== undefined) {
-      encodedData.hume = data.humidifierMode ? PROTOCOL.ON : PROTOCOL.OFF;
-    }
-
-    if (data.targetHumidity !== undefined) {
-      encodedData.humt = String(data.targetHumidity).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
-    }
-
-    const message: DysonMessage = {
-      msg: 'STATE-SET',
-      time: new Date().toISOString(),
-      'mode-reason': 'LAPP',
-      data: encodedData,
-    };
-
-    return JSON.stringify(message);
-  }
-
-  /**
-   * Decode a state message from the device
-   *
-   * @param payload - Raw message payload (Buffer or object)
-   * @returns Partial device state
-   */
-  static decodeState(payload: Buffer | DysonMessage): Partial<DeviceState> {
-    let message: DysonMessage;
-
-    if (Buffer.isBuffer(payload)) {
-      try {
-        message = JSON.parse(payload.toString('utf8')) as DysonMessage;
-      } catch {
-        return {};
-      }
-    } else {
-      message = payload;
-    }
-
-    const rawState = message['product-state'] || message.data;
-    if (!rawState) {
-      return {};
-    }
-
-    return MessageCodec.parseRawState(rawState);
   }
 
   /**
@@ -418,8 +283,10 @@ export class MessageCodec {
         state.pm10 = value;
       }
     }
+    // pact is the 0-9 index of older Link models; never let it overwrite a
+    // real p25r density from the same message
     const pact = MessageCodec.extractValue(raw.pact);
-    if (pact !== undefined && pact !== 'INIT' && pact !== PROTOCOL.OFF) {
+    if (state.pm25 === undefined && pact !== undefined && pact !== 'INIT' && pact !== PROTOCOL.OFF) {
       const value = parseInt(pact, 10);
       if (!isNaN(value)) {
         state.pm25 = value;
@@ -433,8 +300,9 @@ export class MessageCodec {
         state.vocIndex = value;
       }
     }
+    // vact (basic sensors) only applies when there is no va10 reading
     const vact = MessageCodec.extractValue(raw.vact);
-    if (vact !== undefined && vact !== 'INIT' && vact !== PROTOCOL.OFF) {
+    if (state.vocIndex === undefined && vact !== undefined && vact !== 'INIT' && vact !== PROTOCOL.OFF) {
       const value = parseInt(vact, 10);
       if (!isNaN(value)) {
         state.vocIndex = value;
@@ -475,11 +343,13 @@ export class MessageCodec {
    * Parse filter status from raw state
    */
   private static parseFilterData(raw: RawStateData, state: Partial<DeviceState>): void {
+    // Link models report HEPA life in hours remaining; newer models report
+    // percentages. State always holds a percentage (0-100).
     const filf = MessageCodec.extractValue(raw.filf);
     if (filf !== undefined) {
       const hours = parseInt(filf, 10);
       if (!isNaN(hours)) {
-        state.hepaFilterLife = hours;
+        state.hepaFilterLife = MessageCodec.clampPercent((hours / FILTER.MAX_HOURS) * FILTER.PERCENT_DIVISOR);
       }
     }
 
@@ -487,7 +357,7 @@ export class MessageCodec {
     if (fltf !== undefined) {
       const percent = parseInt(fltf, 10);
       if (!isNaN(percent)) {
-        state.hepaFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
+        state.hepaFilterLife = MessageCodec.clampPercent(percent);
       }
     }
 
@@ -495,9 +365,13 @@ export class MessageCodec {
     if (cflr !== undefined) {
       const percent = parseInt(cflr, 10);
       if (!isNaN(percent)) {
-        state.carbonFilterLife = Math.round((percent / FILTER.PERCENT_DIVISOR) * FILTER.MAX_HOURS);
+        state.carbonFilterLife = MessageCodec.clampPercent(percent);
       }
     }
+  }
+
+  private static clampPercent(value: number): number {
+    return Math.max(PERCENT.MIN, Math.min(PERCENT.MAX, Math.round(value)));
   }
 
   /**
@@ -528,6 +402,7 @@ export class MessageCodec {
     const hume = MessageCodec.extractValue(raw.hume);
     if (hume !== undefined) {
       state.humidifierEnabled = hume === PROTOCOL.ON || hume === PROTOCOL.AUTO;
+      state.humidifierAuto = hume === PROTOCOL.AUTO;
     }
     const humt = MessageCodec.extractValue(raw.humt);
     if (humt !== undefined) {
@@ -613,14 +488,6 @@ export class MessageCodec {
   }
 
   /**
-   * Encode oscillation angle to Dyson format
-   */
-  static encodeAngle(angle: number): string {
-    const clampedAngle = Math.max(OSCILLATION_ANGLE.MIN, Math.min(OSCILLATION_ANGLE.MAX, angle));
-    return String(clampedAngle).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
-  }
-
-  /**
    * Encode temperature from Celsius to Dyson format (Kelvin * 10)
    */
   static encodeTemperature(celsius: number): string {
@@ -639,12 +506,13 @@ export class MessageCodec {
   }
 
   /**
-   * Create a REQUEST-CURRENT-STATE message
+   * Convert a Dyson temperature reading (Kelvin × 10) to Celsius rounded to
+   * 0.1°, or undefined when there is no valid reading.
    */
-  static encodeRequestState(): string {
-    return JSON.stringify({
-      msg: 'REQUEST-CURRENT-STATE',
-      time: new Date().toISOString(),
-    });
+  static decodeCelsius(kelvinTimes10: number | undefined): number | undefined {
+    if (kelvinTimes10 === undefined || !Number.isFinite(kelvinTimes10) || kelvinTimes10 <= 0) {
+      return undefined;
+    }
+    return Math.round(MessageCodec.decodeTemperature(kelvinTimes10) * 10) / 10;
   }
 }

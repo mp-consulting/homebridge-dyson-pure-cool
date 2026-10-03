@@ -14,6 +14,7 @@
 
 import { HomebridgePluginUiServer, RequestError } from '@homebridge/plugin-ui-utils';
 import { createDecipheriv } from 'node:crypto';
+import { isIPv4 } from 'node:net';
 
 import { getProductTypeDisplayNames, getDeviceFeatures, getHeatingDevices } from '../dist/config/index.js';
 import { DysonMqttClient } from '../dist/protocol/mqttClient.js';
@@ -78,7 +79,8 @@ async function dysonRequest(endpoint, options = {}) {
     clearTimeout(timeoutId);
 
     const text = await response.text();
-    console.log(`[DysonUI] Response status: ${response.status} body: ${text?.slice(0, 500)}`);
+    // Never log the body: it carries auth tokens, challenge IDs and device credentials
+    console.log(`[DysonUI] Response status: ${response.status} (${Buffer.byteLength(text ?? '', 'utf8')} bytes)`);
 
     if (!text?.trim()) {
       return null;
@@ -117,6 +119,64 @@ async function dysonRequest(endpoint, options = {}) {
 }
 
 // =============================================================================
+// Input Validation
+// =============================================================================
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_MAX_LENGTH = 254;
+const OTP_PATTERN = /^\d{6}$/;
+const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
+
+export function validateEmail(email) {
+  if (typeof email !== 'string' || email.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(email)) {
+    throw new RequestError('A valid email address is required', { status: 400 });
+  }
+  return email;
+}
+
+export function validatePassword(password) {
+  if (typeof password !== 'string' || password.length === 0) {
+    throw new RequestError('Password is required', { status: 400 });
+  }
+  return password;
+}
+
+export function validateOtpCode(otpCode) {
+  if (typeof otpCode !== 'string' || !OTP_PATTERN.test(otpCode)) {
+    throw new RequestError('Verification code must be 6 digits', { status: 400 });
+  }
+  return otpCode;
+}
+
+export function validateCountryCode(countryCode) {
+  const normalized = typeof countryCode === 'string' ? countryCode.toUpperCase() : countryCode;
+  if (typeof normalized !== 'string' || !COUNTRY_CODE_PATTERN.test(normalized)) {
+    throw new RequestError('Country code must be a 2-letter ISO code', { status: 400 });
+  }
+  return normalized;
+}
+
+/** Optional IP from the browser: empty means "discover via mDNS", anything else must be IPv4 */
+export function validateOptionalIpAddress(ipAddress) {
+  if (ipAddress === undefined || ipAddress === null || ipAddress === '') {
+    return undefined;
+  }
+  if (typeof ipAddress !== 'string' || !isIPv4(ipAddress)) {
+    throw new RequestError('ipAddress must be a valid IPv4 address', { status: 400 });
+  }
+  return ipAddress;
+}
+
+/** True for RFC1918 private IPv4 addresses (10/8, 172.16/12, 192.168/16) */
+export function isPrivateIPv4(ip) {
+  if (typeof ip !== 'string' || !isIPv4(ip)) {
+    return false;
+  }
+  const [a, b] = ip.split('.').map(Number);
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+// =============================================================================
 // Credential Decryption
 // =============================================================================
 
@@ -141,13 +201,23 @@ function decryptCredentials(encryptedCredentials) {
 // Request Handlers
 // =============================================================================
 
-async function handleAuthenticate(ctx, payload) {
-  const { email, password, countryCode = 'US' } = payload;
-
-  if (!email || !password) {
-    throw new RequestError('Email and password are required', { status: 400 });
+/** Drop the held password, challenge and expiry timer */
+function clearPendingAuth(ctx) {
+  ctx.pendingAuth = null;
+  ctx.challengeId = null;
+  if (ctx._pendingAuthTimer) {
+    clearTimeout(ctx._pendingAuthTimer);
+    ctx._pendingAuthTimer = null;
   }
+}
 
+async function handleAuthenticate(ctx, payload) {
+  const email = validateEmail(payload?.email);
+  const password = validatePassword(payload?.password);
+  const countryCode = validateCountryCode(payload?.countryCode ?? 'US');
+
+  // A new attempt invalidates any previous challenge
+  ctx.challengeId = null;
   ctx.pendingAuth = { email, password, countryCode };
 
   // Clear any existing timeout and set a new one to avoid holding credentials in memory
@@ -200,26 +270,20 @@ async function handleAuthenticate(ctx, payload) {
 
     if (auth?.token) {
       console.log('[DysonUI] Direct auth (no 2FA)');
-      ctx.pendingAuth = null;
+      clearPendingAuth(ctx);
       return { success: true, requires2FA: false, token: auth.token };
     }
 
     throw new RequestError('Unexpected response from Dyson', { status: 500 });
   } catch (error) {
     console.error('[DysonUI] Auth error:', error.message);
-    if (!(error instanceof RequestError)) {
-      ctx.pendingAuth = null;
-    }
+    clearPendingAuth(ctx);
     throw error;
   }
 }
 
 async function handleVerifyOtp(ctx, payload) {
-  const { otpCode } = payload;
-
-  if (!otpCode) {
-    throw new RequestError('OTP code is required', { status: 400 });
-  }
+  const otpCode = validateOtpCode(payload?.otpCode);
 
   if (!ctx.challengeId || !ctx.pendingAuth) {
     throw new RequestError('No pending authentication', { status: 400 });
@@ -235,27 +299,19 @@ async function handleVerifyOtp(ctx, payload) {
     });
 
     console.log('[DysonUI] Verify success');
-    ctx.pendingAuth = null;
-    ctx.challengeId = null;
-    if (ctx._pendingAuthTimer) {
-      clearTimeout(ctx._pendingAuthTimer);
-      ctx._pendingAuthTimer = null;
-    }
+    clearPendingAuth(ctx);
 
     return { success: true, token: response.token };
   } catch (error) {
     console.error('[DysonUI] Verify error:', error.message);
 
+    // Keep the pending challenge so the user can retry a mistyped code; the
+    // expiry timer set in handleAuthenticate still bounds how long it is held
     if (error.message?.includes('Invalid')) {
       throw new RequestError('Invalid verification code', { status: 401 });
     }
 
-    ctx.pendingAuth = null;
-    ctx.challengeId = null;
-    if (ctx._pendingAuthTimer) {
-      clearTimeout(ctx._pendingAuthTimer);
-      ctx._pendingAuthTimer = null;
-    }
+    clearPendingAuth(ctx);
     throw error;
   }
 }
@@ -346,9 +402,10 @@ const MDNS_TIMEOUT = 5000;
  * @param {object} ctx - Server context with access to config
  * @param {string} serial - Device serial number
  * @param {string} [configIp] - IP address from config (if available)
+ * @param {string} [previousIp] - Cached/configured IP, used to warn when mDNS reports a different one
  * @returns {Promise<{ip: string, discovered: boolean}>} IP and whether it was discovered
  */
-async function getDeviceIp(_ctx, serial, configIp) {
+async function getDeviceIp(_ctx, serial, configIp, previousIp) {
   // Try config IP first if provided
   if (configIp) {
     console.log(`[DysonUI] Using cached IP for ${serial}`);
@@ -365,6 +422,15 @@ async function getDeviceIp(_ctx, serial, configIp) {
 
     const ip = devices.get(serial);
     if (ip) {
+      // mDNS answers are unauthenticated: never point MQTT (and the device
+      // credentials) at anything outside the private LAN ranges
+      if (!isPrivateIPv4(ip)) {
+        console.warn(`[DysonUI] Ignoring mDNS address for ${serial}: not a private IPv4 address`);
+        return { ip: null, discovered: false };
+      }
+      if (previousIp && ip !== previousIp) {
+        console.warn(`[DysonUI] mDNS-discovered IP for ${serial} differs from the cached/configured IP`);
+      }
       return { ip, discovered: true };
     }
 
@@ -380,7 +446,8 @@ async function getDeviceIp(_ctx, serial, configIp) {
  * Get device state via MQTT
  */
 async function handleGetDeviceState(ctx, payload) {
-  const { serial, productType, localCredentials, ipAddress } = payload;
+  const { serial, productType, localCredentials } = payload;
+  const ipAddress = validateOptionalIpAddress(payload.ipAddress);
 
   if (!serial || !productType || !localCredentials) {
     throw new RequestError('Missing device info (serial, productType, localCredentials)', { status: 400 });
@@ -436,7 +503,9 @@ async function handleGetDeviceState(ctx, payload) {
     return {
       success: true,
       continuousMonitoring,
-      discoveredIp: discovered ? ip : undefined,
+      // A retry after mDNS rediscovery passes the new IP in as if cached;
+      // still report it so the wizard saves it
+      discoveredIp: discovered || payload._retried ? ip : undefined,
     };
   } catch (error) {
     console.error('[DysonUI] MQTT error:', error.message);
@@ -449,7 +518,7 @@ async function handleGetDeviceState(ctx, payload) {
     // If connection failed with cached IP, try mDNS discovery (but only once)
     if (ipAddress && !discovered && !payload._retried) {
       console.log('[DysonUI] Cached IP failed, trying mDNS discovery...');
-      const freshResult = await getDeviceIp(ctx, serial, null);
+      const freshResult = await getDeviceIp(ctx, serial, null, ipAddress);
       if (freshResult.ip && freshResult.ip !== ipAddress) {
         // Retry with freshly discovered IP
         return handleGetDeviceState(ctx, { ...payload, ipAddress: freshResult.ip, _retried: true });
@@ -464,7 +533,8 @@ async function handleGetDeviceState(ctx, payload) {
  * Set continuous monitoring via MQTT
  */
 async function handleSetContinuousMonitoring(ctx, payload) {
-  const { serial, productType, localCredentials, enabled, ipAddress } = payload;
+  const { serial, productType, localCredentials, enabled } = payload;
+  const ipAddress = validateOptionalIpAddress(payload.ipAddress);
 
   if (!serial || !productType || !localCredentials) {
     throw new RequestError('Missing device info (serial, productType, localCredentials)', { status: 400 });
@@ -513,7 +583,9 @@ async function handleSetContinuousMonitoring(ctx, payload) {
     return {
       success: true,
       continuousMonitoring: enabled,
-      discoveredIp: discovered ? ip : undefined,
+      // A retry after mDNS rediscovery passes the new IP in as if cached;
+      // still report it so the wizard saves it
+      discoveredIp: discovered || payload._retried ? ip : undefined,
     };
   } catch (error) {
     console.error('[DysonUI] MQTT error:', error.message);
@@ -526,7 +598,7 @@ async function handleSetContinuousMonitoring(ctx, payload) {
     // If connection failed with cached IP, try mDNS discovery (but only once)
     if (ipAddress && !discovered && !payload._retried) {
       console.log('[DysonUI] Cached IP failed, trying mDNS discovery...');
-      const freshResult = await getDeviceIp(ctx, serial, null);
+      const freshResult = await getDeviceIp(ctx, serial, null, ipAddress);
       if (freshResult.ip && freshResult.ip !== ipAddress) {
         // Retry with freshly discovered IP
         return handleSetContinuousMonitoring(ctx, { ...payload, ipAddress: freshResult.ip, _retried: true });

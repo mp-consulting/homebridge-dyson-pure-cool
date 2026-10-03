@@ -16,13 +16,25 @@ export function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Default reconnection settings
+ */
+export const RECONNECT_DEFAULTS = {
+  /** Maximum number of reconnection attempts */
+  maxAttempts: 5,
+  /** Base delay for exponential backoff (1 second) */
+  baseDelay: 1000,
+  /** Maximum delay between attempts (30 seconds) */
+  maxDelay: 30000,
+} as const;
+
+/**
  * Calculate exponential backoff delay
  *
  * Formula: baseDelay * 2^attempt (clamped to maxDelay)
  *
  * @param attempt - Current attempt number (0-based)
- * @param baseDelay - Base delay in milliseconds (default: 1000)
- * @param maxDelay - Maximum delay in milliseconds (default: 30000)
+ * @param baseDelay - Base delay in milliseconds (default: RECONNECT_DEFAULTS.baseDelay)
+ * @param maxDelay - Maximum delay in milliseconds (default: RECONNECT_DEFAULTS.maxDelay)
  * @returns Delay in milliseconds
  *
  * @example
@@ -37,21 +49,9 @@ export function sleep(ms: number): Promise<void> {
  */
 export function calculateBackoff(
   attempt: number,
-  baseDelay = 1000,
-  maxDelay = 30000,
+  baseDelay: number = RECONNECT_DEFAULTS.baseDelay,
+  maxDelay: number = RECONNECT_DEFAULTS.maxDelay,
 ): number {
   const delay = baseDelay * Math.pow(2, attempt);
   return Math.min(delay, maxDelay);
 }
-
-/**
- * Default reconnection settings
- */
-export const RECONNECT_DEFAULTS = {
-  /** Maximum number of reconnection attempts */
-  maxAttempts: 5,
-  /** Base delay for exponential backoff (1 second) */
-  baseDelay: 1000,
-  /** Maximum delay between attempts (30 seconds) */
-  maxDelay: 30000,
-} as const;

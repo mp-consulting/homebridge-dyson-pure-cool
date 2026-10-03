@@ -12,7 +12,7 @@ export default defineConfig({
     testTimeout: 10000,
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.ts'],
+      include: ['src/**/*.ts', 'homebridge-ui/server.js'],
       exclude: ['src/**/*.{test,spec}.ts', 'src/**/__tests__/**'],
     },
   },

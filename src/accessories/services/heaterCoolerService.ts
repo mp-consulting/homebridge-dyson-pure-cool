@@ -5,28 +5,16 @@
  * Supports heating control with target temperature.
  */
 
-import type {
-  API,
-  CharacteristicValue,
-  Logging,
-  PlatformAccessory,
-  Service,
-} from 'homebridge';
+import type { CharacteristicValue } from 'homebridge';
 
 import type { DysonLinkDevice } from '../../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../../devices/types.js';
+import { MessageCodec } from '../../protocol/messageCodec.js';
+import { BaseService } from './baseService.js';
+import type { BaseServiceConfig } from './baseService.js';
 
-/**
- * Temperature conversion constants
- */
-const TEMPERATURE = {
-  /** Kelvin to Celsius offset */
-  KELVIN_OFFSET: 273.15,
-  /** Dyson reports temperature multiplied by this factor */
-  MULTIPLIER: 10,
-  /** Default temperature when reading fails (°C) */
-  DEFAULT_CELSIUS: 20,
-};
+/** Initial HeatingThresholdTemperature before the device reports one (°C) */
+const DEFAULT_THRESHOLD_CELSIUS = 20;
 
 /**
  * Heating threshold temperature range (°C)
@@ -53,17 +41,25 @@ const CURRENT_TEMP_RANGE = {
  */
 const HEATING_TOLERANCE_CELSIUS = 0.5;
 
+/** HomeKit CurrentHeaterCoolerState values */
+const CURRENT_STATE = {
+  INACTIVE: 0,
+  IDLE: 1,
+  HEATING: 2,
+  COOLING: 3,
+} as const;
+
+/** HomeKit TargetHeaterCoolerState values */
+const TARGET_STATE = {
+  AUTO: 0,
+  HEAT: 1,
+  COOL: 2,
+} as const;
+
 /**
  * Configuration for HeaterCoolerService
  */
-export interface HeaterCoolerServiceConfig {
-  accessory: PlatformAccessory;
-  device: DysonLinkDevice;
-  api: API;
-  log: Logging;
-  /** Primary service to link this service to */
-  primaryService?: Service;
-}
+export type HeaterCoolerServiceConfig = BaseServiceConfig<DysonLinkDevice>;
 
 /**
  * HeaterCoolerService handles the HeaterCooler HomeKit service
@@ -75,42 +71,15 @@ export interface HeaterCoolerServiceConfig {
  * - CurrentTemperature ↔ temperature
  * - HeatingThresholdTemperature ↔ targetTemperature
  */
-export class HeaterCoolerService {
-  private readonly service: Service;
-  private readonly device: DysonLinkDevice;
-  private readonly log: Logging;
-  private readonly api: API;
-  private readonly boundHandleStateChange: (state: DeviceState) => void;
-
-  // HomeKit HeaterCooler state constants
-  private readonly CURRENT_STATE = {
-    INACTIVE: 0,
-    IDLE: 1,
-    HEATING: 2,
-    COOLING: 3,
-  };
-
-  private readonly TARGET_STATE = {
-    AUTO: 0,
-    HEAT: 1,
-    COOL: 2,
-  };
-
+export class HeaterCoolerService extends BaseService<DysonLinkDevice> {
   constructor(config: HeaterCoolerServiceConfig) {
-    this.device = config.device;
-    this.log = config.log;
-    this.api = config.api;
+    super(config, {
+      type: config.api.hap.Service.HeaterCooler,
+      name: 'Heater',
+      subtype: 'heater-cooler',
+    });
 
-    const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
-
-    // Get or create the HeaterCooler service with name
-    this.service = config.accessory.getService('heater-cooler') ||
-      config.accessory.addService(Service.HeaterCooler, 'Heater', 'heater-cooler');
-
-    // Set ConfiguredName for better HomeKit display
-    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
-    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Heater');
 
     // Set up Active characteristic (required)
     this.service.getCharacteristic(Characteristic.Active)
@@ -128,7 +97,7 @@ export class HeaterCoolerService {
       .setProps({
         minValue: 1,
         maxValue: 1,
-        validValues: [this.TARGET_STATE.HEAT],
+        validValues: [TARGET_STATE.HEAT],
       })
       .onGet(this.handleTargetStateGet.bind(this));
 
@@ -145,7 +114,7 @@ export class HeaterCoolerService {
     // HomeKit standard range is 10-38°C to avoid Home app issues
     // Set initial value within range before setting props to avoid warning
     this.service.getCharacteristic(Characteristic.HeatingThresholdTemperature)
-      .updateValue(TEMPERATURE.DEFAULT_CELSIUS)
+      .updateValue(DEFAULT_THRESHOLD_CELSIUS)
       .setProps({
         minValue: HEATING_TEMP_RANGE.MIN,
         maxValue: HEATING_TEMP_RANGE.MAX,
@@ -154,30 +123,7 @@ export class HeaterCoolerService {
       .onGet(this.handleHeatingThresholdGet.bind(this))
       .onSet(this.handleHeatingThresholdSet.bind(this));
 
-    // Link to primary service if provided
-    if (config.primaryService) {
-      config.primaryService.addLinkedService(this.service);
-    }
-
-    // Subscribe to device state changes
-    this.boundHandleStateChange = this.handleStateChange.bind(this);
-    this.device.on('stateChange', this.boundHandleStateChange);
-
     this.log.debug('HeaterCoolerService initialized for', config.accessory.displayName);
-  }
-
-  /**
-   * Get the underlying HomeKit service
-   */
-  getService(): Service {
-    return this.service;
-  }
-
-  /**
-   * Clean up event listeners
-   */
-  destroy(): void {
-    this.device.off('stateChange', this.boundHandleStateChange);
   }
 
   /**
@@ -185,9 +131,8 @@ export class HeaterCoolerService {
    * Returns 1 (ACTIVE) or 0 (INACTIVE)
    */
   private handleActiveGet(): CharacteristicValue {
-    const state = this.device.getState();
-    // Active means fan is on AND heating is enabled
-    const active = state.isOn && state.heatingEnabled ? 1 : 0;
+    this.assertConnected();
+    const active = this.getActive(this.device.getState());
     this.log.debug('Get Heater Active ->', active);
     return active;
   }
@@ -200,23 +145,20 @@ export class HeaterCoolerService {
     const active = value === 1;
     this.log.debug('Set Heater Active ->', active);
 
-    try {
+    await this.runCommand('set heater active', async () => {
       if (active) {
-        // Turn on heating mode
-        await this.device.setHeatingMode(true);
-        // Ensure fan is on
-        const state = this.device.getState();
-        if (!state.isOn) {
-          await this.device.setFanPower(true);
+        // Turn on heating mode and make sure the fan runs. Both are queued in
+        // the same tick so they go out as a single MQTT command.
+        const commands = [this.device.setHeating(true)];
+        if (!this.device.getState().isOn) {
+          commands.push(this.device.setFanPower(true));
         }
+        await Promise.all(commands);
       } else {
         // Turn off heating mode (fan may stay on)
-        await this.device.setHeatingMode(false);
+        await this.device.setHeating(false);
       }
-    } catch (error) {
-      this.log.error('Failed to set heater active:', error);
-      throw error;
-    }
+    });
   }
 
   /**
@@ -224,25 +166,8 @@ export class HeaterCoolerService {
    * Returns current operational state
    */
   private handleCurrentStateGet(): CharacteristicValue {
-    const state = this.device.getState();
-
-    let currentState: number;
-
-    if (!state.isOn || !state.heatingEnabled) {
-      currentState = this.CURRENT_STATE.INACTIVE;
-    } else {
-      // When heating is on, determine if actively heating or idle
-      // Compare current temp to target temp
-      const currentTemp = this.convertTemperature(state.temperature);
-      const targetTemp = this.convertTargetTemperature(state.targetTemperature);
-
-      if (currentTemp < targetTemp - HEATING_TOLERANCE_CELSIUS) {
-        currentState = this.CURRENT_STATE.HEATING;
-      } else {
-        currentState = this.CURRENT_STATE.IDLE;
-      }
-    }
-
+    this.assertConnected();
+    const currentState = this.getCurrentState(this.device.getState());
     this.log.debug('Get CurrentHeaterCoolerState ->', currentState);
     return currentState;
   }
@@ -254,7 +179,7 @@ export class HeaterCoolerService {
    */
   private handleTargetStateGet(): CharacteristicValue {
     this.log.debug('Get TargetHeaterCoolerState -> HEAT');
-    return this.TARGET_STATE.HEAT;
+    return TARGET_STATE.HEAT;
   }
 
   /**
@@ -262,8 +187,11 @@ export class HeaterCoolerService {
    * Returns current room temperature in Celsius
    */
   private handleCurrentTemperatureGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const celsius = this.convertTemperature(state.temperature);
+    this.assertConnected();
+    const celsius = MessageCodec.decodeCelsius(this.device.getState().temperature);
+    if (celsius === undefined) {
+      return this.cachedValue(this.api.hap.Characteristic.CurrentTemperature);
+    }
     this.log.debug('Get CurrentTemperature ->', celsius, '°C');
     return celsius;
   }
@@ -273,8 +201,11 @@ export class HeaterCoolerService {
    * Returns target temperature in Celsius
    */
   private handleHeatingThresholdGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const celsius = this.convertTargetTemperature(state.targetTemperature);
+    this.assertConnected();
+    const celsius = this.convertTargetTemperature(this.device.getState().targetTemperature);
+    if (celsius === undefined) {
+      return this.cachedValue(this.api.hap.Characteristic.HeatingThresholdTemperature);
+    }
     this.log.debug('Get HeatingThreshold ->', celsius, '°C');
     return celsius;
   }
@@ -286,85 +217,59 @@ export class HeaterCoolerService {
   private async handleHeatingThresholdSet(value: CharacteristicValue): Promise<void> {
     const celsius = value as number;
     this.log.debug('Set HeatingThreshold ->', celsius, '°C');
+    await this.runCommand('set target temperature', () => this.device.setTargetTemperature(celsius));
+  }
 
-    try {
-      await this.device.setTargetTemperature(celsius);
-    } catch (error) {
-      this.log.error('Failed to set target temperature:', error);
-      throw error;
-    }
+  private getActive(state: DeviceState): number {
+    // Active means fan is on AND heating is enabled
+    return state.isOn && state.heatingEnabled ? 1 : 0;
   }
 
   /**
-   * Convert Dyson temperature (Kelvin × 10) to Celsius
-   *
-   * @param kelvinTimes10 - Temperature in Kelvin × 10
-   * @returns Temperature in Celsius, or default if invalid
+   * Heating when the room is below target, idle otherwise. Without
+   * temperature readings the heater is assumed to be heating.
    */
-  private convertTemperature(kelvinTimes10: number | undefined): number {
-    if (kelvinTimes10 === undefined || kelvinTimes10 <= 0) {
-      return TEMPERATURE.DEFAULT_CELSIUS;
+  private getCurrentState(state: DeviceState): number {
+    if (!state.isOn || !state.heatingEnabled) {
+      return CURRENT_STATE.INACTIVE;
     }
-    const celsius = (kelvinTimes10 / TEMPERATURE.MULTIPLIER) - TEMPERATURE.KELVIN_OFFSET;
-    return Math.round(celsius * TEMPERATURE.MULTIPLIER) / TEMPERATURE.MULTIPLIER;
+    const currentTemp = MessageCodec.decodeCelsius(state.temperature);
+    const targetTemp = this.convertTargetTemperature(state.targetTemperature);
+    if (currentTemp === undefined || targetTemp === undefined) {
+      return CURRENT_STATE.HEATING;
+    }
+    return currentTemp < targetTemp - HEATING_TOLERANCE_CELSIUS
+      ? CURRENT_STATE.HEATING
+      : CURRENT_STATE.IDLE;
   }
 
   /**
-   * Convert Dyson target temperature (Kelvin × 10) to Celsius
-   *
-   * @param kelvinTimes10 - Target temperature in Kelvin × 10
-   * @returns Temperature in Celsius, or default if invalid
+   * Convert Dyson target temperature (Kelvin × 10) to whole degrees Celsius
+   * within the characteristic range, or undefined if not reported
    */
-  private convertTargetTemperature(kelvinTimes10: number | undefined): number {
-    if (kelvinTimes10 === undefined || kelvinTimes10 <= 0) {
-      return TEMPERATURE.DEFAULT_CELSIUS;
+  private convertTargetTemperature(kelvinTimes10: number | undefined): number | undefined {
+    const celsius = MessageCodec.decodeCelsius(kelvinTimes10);
+    if (celsius === undefined) {
+      return undefined;
     }
-    const celsius = (kelvinTimes10 / TEMPERATURE.MULTIPLIER) - TEMPERATURE.KELVIN_OFFSET;
-    // Round to nearest integer (Dyson uses integer temps)
-    return Math.round(celsius);
+    return Math.max(HEATING_TEMP_RANGE.MIN, Math.min(HEATING_TEMP_RANGE.MAX, Math.round(celsius)));
   }
 
-  /**
-   * Handle device state changes
-   * Updates HomeKit characteristics to reflect current device state
-   */
-  private handleStateChange(state: DeviceState): void {
-    this.log.debug('Heater state changed');
-
+  protected handleStateChange(state: DeviceState): void {
     const Characteristic = this.api.hap.Characteristic;
 
-    // Update Active (on/off is controlled here, not via TargetHeaterCoolerState)
-    const active = state.isOn && state.heatingEnabled ? 1 : 0;
-    this.service.updateCharacteristic(Characteristic.Active, active);
+    // Active (on/off is controlled here, not via TargetHeaterCoolerState)
+    this.update(Characteristic.Active, this.getActive(state));
+    this.update(Characteristic.CurrentHeaterCoolerState, this.getCurrentState(state));
 
-    // Update CurrentHeaterCoolerState
-    let currentState: number;
-    if (!state.isOn || !state.heatingEnabled) {
-      currentState = this.CURRENT_STATE.INACTIVE;
-    } else {
-      const currentTemp = this.convertTemperature(state.temperature);
-      const targetTemp = this.convertTargetTemperature(state.targetTemperature);
-      currentState = currentTemp < targetTemp - HEATING_TOLERANCE_CELSIUS
-        ? this.CURRENT_STATE.HEATING
-        : this.CURRENT_STATE.IDLE;
+    const celsius = MessageCodec.decodeCelsius(state.temperature);
+    if (celsius !== undefined) {
+      this.update(Characteristic.CurrentTemperature, celsius);
     }
-    this.service.updateCharacteristic(Characteristic.CurrentHeaterCoolerState, currentState);
 
-    // Update CurrentTemperature
-    const celsius = this.convertTemperature(state.temperature);
-    this.service.updateCharacteristic(Characteristic.CurrentTemperature, celsius);
-
-    // Update HeatingThresholdTemperature
     const targetCelsius = this.convertTargetTemperature(state.targetTemperature);
-    this.service.updateCharacteristic(Characteristic.HeatingThresholdTemperature, targetCelsius);
-  }
-
-  /**
-   * Update characteristics from current device state
-   * Call this after connecting to sync HomeKit with device
-   */
-  updateFromState(): void {
-    const state = this.device.getState();
-    this.handleStateChange(state);
+    if (targetCelsius !== undefined) {
+      this.update(Characteristic.HeatingThresholdTemperature, targetCelsius);
+    }
   }
 }

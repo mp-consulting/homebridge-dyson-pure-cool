@@ -196,6 +196,10 @@ export abstract class DysonDevice extends EventEmitter {
       return; // Already connected
     }
 
+    // Dispose of any previous client (e.g. a half-initialised one from a
+    // failed attempt) so it cannot keep reconnecting and feeding us messages.
+    await this.disposeMqttClient();
+
     // Create MQTT client
     this.mqttClient = this.mqttClientFactory(
       this.deviceInfo.ipAddress,
@@ -208,14 +212,19 @@ export abstract class DysonDevice extends EventEmitter {
     // Set up event handlers
     this.setupMqttHandlers();
 
-    // Connect to device
-    await this.mqttClient.connect();
+    try {
+      // Connect to device
+      await this.mqttClient.connect();
 
-    // Subscribe to status topic
-    await this.mqttClient.subscribeToStatus();
+      // Subscribe to status topic
+      await this.mqttClient.subscribeToStatus();
 
-    // Request current state
-    await this.mqttClient.requestCurrentState();
+      // Request current state
+      await this.mqttClient.requestCurrentState();
+    } catch (error) {
+      await this.disposeMqttClient();
+      throw error;
+    }
 
     // Start periodic polling for state updates
     this.startPolling();
@@ -236,13 +245,26 @@ export abstract class DysonDevice extends EventEmitter {
     // Stop polling
     this.stopPolling();
 
-    if (this.mqttClient) {
-      await this.mqttClient.disconnect();
-      this.mqttClient = null;
-    }
+    await this.disposeMqttClient();
 
     this.updateState({ connected: false });
     this.emit('disconnect');
+  }
+
+  /**
+   * Detach and disconnect the current MQTT client, if any
+   */
+  private async disposeMqttClient(): Promise<void> {
+    const client = this.mqttClient;
+    if (!client) {
+      return;
+    }
+    this.mqttClient = null;
+    client.removeAllListeners();
+    // Keep a no-op error listener so late errors from the closing socket
+    // don't surface as unhandled 'error' events.
+    client.on('error', () => {});
+    await client.disconnect();
   }
 
   /**
@@ -291,6 +313,14 @@ export abstract class DysonDevice extends EventEmitter {
   }
 
   /**
+   * Change the IP address used for the next connect().
+   * Disconnect first if the device is currently connected.
+   */
+  setIpAddress(ipAddress: string): void {
+    this.deviceInfo.ipAddress = ipAddress;
+  }
+
+  /**
    * Send a command to the device
    *
    * @param data - Command data to send
@@ -317,11 +347,20 @@ export abstract class DysonDevice extends EventEmitter {
   /**
    * Update device state and emit stateChange event
    *
+   * The event is only emitted when at least one field actually changed, so
+   * periodic polls that return identical state don't fan out to every
+   * HomeKit service. Listeners receive a copy of the state.
+   *
    * @param partial - Partial state to merge
    */
   protected updateState(partial: Partial<DeviceState>): void {
+    const changed = (Object.keys(partial) as (keyof DeviceState)[])
+      .some((key) => this.state[key] !== partial[key]);
+    if (!changed) {
+      return;
+    }
     this.state = { ...this.state, ...partial };
-    this.emit('stateChange', this.state);
+    this.emit('stateChange', { ...this.state });
   }
 
   /**
@@ -406,13 +445,9 @@ export abstract class DysonDevice extends EventEmitter {
       this.emit('error', error);
     });
 
-    this.mqttClient.on('offline', () => {
-      this.updateState({ connected: false });
-    });
-
     this.mqttClient.on('reconnectFailed', () => {
       this.updateState({ connected: false });
-      this.emit('error', new Error('Failed to reconnect to device'));
+      this.emit('reconnectFailed');
     });
   }
 }

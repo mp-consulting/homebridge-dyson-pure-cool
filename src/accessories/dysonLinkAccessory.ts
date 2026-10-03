@@ -25,7 +25,24 @@ import { HumidifierControlService } from './services/humidifierControlService.js
 import { JetFocusService } from './services/jetFocusService.js';
 import { HeaterCoolerService } from './services/heaterCoolerService.js';
 import type { DysonLinkDevice } from '../devices/dysonLinkDevice.js';
-import type { DeviceState } from '../devices/types.js';
+import type { BaseService } from './services/baseService.js';
+
+/**
+ * Subtypes of the optional services this accessory manages. A cached service
+ * with one of these subtypes that is no longer enabled gets removed.
+ */
+const OPTIONAL_SERVICE_SUBTYPES = new Set([
+  'temperature-sensor',
+  'humidity-sensor',
+  'night-mode',
+  'continuous-monitoring',
+  'air-quality-sensor',
+  'filter-maintenance',
+  'thermostat',
+  'heater-cooler',
+  'humidifier',
+  'jet-focus',
+]);
 
 /**
  * Configuration options for device features
@@ -95,6 +112,8 @@ export interface DysonLinkAccessoryConfig {
   log: Logging;
   /** Device-specific options */
   options?: DeviceOptions;
+  /** Firmware version reported by the Dyson cloud, if known */
+  firmwareVersion?: string;
 }
 
 /**
@@ -123,7 +142,7 @@ export class DysonLinkAccessory extends DysonAccessory {
   private jetFocusService?: JetFocusService;
   private heaterCoolerService?: HeaterCoolerService;
 
-  private options: DeviceOptions = {};
+  private readonly options: DeviceOptions;
 
   /**
    * Create a new DysonLinkAccessory
@@ -131,20 +150,9 @@ export class DysonLinkAccessory extends DysonAccessory {
    * @param config - Accessory configuration
    */
   constructor(config: DysonLinkAccessoryConfig) {
-    // Store options BEFORE calling super(), because super() calls setupServices()
-    // which needs access to options. Field initializers run before super() in the
-    // JS runtime, so we can use Object.defineProperty to set it before super() runs.
-    // However, the simplest correct approach: store on the accessory context.
-    //
-    // We store options in the accessory context so setupServices() can access them,
-    // since TypeScript prevents assigning to `this` before `super()`.
-    config.accessory.context._deviceOptions = config.options ?? {};
-
-    // Pass to parent - the base class will call setupServices()
     super(config as DysonAccessoryConfig);
-
-    // Also store as instance field for other methods
-    this.options = config.accessory.context._deviceOptions as DeviceOptions;
+    this.options = config.options ?? {};
+    this.setupServices();
   }
 
   /**
@@ -157,7 +165,7 @@ export class DysonLinkAccessory extends DysonAccessory {
     const features = linkDevice.getFeatures();
     // Read options from accessory context (set before super() call) to ensure
     // they're available even though setupServices() is called during construction
-    const opts: DeviceOptions = (this.accessory.context._deviceOptions as DeviceOptions) ?? this.options ?? {};
+    const opts = this.options;
     const deviceName = this.accessory.displayName;
 
     // Modes to switch on automatically whenever the device is activated.
@@ -307,30 +315,43 @@ export class DysonLinkAccessory extends DysonAccessory {
       });
     }
 
+    this.removeDisabledServices();
+
     this.log.debug('DysonLinkAccessory services configured');
   }
 
   /**
-   * Handle device state changes
-   *
-   * Services handle their own state updates via event subscription.
-   *
-   * @param state - New device state
+   * All service handlers currently active on this accessory
    */
-  protected handleStateChange(state: DeviceState): void {
-    super.handleStateChange(state);
-    // Services subscribe to stateChange directly, so no need to forward
+  private getServiceHandlers(): BaseService[] {
+    return [
+      this.fanService,
+      this.temperatureService,
+      this.humidityService,
+      this.nightModeService,
+      this.continuousMonitoringService,
+      this.airQualityService,
+      this.filterService,
+      this.thermostatService,
+      this.humidifierControlService,
+      this.jetFocusService,
+      this.heaterCoolerService,
+    ].filter((handler): handler is NonNullable<typeof handler> => handler !== undefined);
   }
 
   /**
-   * Handle device disconnection
-   *
-   * When device disconnects, HomeKit will show "Not Responding"
-   * automatically when characteristic gets return errors.
+   * Remove cached HomeKit services whose feature was disabled in the config
+   * (or that the device no longer supports), so they don't linger in the
+   * Home app without handlers.
    */
-  protected handleDisconnect(): void {
-    super.handleDisconnect();
-    this.log.warn('DysonLinkAccessory: Device disconnected, HomeKit will show Not Responding');
+  private removeDisabledServices(): void {
+    const active = new Set(this.getServiceHandlers().map((handler) => handler.getService()));
+    for (const service of [...this.accessory.services]) {
+      if (service.subtype && OPTIONAL_SERVICE_SUBTYPES.has(service.subtype) && !active.has(service)) {
+        this.log.info(`Removing disabled service "${service.displayName}" from`, this.accessory.displayName);
+        this.removeService(service);
+      }
+    }
   }
 
   /**
@@ -341,17 +362,9 @@ export class DysonLinkAccessory extends DysonAccessory {
   protected handleConnect(): void {
     super.handleConnect();
     // Sync HomeKit state with device state after reconnection
-    this.fanService.updateFromState();
-    this.temperatureService?.updateFromState();
-    this.humidityService?.updateFromState();
-    this.nightModeService?.updateFromState();
-    this.continuousMonitoringService?.updateFromState();
-    this.airQualityService?.updateFromState();
-    this.filterService?.updateFromState();
-    this.thermostatService?.updateFromState();
-    this.humidifierControlService?.updateFromState();
-    this.jetFocusService?.updateFromState();
-    this.heaterCoolerService?.updateFromState();
+    for (const handler of this.getServiceHandlers()) {
+      handler.updateFromState();
+    }
     this.log.info('DysonLinkAccessory: Device reconnected, state synced');
   }
 
@@ -359,17 +372,9 @@ export class DysonLinkAccessory extends DysonAccessory {
    * Clean up all service event listeners
    */
   override destroy(): void {
-    this.fanService?.destroy();
-    this.temperatureService?.destroy();
-    this.humidityService?.destroy();
-    this.nightModeService?.destroy();
-    this.continuousMonitoringService?.destroy();
-    this.airQualityService?.destroy();
-    this.filterService?.destroy();
-    this.thermostatService?.destroy();
-    this.humidifierControlService?.destroy();
-    this.jetFocusService?.destroy();
-    this.heaterCoolerService?.destroy();
+    for (const handler of this.getServiceHandlers()) {
+      handler.destroy();
+    }
     super.destroy();
   }
 

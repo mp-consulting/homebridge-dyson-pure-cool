@@ -29,6 +29,18 @@ Main HomeKit accessory implementation for all Dyson models:
 
 ## Services
 
+Each service handler extends `BaseService` (`services/baseService.ts`), which:
+- gets or creates the HomeKit service, setting `ConfiguredName` only on creation
+  so names changed in the Home app survive restarts
+- pushes only characteristic values that changed
+- throws a communication failure from GET handlers while the device is
+  disconnected (HomeKit shows "Not Responding")
+- reports failed SET commands to HomeKit as communication failures
+
+On/off switches (night mode, jet focus, continuous monitoring) are thin
+subclasses of `BooleanSwitchService`. Services for options that are turned off
+are removed from cached accessories by `DysonLinkAccessory`.
+
 Each service file implements a specific HomeKit service:
 
 | Service | File | HomeKit Type | Purpose |

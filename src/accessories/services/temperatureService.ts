@@ -5,31 +5,29 @@
  * Converts Dyson temperature format (Kelvin × 10) to Celsius.
  */
 
-import type {
-  API,
-  CharacteristicValue,
-  Logging,
-  PlatformAccessory,
-  Service,
-} from 'homebridge';
+import type { CharacteristicValue } from 'homebridge';
 
 import type { DysonDevice } from '../../devices/dysonDevice.js';
 import type { DeviceState } from '../../devices/types.js';
+import { MessageCodec } from '../../protocol/messageCodec.js';
+import { BaseService } from './baseService.js';
+import type { BaseServiceConfig } from './baseService.js';
+
+/** CurrentTemperature characteristic range (Celsius) */
+const TEMPERATURE_RANGE = {
+  MIN: -40,
+  MAX: 100,
+  STEP: 0.1,
+} as const;
 
 /**
  * Configuration for TemperatureService
  */
-export interface TemperatureServiceConfig {
-  accessory: PlatformAccessory;
-  device: DysonDevice;
-  api: API;
-  log: Logging;
+export interface TemperatureServiceConfig extends BaseServiceConfig<DysonDevice> {
   /** Temperature offset in Celsius (can be positive or negative) */
   temperatureOffset?: number;
   /** Use Fahrenheit for logging (HomeKit always uses Celsius internally) */
   useFahrenheit?: boolean;
-  /** Primary service to link this service to */
-  primaryService?: Service;
 }
 
 /**
@@ -38,81 +36,47 @@ export interface TemperatureServiceConfig {
  * Maps HomeKit characteristics to Dyson device state:
  * - CurrentTemperature (Celsius) ↔ temperature (Kelvin × 10)
  */
-export class TemperatureService {
-  private readonly service: Service;
-  private readonly device: DysonDevice;
-  private readonly log: Logging;
-  private readonly api: API;
+export class TemperatureService extends BaseService<DysonDevice> {
   private readonly temperatureOffset: number;
   private readonly useFahrenheit: boolean;
-  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   constructor(config: TemperatureServiceConfig) {
-    this.device = config.device;
-    this.log = config.log;
-    this.api = config.api;
+    super(config, {
+      type: config.api.hap.Service.TemperatureSensor,
+      name: 'Temperature',
+      subtype: 'temperature-sensor',
+    });
     this.temperatureOffset = config.temperatureOffset ?? 0;
     this.useFahrenheit = config.useFahrenheit ?? false;
 
-    const Service = this.api.hap.Service;
-    const Characteristic = this.api.hap.Characteristic;
-
-    // Get or create the TemperatureSensor service with name
-    this.service = config.accessory.getService('temperature-sensor') ||
-      config.accessory.addService(Service.TemperatureSensor, 'Temperature', 'temperature-sensor');
-
-    // Set ConfiguredName for better HomeKit display
-    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
-    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Temperature');
-
     // Set up CurrentTemperature characteristic (required)
-    this.service.getCharacteristic(Characteristic.CurrentTemperature)
+    this.service.getCharacteristic(this.api.hap.Characteristic.CurrentTemperature)
       .onGet(this.handleTemperatureGet.bind(this))
       .setProps({
-        minValue: -40,
-        maxValue: 100,
-        minStep: 0.1,
+        minValue: TEMPERATURE_RANGE.MIN,
+        maxValue: TEMPERATURE_RANGE.MAX,
+        minStep: TEMPERATURE_RANGE.STEP,
       });
-
-    // Link to primary service if provided
-    if (config.primaryService) {
-      config.primaryService.addLinkedService(this.service);
-    }
-
-    // Subscribe to device state changes
-    this.boundHandleStateChange = this.handleStateChange.bind(this);
-    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('TemperatureService initialized for', config.accessory.displayName);
   }
 
   /**
-   * Get the underlying HomeKit service
-   */
-  getService(): Service {
-    return this.service;
-  }
-
-  /**
-   * Clean up event listeners
-   */
-  destroy(): void {
-    this.device.off('stateChange', this.boundHandleStateChange);
-  }
-
-  /**
-   * Handle CurrentTemperature GET request
-   * Returns temperature in Celsius (HomeKit standard)
+   * Handle CurrentTemperature GET request.
+   * Returns the last value HomeKit has while the sensor has no reading.
    */
   private handleTemperatureGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const celsius = this.convertTemperature(state.temperature);
+    this.assertConnected();
+    const celsius = this.convertTemperature(this.device.getState().temperature);
+    if (celsius === undefined) {
+      return this.cachedValue(this.api.hap.Characteristic.CurrentTemperature);
+    }
     this.logTemperature('Get Temperature ->', celsius);
     return celsius;
   }
 
   /**
-   * Log temperature in configured unit
+   * Log temperature in the user's preferred unit
    */
   private logTemperature(message: string, celsius: number): void {
     if (this.useFahrenheit) {
@@ -124,43 +88,24 @@ export class TemperatureService {
   }
 
   /**
-   * Convert Dyson temperature (Kelvin × 10) to Celsius with offset
-   *
-   * @param kelvinTimes10 - Temperature in Kelvin × 10 (e.g., 2950 = 295K = 21.85°C)
-   * @returns Temperature in Celsius with offset applied, or default if invalid
+   * Convert Dyson temperature (Kelvin × 10) to Celsius with the configured
+   * offset, clamped to the characteristic range. Undefined if no reading.
    */
-  private convertTemperature(kelvinTimes10: number | undefined): number {
-    if (kelvinTimes10 === undefined || kelvinTimes10 <= 0) {
-      // Return a sensible default when sensor data unavailable
-      return 20 + this.temperatureOffset;
+  private convertTemperature(kelvinTimes10: number | undefined): number | undefined {
+    const celsius = MessageCodec.decodeCelsius(kelvinTimes10);
+    if (celsius === undefined) {
+      return undefined;
     }
-
-    // Dyson reports temperature as Kelvin × 10
-    // Formula: (kelvin / 10) - 273.15 = Celsius
-    const celsius = (kelvinTimes10 / 10) - 273.15;
-
-    // Apply offset and round to 1 decimal place
-    return Math.round((celsius + this.temperatureOffset) * 10) / 10;
+    const adjusted = Math.round((celsius + this.temperatureOffset) * 10) / 10;
+    return Math.max(TEMPERATURE_RANGE.MIN, Math.min(TEMPERATURE_RANGE.MAX, adjusted));
   }
 
-  /**
-   * Handle device state changes
-   * Updates HomeKit characteristic to reflect current device state
-   */
-  private handleStateChange(state: DeviceState): void {
+  protected handleStateChange(state: DeviceState): void {
     const celsius = this.convertTemperature(state.temperature);
+    if (celsius === undefined) {
+      return;
+    }
     this.logTemperature('Temperature state changed ->', celsius);
-
-    const Characteristic = this.api.hap.Characteristic;
-    this.service.updateCharacteristic(Characteristic.CurrentTemperature, celsius);
-  }
-
-  /**
-   * Update characteristic from current device state
-   * Call this after connecting to sync HomeKit with device
-   */
-  updateFromState(): void {
-    const state = this.device.getState();
-    this.handleStateChange(state);
+    this.update(this.api.hap.Characteristic.CurrentTemperature, celsius);
   }
 }

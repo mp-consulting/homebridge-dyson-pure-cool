@@ -6,27 +6,18 @@
  * RotationSpeed, and SwingMode characteristics.
  */
 
-import type {
-  API,
-  CharacteristicValue,
-  Logging,
-  PlatformAccessory,
-  Service,
-} from 'homebridge';
+import type { CharacteristicValue } from 'homebridge';
 
 import type { DysonLinkDevice } from '../../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../../devices/types.js';
-import { MessageCodec } from '../../protocol/messageCodec.js';
-
+import { FAN_SPEED, MessageCodec } from '../../protocol/messageCodec.js';
+import { BaseService } from './baseService.js';
+import type { BaseServiceConfig } from './baseService.js';
 
 /**
  * Configuration for FanService
  */
-export interface FanServiceConfig {
-  accessory: PlatformAccessory;
-  device: DysonLinkDevice;
-  api: API;
-  log: Logging;
+export interface FanServiceConfig extends Omit<BaseServiceConfig<DysonLinkDevice>, 'primaryService'> {
   /** Device name to display in HomeKit */
   deviceName: string;
   /**
@@ -68,6 +59,12 @@ const ROTATION_SPEED = {
   STEP: 10,
 } as const;
 
+/** Callbacks of a RotationSpeed SET waiting for the debounced command */
+interface SpeedWaiter {
+  resolve: () => void;
+  reject: (error: unknown) => void;
+}
+
 /**
  * FanService handles the AirPurifier HomeKit service
  *
@@ -75,39 +72,31 @@ const ROTATION_SPEED = {
  * - Active (0/1) ↔ isOn (boolean)
  * - CurrentAirPurifierState (0=INACTIVE, 1=IDLE, 2=PURIFYING) ↔ isOn + fanSpeed
  * - TargetAirPurifierState (0=MANUAL, 1=AUTO) ↔ autoMode (boolean)
- * - RotationSpeed (0-100%) ↔ fanSpeed (1-10)
+ * - RotationSpeed (0-100%) ↔ fanSpeed (1-10); keeps the last manual speed in auto mode
  * - SwingMode (0/1) ↔ oscillation (boolean)
  */
-
-export class FanService {
-  private readonly service: Service;
-  private readonly device: DysonLinkDevice;
-  private readonly log: Logging;
-  private readonly api: API;
-  private readonly boundHandleStateChange: (state: DeviceState) => void;
-
+export class FanService extends BaseService<DysonLinkDevice> {
   /** Timer for debouncing speed changes */
   private speedDebounceTimer?: ReturnType<typeof setTimeout>;
   /** Pending speed value to be set after debounce */
   private pendingSpeed?: number;
+  /** SET requests waiting for the debounced command to complete */
+  private speedWaiters: SpeedWaiter[] = [];
   /** Whether this service has been destroyed */
   private destroyed = false;
+  /** Last manual fan speed (1-10), shown on the slider while in auto mode */
+  private lastManualSpeed: number = FAN_SPEED.DEFAULT;
 
   constructor(config: FanServiceConfig) {
-    this.device = config.device;
-    this.log = config.log;
-    this.api = config.api;
+    super(config, {
+      type: config.api.hap.Service.AirPurifier,
+      name: config.deviceName,
+      subtype: 'air-purifier',
+      // Earlier versions may have created the service under another subtype
+      findExisting: (accessory) => accessory.getService(config.api.hap.Service.AirPurifier),
+    });
 
-    const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
-
-    // Get or create the AirPurifier service with device name
-    this.service = config.accessory.getService(Service.AirPurifier) ||
-      config.accessory.addService(Service.AirPurifier, config.deviceName, 'air-purifier');
-
-    // Set ConfiguredName for better HomeKit display
-    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
-    this.service.updateCharacteristic(Characteristic.ConfiguredName, config.deviceName);
 
     // Set up Active characteristic (required)
     this.service.getCharacteristic(Characteristic.Active)
@@ -145,29 +134,19 @@ export class FanService {
       .onGet(this.handleSwingModeGet.bind(this))
       .onSet(this.handleSwingModeSet.bind(this));
 
-    // Subscribe to device state changes
-    this.boundHandleStateChange = this.handleStateChange.bind(this);
-    this.device.on('stateChange', this.boundHandleStateChange);
-
     this.log.debug('FanService (AirPurifier) initialized for', config.accessory.displayName);
-  }
-
-  /**
-   * Get the underlying HomeKit service
-   */
-  getService(): Service {
-    return this.service;
   }
 
   /**
    * Clean up event listeners and timers
    */
-  destroy(): void {
+  override destroy(): void {
     this.destroyed = true;
-    this.device.off('stateChange', this.boundHandleStateChange);
+    super.destroy();
     if (this.speedDebounceTimer) {
       clearTimeout(this.speedDebounceTimer);
     }
+    this.settleSpeedWaiters();
   }
 
   /**
@@ -175,8 +154,8 @@ export class FanService {
    * Returns 1 (ACTIVE) or 0 (INACTIVE)
    */
   private handleActiveGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const active = state.isOn ? 1 : 0;
+    this.assertConnected();
+    const active = this.device.getState().isOn ? 1 : 0;
     this.log.debug('Get Active ->', active);
     return active;
   }
@@ -188,13 +167,7 @@ export class FanService {
   private async handleActiveSet(value: CharacteristicValue): Promise<void> {
     const isOn = value === 1;
     this.log.debug('Set Active ->', isOn);
-
-    try {
-      await this.device.setFanPower(isOn);
-    } catch (error) {
-      this.log.error('Failed to set fan power:', error);
-      throw error;
-    }
+    await this.runCommand('set fan power', () => this.device.setFanPower(isOn));
   }
 
   /**
@@ -202,18 +175,8 @@ export class FanService {
    * Returns 0 (INACTIVE), 1 (IDLE), or 2 (PURIFYING_AIR)
    */
   private handleCurrentStateGet(): CharacteristicValue {
-    const state = this.device.getState();
-
-    let currentState: number;
-    if (!state.isOn) {
-      currentState = AirPurifierState.INACTIVE;
-    } else if (state.fanSpeed === 0) {
-      currentState = AirPurifierState.IDLE;
-    } else {
-      // Device is on and running (whether manual or auto mode)
-      currentState = AirPurifierState.PURIFYING_AIR;
-    }
-
+    this.assertConnected();
+    const currentState = this.getCurrentState(this.device.getState());
     this.log.debug('Get CurrentAirPurifierState ->', currentState);
     return currentState;
   }
@@ -223,8 +186,8 @@ export class FanService {
    * Returns 1 (AUTO) or 0 (MANUAL)
    */
   private handleTargetStateGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const targetState = state.autoMode ? TargetAirPurifierState.AUTO : TargetAirPurifierState.MANUAL;
+    this.assertConnected();
+    const targetState = this.getTargetState(this.device.getState());
     this.log.debug('Get TargetAirPurifierState ->', targetState);
     return targetState;
   }
@@ -236,13 +199,7 @@ export class FanService {
   private async handleTargetStateSet(value: CharacteristicValue): Promise<void> {
     const autoMode = value === TargetAirPurifierState.AUTO;
     this.log.debug('Set TargetAirPurifierState ->', autoMode ? 'AUTO' : 'MANUAL');
-
-    try {
-      await this.device.setAutoMode(autoMode);
-    } catch (error) {
-      this.log.error('Failed to set auto mode:', error);
-      throw error;
-    }
+    await this.runCommand('set auto mode', () => this.device.setAutoMode(autoMode));
   }
 
   /**
@@ -250,20 +207,20 @@ export class FanService {
    * Returns 0-100 percentage
    */
   private handleSpeedGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const percent = MessageCodec.speedToPercent(state.fanSpeed);
+    this.assertConnected();
+    const percent = this.getSpeedPercent(this.device.getState());
     this.log.debug('Get RotationSpeed ->', percent);
     return percent;
   }
 
   /**
    * Handle RotationSpeed SET request
-   * Uses debouncing to prevent flooding the device when dragging the slider
+   * Uses debouncing to prevent flooding the device when dragging the slider.
+   * Resolves once the debounced command has been sent, so failures reach HomeKit.
    * @param value - 0-100 percentage
    */
-  private handleSpeedSet(value: CharacteristicValue): void {
-    const percent = value as number;
-    this.pendingSpeed = percent;
+  private handleSpeedSet(value: CharacteristicValue): Promise<void> {
+    this.pendingSpeed = value as number;
 
     // Clear any existing debounce timer
     if (this.speedDebounceTimer) {
@@ -272,8 +229,12 @@ export class FanService {
 
     // Set new debounce timer
     this.speedDebounceTimer = setTimeout(() => {
-      this.applyPendingSpeed();
+      void this.applyPendingSpeed();
     }, DEBOUNCE_DELAY_MS);
+
+    return new Promise((resolve, reject) => {
+      this.speedWaiters.push({ resolve, reject });
+    });
   }
 
   /**
@@ -286,6 +247,7 @@ export class FanService {
 
     const percent = this.pendingSpeed;
     if (percent === undefined) {
+      this.settleSpeedWaiters();
       return;
     }
 
@@ -293,22 +255,41 @@ export class FanService {
     this.pendingSpeed = undefined;
 
     try {
-      if (percent === 0) {
-        // 0% means turn off the fan
-        await this.device.setFanPower(false);
-      } else {
-        // Convert percentage to speed (1-10)
-        const speed = MessageCodec.percentToSpeed(percent);
-        await this.device.setFanSpeed(speed);
-
-        // Also ensure fan is on when setting speed
-        const state = this.device.getState();
-        if (!state.isOn) {
-          await this.device.setFanPower(true);
+      await this.runCommand('set fan speed', async () => {
+        if (percent === 0) {
+          // 0% means turn off the fan
+          await this.device.setFanPower(false);
+          return;
         }
-      }
+        // Power on first (which may re-apply auto mode or other activation
+        // defaults), then set the speed in the same tick so the explicit
+        // speed wins in the merged MQTT command.
+        const speed = MessageCodec.percentToSpeed(percent);
+        const commands: Promise<void>[] = [];
+        if (!this.device.getState().isOn) {
+          commands.push(this.device.setFanPower(true));
+        }
+        commands.push(this.device.setFanSpeed(speed));
+        await Promise.all(commands);
+      });
+      this.settleSpeedWaiters();
     } catch (error) {
-      this.log.error('Failed to set fan speed:', error);
+      this.settleSpeedWaiters(error);
+    }
+  }
+
+  /**
+   * Resolve (or reject) every SET request waiting on the debounced command
+   */
+  private settleSpeedWaiters(error?: unknown): void {
+    const waiters = this.speedWaiters;
+    this.speedWaiters = [];
+    for (const waiter of waiters) {
+      if (error === undefined) {
+        waiter.resolve();
+      } else {
+        waiter.reject(error);
+      }
     }
   }
 
@@ -317,8 +298,8 @@ export class FanService {
    * Returns 1 (SWING_ENABLED) or 0 (SWING_DISABLED)
    */
   private handleSwingModeGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const swingMode = state.oscillation ? 1 : 0;
+    this.assertConnected();
+    const swingMode = this.device.getState().oscillation ? 1 : 0;
     this.log.debug('Get SwingMode ->', swingMode);
     return swingMode;
   }
@@ -330,70 +311,45 @@ export class FanService {
   private async handleSwingModeSet(value: CharacteristicValue): Promise<void> {
     const oscillation = value === 1;
     this.log.debug('Set SwingMode ->', oscillation);
-
-    try {
-      await this.device.setOscillation(oscillation);
-    } catch (error) {
-      this.log.error('Failed to set oscillation:', error);
-      throw error;
-    }
+    await this.runCommand('set oscillation', () => this.device.setOscillation(oscillation));
   }
 
-  /**
-   * Handle device state changes
-   * Updates HomeKit characteristics to reflect current device state
-   */
-  private handleStateChange(state: DeviceState): void {
-    this.log.debug('Device state changed, updating characteristics');
-
-    const Characteristic = this.api.hap.Characteristic;
-
-    // Update Active
-    this.service.updateCharacteristic(
-      Characteristic.Active,
-      state.isOn ? 1 : 0,
-    );
-
-    // Update CurrentAirPurifierState
-    let currentState: number;
+  private getCurrentState(state: DeviceState): number {
     if (!state.isOn) {
-      currentState = AirPurifierState.INACTIVE;
-    } else if (state.fanSpeed === 0) {
-      currentState = AirPurifierState.IDLE;
-    } else {
-      currentState = AirPurifierState.PURIFYING_AIR;
+      return AirPurifierState.INACTIVE;
     }
-    this.service.updateCharacteristic(
-      Characteristic.CurrentAirPurifierState,
-      currentState,
-    );
+    if (state.fanSpeed === 0) {
+      return AirPurifierState.IDLE;
+    }
+    // Device is on and running (whether manual or auto mode)
+    return AirPurifierState.PURIFYING_AIR;
+  }
 
-    // Update TargetAirPurifierState
-    this.service.updateCharacteristic(
-      Characteristic.TargetAirPurifierState,
-      state.autoMode ? TargetAirPurifierState.AUTO : TargetAirPurifierState.MANUAL,
-    );
-
-    // Update RotationSpeed
-    const percent = MessageCodec.speedToPercent(state.fanSpeed);
-    this.service.updateCharacteristic(
-      Characteristic.RotationSpeed,
-      percent,
-    );
-
-    // Update SwingMode
-    this.service.updateCharacteristic(
-      Characteristic.SwingMode,
-      state.oscillation ? 1 : 0,
-    );
+  private getTargetState(state: DeviceState): number {
+    return state.autoMode ? TargetAirPurifierState.AUTO : TargetAirPurifierState.MANUAL;
   }
 
   /**
-   * Update characteristics from current device state
-   * Call this after connecting to sync HomeKit with device
+   * RotationSpeed percentage. In auto mode the device reports no numeric
+   * speed, so the last manual speed is shown instead of 0%.
    */
-  updateFromState(): void {
-    const state = this.device.getState();
-    this.handleStateChange(state);
+  private getSpeedPercent(state: DeviceState): number {
+    if (state.fanSpeed > 0) {
+      this.lastManualSpeed = state.fanSpeed;
+      return MessageCodec.speedToPercent(state.fanSpeed);
+    }
+    if (state.fanSpeed === FAN_SPEED.AUTO || state.autoMode) {
+      return MessageCodec.speedToPercent(this.lastManualSpeed);
+    }
+    return MessageCodec.speedToPercent(state.fanSpeed);
+  }
+
+  protected handleStateChange(state: DeviceState): void {
+    const Characteristic = this.api.hap.Characteristic;
+    this.update(Characteristic.Active, state.isOn ? 1 : 0);
+    this.update(Characteristic.CurrentAirPurifierState, this.getCurrentState(state));
+    this.update(Characteristic.TargetAirPurifierState, this.getTargetState(state));
+    this.update(Characteristic.RotationSpeed, this.getSpeedPercent(state));
+    this.update(Characteristic.SwingMode, state.oscillation ? 1 : 0);
   }
 }
