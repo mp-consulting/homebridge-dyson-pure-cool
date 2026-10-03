@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-03
+
+### Security
+
+- **The settings page logged Dyson credentials** ([#18](https://github.com/mp-consulting/homebridge-dyson-pure-cool/pull/18)): the UI server logged the first 500 characters of every Dyson API response, which include the account token and the local MQTT password of each device, and those logs are often pasted into bug reports. It now logs only the status code and size. The email and password held during sign-in are also cleared after any failed attempt instead of lingering for up to 10 minutes, and the email, one-time code, country code and IP sent by the page are validated.
+- **A device name could inject script into the settings page**: the wizard's HTML escaping did not escape quotes, so a name containing `"` could break out of an attribute. Quotes are now escaped.
+- **Device passwords could be sent to a spoofed mDNS answer**: an IP found via mDNS is now only used if it is a local-network address, and a change of IP is logged as a warning.
+- **Credential fields are masked** in the Homebridge settings form.
+
+### Fixed
+
+- **Commands that failed looked successful in HomeKit**: when a command could not be sent (device offline, broken connection), the Home app showed the change as applied and nothing was logged. The error now reaches HomeKit and is logged.
+- **Turning a device off and quickly back on left it off** while the Home app showed it on: the ON command was skipped because the device had not yet reported that it was off.
+- **The accessory never showed "No Response"**: while a device is disconnected, HomeKit now gets a communication error instead of stale values. Missing sensor readings no longer show invented values (20 °C, 50 % humidity, 100 % filter life); the last known value is kept instead.
+- **Names changed in the Home app were reset on every restart**: the plugin now only names a service when it first creates it.
+- **Disabled options left dead tiles in the Home app**: turning off jet focus, night mode, a sensor, the filter or a heating service now removes it from the accessory.
+- **A device could stop updating after a reconnect**, or reconnect after Homebridge had asked it to disconnect. Connections from failed attempts are now closed properly.
+- **When a device changed IP, HomeKit kept controlling the old connection** until restart. The same device is now reconnected at the new address, which is also remembered across restarts.
+- **One invalid entry in `devices` stopped every device from loading**: entries without a serial number are now skipped with an error in the log.
+- **Fan speed showed 0 % in auto mode**; it now shows the last manual speed. Moving the speed slider while the fan is off powers it on and keeps the chosen speed.
+- **Air quality ignored PM10, VOC and NO2** on newer models; the rating now reflects the worst of them. On Pure Cool Link models, the 0–9 particle index is no longer shown as a PM2.5 density.
+- **Filter life ignored the carbon filter** when a HEPA value was present; it now shows whichever is more worn.
+- **Choosing Auto on the humidifier flipped back to Humidifier**, and the heater's target temperature could fall outside the range HomeKit accepts.
+
+### Changed
+
+- **Firmware version**: the accessory now shows the firmware reported by the Dyson cloud instead of `1.0.0`. Run the setup wizard again to fill it in for existing devices.
+- **Fewer HomeKit updates**: values are only pushed when they change, and offline devices share one network scan when looking for a new IP.
+- **Development**: test files are now type-checked (`npm run typecheck`, also run in CI), GitHub Actions are pinned to commit SHAs, and the test suite grew from 607 to 836 tests.
+
 ## [1.2.4] - 2026-09-10
 
 ### Fixed
