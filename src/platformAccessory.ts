@@ -14,7 +14,6 @@ import { DysonLinkAccessory } from './accessories/dysonLinkAccessory.js';
 import type { DeviceOptions } from './accessories/dysonLinkAccessory.js';
 import type { DysonLinkDevice } from './devices/dysonLinkDevice.js';
 import { getDeviceModelName, isProductTypeSupported } from './config/index.js';
-import { MdnsDiscovery, DEFAULT_DISCOVERY_TIMEOUT } from './discovery/index.js';
 
 /**
  * Device configuration from plugin settings
@@ -32,6 +31,8 @@ interface DeviceConfig {
   localCredentials?: string;
   /** Device IP address on local network */
   ipAddress?: string;
+  /** Firmware version reported by the Dyson cloud */
+  firmwareVersion?: string;
 
   // Optional device settings
   /** Temperature offset in Celsius */
@@ -165,6 +166,7 @@ export class DysonPlatformAccessory {
         api: this.platform.api,
         log: this.log,
         options: this.extractDeviceOptions(config),
+        firmwareVersion: config.firmwareVersion,
       });
 
       // Apply polling interval from config if set
@@ -173,8 +175,8 @@ export class DysonPlatformAccessory {
         this.device.setPollingInterval(pollingInterval);
       }
 
-      // Listen for MQTT reconnection exhaustion (device went offline mid-session)
-      this.attachDeviceErrorListener();
+      // Log device errors and catch MQTT reconnection exhaustion
+      this.attachDeviceListeners();
 
       // Connect to the device if IP address is available
       if (config.ipAddress) {
@@ -188,20 +190,21 @@ export class DysonPlatformAccessory {
     }
   }
 
-  /** mDNS discovery timeout for IP refresh */
-  private static readonly MDNS_TIMEOUT = DEFAULT_DISCOVERY_TIMEOUT;
-
   /**
-   * Attach a listener on the device's error event to catch MQTT reconnection exhaustion.
-   * When the MQTT client gives up (device went offline mid-session), schedule a periodic retry.
+   * Log device errors (an 'error' event without a listener would crash
+   * Homebridge) and schedule a periodic retry once the MQTT client gives up
+   * reconnecting (device went offline mid-session).
    */
-  private attachDeviceErrorListener(): void {
+  private attachDeviceListeners(): void {
     if (!this.device) {
       return;
     }
+    const serial = this.device.getSerial();
     this.device.on('error', (error: Error) => {
-      if (!this.isIntentionalDisconnect && error.message.includes('Failed to reconnect')) {
-        const serial = (this.accessory.context.device as DeviceConfig).serial;
+      this.log.error(`[${serial}] Device error: ${error.message}`);
+    });
+    this.device.on('reconnectFailed', () => {
+      if (!this.isIntentionalDisconnect) {
         this.log.warn(`[${serial}] MQTT reconnection exhausted — device is offline. Will retry in 5 min.`);
         this.scheduleOfflineRetry();
       }
@@ -261,41 +264,23 @@ export class DysonPlatformAccessory {
         const newIp = await this.rediscoverDeviceIp(config.serial);
 
         if (newIp && newIp !== config.ipAddress) {
-          this.log.info(`Found new IP ${newIp} for ${config.serial} (was ${config.ipAddress}). Retrying connection...`);
+          this.log.warn(
+            `Device ${config.serial} answered mDNS at ${newIp} instead of ${config.ipAddress}. ` +
+            'Set a static IP for the device if this was not expected.',
+          );
 
-          // Recreate device with new IP
-          this.device = createDevice({
-            serial: config.serial,
-            productType: config.productType,
-            name: config.name || `Dyson ${config.serial}`,
-            credentials: this.getCredentials(config),
-            ipAddress: newIp,
-          }) as DysonLinkDevice;
-
-          // Re-attach error listener on the new device instance
-          this.attachDeviceErrorListener();
-
+          // Reuse the same device instance so the HomeKit handlers stay bound to it
           try {
+            await this.device.disconnect();
+            this.device.setIpAddress(newIp);
             await this.device.connect();
             this.log.info(`Connected to ${this.device.getSerial()} at new IP ${newIp}`);
-
-            // Persist new IP for future restarts
-            config.ipAddress = newIp;
-            this.accessory.context.device = config;
-
-            // Recreate accessory handler with the new device
-            this.accessoryHandler?.destroy();
-            this.accessoryHandler = new DysonLinkAccessory({
-              accessory: this.accessory,
-              device: this.device,
-              api: this.platform.api,
-              log: this.log,
-              options: this.extractDeviceOptions(config),
-            });
+            this.persistDiscoveredIp(config, newIp);
             return; // Connected successfully
           } catch (retryError) {
             const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
             this.log.warn(`Failed to connect to ${config.serial} at new IP ${newIp}: ${retryMsg}`);
+            this.device.setIpAddress(config.ipAddress);
           }
         } else if (newIp === config.ipAddress) {
           this.log.warn(`Device ${config.serial} found at same IP ${config.ipAddress} but not responding`);
@@ -311,13 +296,23 @@ export class DysonPlatformAccessory {
   }
 
   /**
+   * Remember an IP found via mDNS so the next restart connects to it
+   * directly. The platform applies it while the configured IP is unchanged.
+   */
+  private persistDiscoveredIp(config: DeviceConfig, newIp: string): void {
+    const previous = this.accessory.context.ipOverride as { from?: string } | undefined;
+    this.accessory.context.ipOverride = { from: previous?.from ?? config.ipAddress, to: newIp };
+    config.ipAddress = newIp;
+    this.accessory.context.device = config;
+    this.platform.api.updatePlatformAccessories([this.accessory]);
+  }
+
+  /**
    * Rediscover device IP via mDNS
    */
   private async rediscoverDeviceIp(serial: string): Promise<string | null> {
     try {
-      const discovery = new MdnsDiscovery();
-      const devices = await discovery.discover({ timeout: DysonPlatformAccessory.MDNS_TIMEOUT });
-
+      const devices = await this.platform.discoverDeviceIps();
       return devices.get(serial) || null;
     } catch (error) {
       this.log.error('mDNS discovery failed:', error);

@@ -3,6 +3,8 @@
  * Discovers Dyson devices on the local network via mDNS/Bonjour
  */
 
+import { isIPv4, isIPv6 } from 'node:net';
+
 import { Bonjour, type Browser, type Service } from 'bonjour-service';
 
 import { DYSON_MDNS_SERVICE } from '../config/index.js';
@@ -15,6 +17,26 @@ const MIN_TIMEOUT = 1000;
 
 /** Maximum timeout allowed */
 const MAX_TIMEOUT = 60000;
+
+/**
+ * Whether an address belongs to the local network: RFC 1918 private IPv4,
+ * or IPv6 link-local (fe80::/10) / unique-local (fc00::/7).
+ *
+ * @internal exported for tests
+ */
+export function isLocalNetworkAddress(address: string): boolean {
+  if (isIPv4(address)) {
+    const [a, b] = address.split('.').map(Number);
+    return a === 10 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168);
+  }
+  if (isIPv6(address)) {
+    const lower = address.toLowerCase();
+    return /^fe[89ab]/.test(lower) || /^f[cd]/.test(lower);
+  }
+  return false;
+}
 
 /**
  * Discovery result containing device serial and IP address
@@ -73,45 +95,8 @@ export class MdnsDiscovery {
    * @returns Map of device serial numbers to IP addresses
    */
   async discover(options: DiscoveryOptions = {}): Promise<Map<string, string>> {
-    const timeout = this.validateTimeout(options.timeout ?? DEFAULT_DISCOVERY_TIMEOUT);
-    const maxDevices = options.maxDevices ?? 0;
-
-    const devices = new Map<string, string>();
-
-    return new Promise((resolve) => {
-      let resolved = false;
-      this.bonjour = this.bonjourFactory();
-
-      // Service type is 'dyson_mqtt' (without leading underscore for bonjour-service)
-      const serviceType = DYSON_MDNS_SERVICE.replace('_', '').replace('._tcp', '');
-
-      this.browser = this.bonjour.find({ type: serviceType });
-
-      // Set timeout to stop discovery (unref to avoid keeping the process alive)
-      const discoveryTimeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          this.cleanup();
-          resolve(devices);
-        }
-      }, timeout);
-      discoveryTimeout.unref();
-
-      this.browser.on('up', (service: Service) => {
-        const device = this.parseService(service);
-        if (device) {
-          devices.set(device.serial, device.ipAddress);
-
-          // Stop early if we found enough devices
-          if (maxDevices > 0 && devices.size >= maxDevices && !resolved) {
-            resolved = true;
-            clearTimeout(discoveryTimeout);
-            this.cleanup();
-            resolve(devices);
-          }
-        }
-      });
-    });
+    const devices = await this.discoverDetailed(options);
+    return new Map(devices.map((device) => [device.serial, device.ipAddress]));
   }
 
   /**
@@ -215,30 +200,25 @@ export class MdnsDiscovery {
    * Get IPv4 address from service, preferring IPv4 over IPv6
    */
   private getIPv4Address(service: Service): string | null {
-    const addresses = service.addresses || [];
+    // Only local-network addresses are accepted: the plugin sends the device
+    // credentials to whatever host answers, so a spoofed mDNS record pointing
+    // at a public address must not be trusted.
+    const addresses = (service.addresses || []).filter(isLocalNetworkAddress);
 
     // First try to find an IPv4 address
-    for (const addr of addresses) {
-      if (this.isIPv4(addr)) {
-        return addr;
-      }
+    const ipv4 = addresses.find((addr) => isIPv4(addr));
+    if (ipv4) {
+      return ipv4;
     }
 
-    // Fall back to referer if available and is IPv4
-    if (service.referer && this.isIPv4(service.referer.address)) {
-      return service.referer.address;
+    // Fall back to referer if available and is a private IPv4
+    const referer = service.referer?.address;
+    if (referer && isIPv4(referer) && isLocalNetworkAddress(referer)) {
+      return referer;
     }
 
-    // If no IPv4 found, return first address (might be IPv6)
+    // If no IPv4 found, return first local address (might be IPv6)
     return addresses[0] || null;
-  }
-
-  /**
-   * Check if address is IPv4
-   */
-  private isIPv4(address: string): boolean {
-    // Simple IPv4 check: contains dots and no colons
-    return address.includes('.') && !address.includes(':');
   }
 
   /**

@@ -12,48 +12,11 @@ import {
 } from '../../../src/protocol/mqttClient.js';
 import type { MqttConnectFn } from '../../../src/protocol/mqttClient.js';
 import type { MqttClient as MqttClientType, IClientOptions } from 'mqtt';
-
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    end: vi.fn((force?: boolean, opts?: object, callback?: () => void) => {
-      if (typeof callback === 'function') {
-        callback();
-      }
-    }),
-    subscribe: vi.fn((topic: string, opts: object, callback: (error?: Error) => void) => {
-      callback();
-    }),
-    unsubscribe: vi.fn((topic: string, callback: (error?: Error) => void) => {
-      callback();
-    }),
-    publish: vi.fn((topic: string, payload: string, opts: object, callback: (error?: Error) => void) => {
-      callback();
-    }),
-    removeAllListeners: vi.fn(),
-    // Helper methods for testing
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-    _getHandlers: (event: string) => eventHandlers.get(event) || [],
-  };
-
-  return mockClient;
-}
+import { createMockRawMqttClient } from '../../helpers/mocks.js';
 
 describe('DysonMqttClient', () => {
   let client: DysonMqttClient;
-  let mockMqttClient: ReturnType<typeof createMockMqttClient>;
+  let mockMqttClient: ReturnType<typeof createMockRawMqttClient>;
   let mockConnect: MqttConnectFn;
 
   const defaultOptions = {
@@ -65,7 +28,7 @@ describe('DysonMqttClient', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    mockMqttClient = createMockMqttClient();
+    mockMqttClient = createMockRawMqttClient();
     mockConnect = vi.fn(() => mockMqttClient as unknown as MqttClientType);
     client = new DysonMqttClient(defaultOptions, mockConnect);
   });
@@ -705,6 +668,135 @@ describe('DysonMqttClient', () => {
     });
   });
 
+  describe('reconnection regressions', () => {
+    /** mqttConnect factory that returns a fresh mock client per call */
+    function makeConnectSequence() {
+      const clients: ReturnType<typeof createMockRawMqttClient>[] = [];
+      const connectFn = vi.fn(() => {
+        const c = createMockRawMqttClient();
+        clients.push(c);
+        return c as unknown as MqttClientType;
+      });
+      return { connectFn: connectFn as unknown as MqttConnectFn & Mock, clients };
+    }
+
+    it('disconnect() during the backoff between attempts cancels the pending reconnect', async () => {
+      const { connectFn, clients } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+      const reconnectHandler = vi.fn();
+      c.on('reconnect', reconnectHandler);
+
+      const first = c.connect();
+      clients[0]._emit('connect');
+      await first;
+
+      // Connection drops -> attempt 1 after 1s
+      clients[0]._emit('close');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(clients.length).toBe(2);
+
+      // Attempt 1 fails with a network error -> client is null while
+      // attempt 2 waits out its 2s backoff
+      clients[1]._emit('error', new Error('connect ECONNREFUSED 192.168.1.100:1883'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reconnectHandler).toHaveBeenCalledWith(2);
+
+      await c.disconnect();
+
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(clients.length).toBe(2);
+      expect(c.isConnected()).toBe(false);
+      expect(c.getSubscribedTopics()).toEqual([]);
+    });
+
+    it('drops a reconnect that completes after disconnect() was requested', async () => {
+      const { connectFn, clients } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+
+      const first = c.connect();
+      clients[0]._emit('connect');
+      await first;
+
+      clients[0]._emit('close');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(clients.length).toBe(2);
+
+      // disconnect() while attempt 1 is in flight
+      const disconnecting = c.disconnect();
+      clients[1]._emit('connect');
+      await disconnecting;
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(c.isConnected()).toBe(false);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(clients.length).toBe(2);
+    });
+
+    it('re-subscribes topics after a reconnect that escalated the variant ladder', async () => {
+      const { connectFn, clients } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+
+      const first = c.connect();
+      clients[0]._emit('connect');
+      await first;
+      await c.subscribe('topic1');
+      await c.subscribe('topic2');
+
+      // Connection drops -> reconnect after 1s, starting at the cached variant
+      clients[0]._emit('close');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(clients.length).toBe(2);
+
+      // Cached variant is now rejected at CONNACK -> ladder escalates
+      // (cleanup() in between resets isReconnecting)
+      clients[1]._emit('error', new Error('Connection refused: Identifier rejected'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clients.length).toBe(3);
+
+      clients[2]._emit('connect');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(c.isConnected()).toBe(true);
+      expect(c.getActiveVariant()?.label).toBe('short-id');
+      const resubscribed = clients[2].subscribe.mock.calls.map((call) => call[0]);
+      expect(resubscribed).toEqual(['topic1', 'topic2']);
+    });
+
+    it('does not re-subscribe on a first connect with no recorded topics', async () => {
+      const { connectFn, clients } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+
+      const first = c.connect();
+      clients[0]._emit('connect');
+      await first;
+
+      expect(clients[0].subscribe).not.toHaveBeenCalled();
+    });
+
+    it('connect() after disconnect() re-enables auto-reconnect', async () => {
+      const { connectFn, clients } = makeConnectSequence();
+      const c = new DysonMqttClient(defaultOptions, connectFn);
+      const reconnectHandler = vi.fn();
+      c.on('reconnect', reconnectHandler);
+
+      const first = c.connect();
+      clients[0]._emit('connect');
+      await first;
+      await c.disconnect();
+
+      const second = c.connect();
+      clients[1]._emit('connect');
+      await second;
+
+      // Unexpected drop on the new connection should trigger auto-reconnect
+      clients[1]._emit('close');
+      expect(reconnectHandler).toHaveBeenCalledWith(1);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(clients.length).toBe(3);
+    });
+  });
+
   describe('reconnection state getters', () => {
     it('should return reconnect attempts', async () => {
       expect(client.getReconnectAttempts()).toBe(0);
@@ -721,11 +813,11 @@ describe('DysonMqttClient', () => {
      * call, so tests can target events at a specific variant attempt.
      */
     function makeConnectSequence() {
-      const clients: ReturnType<typeof createMockMqttClient>[] = [];
+      const clients: ReturnType<typeof createMockRawMqttClient>[] = [];
       const optionsLog: IClientOptions[] = [];
       const connectFn = vi.fn((_brokerUrl: string, options: IClientOptions) => {
         optionsLog.push(options);
-        const c = createMockMqttClient();
+        const c = createMockRawMqttClient();
         clients.push(c);
         return c as unknown as MqttClientType;
       });

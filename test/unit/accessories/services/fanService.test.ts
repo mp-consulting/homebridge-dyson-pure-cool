@@ -2,87 +2,14 @@
  * FanService Unit Tests (AirPurifier Service)
  */
 
-import { vi, type Mock, type Mocked } from 'vitest';
+import { vi, type Mock } from 'vitest';
 
 import { FanService } from '../../../../src/accessories/services/fanService.js';
 import type { FanServiceConfig } from '../../../../src/accessories/services/fanService.js';
 import { DysonLinkDevice } from '../../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../../src/devices/index.js';
-import type { DysonMqttClient } from '../../../../src/protocol/mqttClient.js';
-import type { API, PlatformAccessory, Service, Logging } from 'homebridge';
-
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
-
-// Create mock HomeKit service
-function createMockService() {
-  const characteristics = new Map<string, {
-    onGet: Mock;
-    onSet: Mock;
-    setProps: Mock;
-    getValue: Mock;
-  }>();
-
-  const mockService = {
-    setCharacteristic: vi.fn().mockReturnThis(),
-    getCharacteristic: vi.fn((char: unknown) => {
-      const uuid = typeof char === 'object' && char !== null && 'UUID' in char
-        ? (char as { UUID: string }).UUID
-        : String(char);
-      if (!characteristics.has(uuid)) {
-        const charMock = {
-          onGet: vi.fn().mockReturnThis(),
-          onSet: vi.fn().mockReturnThis(),
-          setProps: vi.fn().mockReturnThis(),
-          getValue: vi.fn(),
-        };
-        characteristics.set(uuid, charMock);
-      }
-      return characteristics.get(uuid);
-    }),
-    updateCharacteristic: vi.fn(),
-    addOptionalCharacteristic: vi.fn().mockReturnThis(),
-    addLinkedService: vi.fn().mockReturnThis(),
-  };
-
-  return mockService as unknown as Mocked<Service>;
-}
-
-// Create mock logging
-function createMockLog(): Logging {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    log: vi.fn(),
-    success: vi.fn(),
-  } as unknown as Logging;
-}
+import type { API, PlatformAccessory, Logging } from 'homebridge';
+import { createMockHapApi, createMockLog, createMockMqttClient, createMockService } from '../../../helpers/mocks.js';
 
 // Create mock API with hap
 function createMockApi() {
@@ -100,12 +27,7 @@ function createMockApi() {
     AirPurifier: { UUID: 'air-purifier-uuid' },
   };
 
-  return {
-    hap: {
-      Service,
-      Characteristic,
-    },
-  } as unknown as API;
+  return createMockHapApi({ Service, Characteristic });
 }
 
 /**
@@ -211,13 +133,33 @@ describe('FanService', () => {
       expect(mockAccessory.getService).toHaveBeenCalled();
     });
 
-    it('should set configured name', () => {
-      expect(mockService.addOptionalCharacteristic).toHaveBeenCalledWith(
+    it('should set configured name when creating a new service', () => {
+      const newService = createMockService();
+      const newAccessory = {
+        displayName: 'Bedroom',
+        getService: vi.fn().mockReturnValue(undefined),
+        addService: vi.fn().mockReturnValue(newService),
+      } as unknown as PlatformAccessory;
+
+      new FanService({ accessory: newAccessory, device, api: mockApi, log: mockLog, deviceName: 'Bedroom' });
+
+      expect(newAccessory.addService).toHaveBeenCalledWith(mockApi.hap.Service.AirPurifier, 'Bedroom', 'air-purifier');
+      expect(newService.addOptionalCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.ConfiguredName,
       );
-      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+      expect(newService.updateCharacteristic).toHaveBeenCalledWith(
         mockApi.hap.Characteristic.ConfiguredName,
-        'Living Room',
+        'Bedroom',
+      );
+    });
+
+    it('should not overwrite ConfiguredName of an existing service', () => {
+      // beforeEach's accessory returns an existing service from getService
+      expect(mockAccessory.addService).not.toHaveBeenCalled();
+      expect(mockService.addOptionalCharacteristic).not.toHaveBeenCalled();
+      expect(mockService.updateCharacteristic).not.toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+        expect.anything(),
       );
     });
 
@@ -396,7 +338,7 @@ describe('FanService', () => {
       expect(result).toBe(50);
     });
 
-    it('should return 0 for AUTO mode when actual speed unknown', async () => {
+    it('should return the default speed (40%) in AUTO mode before any manual speed is seen', async () => {
       // Simulate auto mode where fnsp is 'AUTO' (actual speed unknown)
       mockMqttClient._emit('message', {
         topic: 'status',
@@ -404,10 +346,42 @@ describe('FanService', () => {
         data: { msg: 'STATE-CHANGE', 'product-state': { fnsp: 'AUTO' } },
       });
 
-      const result = speedGetHandler();
-      // When fnsp is 'AUTO', fanSpeed is -1 and we return 0% to indicate
-      // the device is managing the speed (we don't know the actual speed)
-      expect(result).toBe(0);
+      // fanSpeed is -1: show FAN_SPEED.DEFAULT (4) rather than 0%
+      expect(speedGetHandler()).toBe(40);
+    });
+
+    it('should keep showing the last manual speed in AUTO mode (not 0)', async () => {
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { fpwr: 'ON', fmod: 'FAN', fnsp: '0007' } },
+      });
+      expect(speedGetHandler()).toBe(70);
+
+      mockService.updateCharacteristic.mockClear();
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { fmod: 'AUTO', fnsp: 'AUTO' } },
+      });
+
+      expect(speedGetHandler()).toBe(70);
+      expect(mockService.updateCharacteristic).not.toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.RotationSpeed,
+        0,
+      );
+    });
+
+    it('should throw HapStatusError on GET when the device is disconnected', () => {
+      mockMqttClient.isConnected.mockReturnValue(false);
+
+      expect(() => speedGetHandler()).toThrow(mockApi.hap.HapStatusError);
+      try {
+        speedGetHandler();
+      } catch (error) {
+        expect((error as { hapStatus: number }).hapStatus).toBe(-70402);
+      }
+      expect(() => activeGetHandler()).toThrow(mockApi.hap.HapStatusError);
     });
 
     it('should call setFanPower(false) when set to 0', async () => {
@@ -453,6 +427,42 @@ describe('FanService', () => {
 
       // Check that we have a speed command
       expect(dataValues.some((d) => d.fnsp === '0005')).toBe(true);
+    });
+
+    it('should send power-on and speed in a single command with the speed winning when off', async () => {
+      // Power-on would re-apply auto mode; the explicit speed must override it
+      device.setActivationDefaults({ autoMode: true });
+      vi.useFakeTimers();
+
+      const result = speedSetHandler(70);
+      vi.advanceTimersByTime(300);
+      await flushCommands();
+      await expect(result).resolves.toBeUndefined();
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { fmod: 'FAN', fnsp: '0007' },
+        }),
+      );
+    });
+
+    it('should debounce rapid slider changes into one command and resolve all SETs', async () => {
+      vi.useFakeTimers();
+
+      const first = speedSetHandler(30);
+      vi.advanceTimersByTime(100);
+      const second = speedSetHandler(60);
+      vi.advanceTimersByTime(300);
+      await flushCommands();
+
+      await expect(Promise.all([first, second])).resolves.toBeDefined();
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { fmod: 'FAN', fnsp: '0006' },
+        }),
+      );
     });
   });
 
@@ -609,49 +619,71 @@ describe('FanService', () => {
     });
   });
 
+  describe('change-only updates', () => {
+    it('should not call updateCharacteristic again for an unchanged value', () => {
+      const state = { msg: 'STATE-CHANGE', 'product-state': { fpwr: 'ON', fmod: 'FAN', fnsp: '0005' } };
+      mockMqttClient._emit('message', { topic: 'status', payload: Buffer.from('{}'), data: state });
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(mockApi.hap.Characteristic.Active, 1);
+
+      mockService.updateCharacteristic.mockClear();
+      // Only oscillation changes; everything else is unchanged
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { oson: 'ON' } },
+      });
+
+      expect(mockService.updateCharacteristic).toHaveBeenCalledTimes(1);
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(mockApi.hap.Characteristic.SwingMode, 1);
+    });
+  });
+
   describe('error handling', () => {
-    it('should throw when setFanPower(false) MQTT publish fails', async () => {
+    it('should throw HapStatusError and log when setFanPower(false) MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      await expect(activeSetHandler(0)).rejects.toThrow('MQTT error');
+      await expect(activeSetHandler(0)).rejects.toBeInstanceOf(mockApi.hap.HapStatusError);
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set fan power: MQTT error');
     });
 
-    it('should emit commandError when setFanSpeed MQTT publish fails', async () => {
+    it('should reject the RotationSpeed SET promise with HapStatusError when publish fails', async () => {
       vi.useFakeTimers();
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      const errorHandler = vi.fn();
-      device.on('commandError', errorHandler);
-
-      speedSetHandler(50);
+      const result = speedSetHandler(50);
+      const assertion = expect(result).rejects.toBeInstanceOf(mockApi.hap.HapStatusError);
       vi.advanceTimersByTime(300);
       await flushCommands();
 
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+      await assertion;
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set fan speed: MQTT error');
     });
 
-    it('should emit commandError when setOscillation MQTT publish fails', async () => {
-      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
+    it('should reject the RotationSpeed SET promise when the device is disconnected', async () => {
+      vi.useFakeTimers();
+      mockMqttClient.isConnected.mockReturnValue(false);
 
-      const errorHandler = vi.fn();
-      device.on('commandError', errorHandler);
-
-      await swingModeSetHandler(1);
+      const result = speedSetHandler(50);
+      const assertion = expect(result).rejects.toBeInstanceOf(mockApi.hap.HapStatusError);
+      vi.advanceTimersByTime(300);
       await flushCommands();
 
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+      await assertion;
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set fan speed: Device not connected');
     });
 
-    it('should emit commandError when setAutoMode MQTT publish fails', async () => {
+    it('should throw HapStatusError when setOscillation MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      const errorHandler = vi.fn();
-      device.on('commandError', errorHandler);
+      await expect(swingModeSetHandler(1)).rejects.toBeInstanceOf(mockApi.hap.HapStatusError);
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set oscillation: MQTT error');
+    });
 
-      await targetStateSetHandler(1);
-      await flushCommands();
+    it('should throw HapStatusError when setAutoMode MQTT publish fails', async () => {
+      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+      await expect(targetStateSetHandler(1)).rejects.toBeInstanceOf(mockApi.hap.HapStatusError);
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set auto mode: MQTT error');
     });
   });
 });

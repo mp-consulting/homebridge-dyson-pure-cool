@@ -2,22 +2,27 @@
  * DysonAccessory Unit Tests
  */
 
-import { vi, type Mocked } from 'vitest';
+import { vi } from 'vitest';
 
 import { DysonAccessory } from '../../../src/accessories/dysonAccessory.js';
 import type { DysonAccessoryConfig } from '../../../src/accessories/dysonAccessory.js';
 import { DysonLinkDevice } from '../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory, DeviceState } from '../../../src/devices/index.js';
-import type { DysonMqttClient } from '../../../src/protocol/mqttClient.js';
 import type { API, PlatformAccessory, Logging } from 'homebridge';
+import { createMockLog, createMockMqttClient } from '../../helpers/mocks.js';
 
-// Track setupServices calls globally since class property initialization
-// happens after super() but setupServices is called during super()
+// Track setupServices calls globally
 let setupServicesCallCount = 0;
 
-// Concrete test implementation of abstract DysonAccessory
+// Concrete test implementation of abstract DysonAccessory.
+// Like real subclasses, it calls setupServices() at the end of its own constructor.
 class TestAccessory extends DysonAccessory {
   public stateChangeHandler?: (state: DeviceState) => void;
+
+  constructor(config: DysonAccessoryConfig) {
+    super(config);
+    this.setupServices();
+  }
 
   protected setupServices(): void {
     setupServicesCallCount++;
@@ -39,43 +44,11 @@ class TestAccessory extends DysonAccessory {
   }
 }
 
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
-
-// Create mock logging
-function createMockLog(): Logging {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    log: vi.fn(),
-    success: vi.fn(),
-  } as unknown as Logging;
+// Subclass that does NOT call setupServices(), to check the base class doesn't either
+class BareAccessory extends DysonAccessory {
+  protected setupServices(): void {
+    setupServicesCallCount++;
+  }
 }
 
 // Create mock AccessoryInformation service
@@ -175,8 +148,40 @@ describe('DysonAccessory', () => {
   });
 
   describe('initialization', () => {
-    it('should call setupServices', () => {
+    it('should call setupServices once when the subclass invokes it', () => {
       expect(TestAccessory.getSetupServicesCallCount()).toBe(1);
+    });
+
+    it('should not call setupServices from the base constructor', () => {
+      TestAccessory.resetSetupServicesCallCount();
+
+      new BareAccessory({ accessory: mockAccessory, device, api: mockApi, log: mockLog });
+
+      expect(TestAccessory.getSetupServicesCallCount()).toBe(0);
+    });
+
+    it('should not set FirmwareRevision when firmwareVersion is not passed', () => {
+      expect(mockInfoService.setCharacteristic).not.toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.FirmwareRevision,
+        expect.anything(),
+      );
+    });
+
+    it('should set FirmwareRevision when firmwareVersion is passed', () => {
+      mockInfoService.setCharacteristic.mockClear();
+
+      new TestAccessory({
+        accessory: mockAccessory,
+        device,
+        api: mockApi,
+        log: mockLog,
+        firmwareVersion: '21.04.03',
+      });
+
+      expect(mockInfoService.setCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.FirmwareRevision,
+        '21.04.03',
+      );
     });
 
     it('should set up AccessoryInformation service', () => {

@@ -2,11 +2,12 @@
  * DysonDevice Unit Tests
  */
 
-import { vi, type Mocked } from 'vitest';
+import { vi } from 'vitest';
 
 import { DysonDevice, DEFAULT_FEATURES, createDefaultState } from '../../../src/devices/dysonDevice.js';
 import type { DeviceInfo, DeviceState, DeviceFeatures, MqttClientFactory } from '../../../src/devices/dysonDevice.js';
-import type { DysonMqttClient, MqttMessage } from '../../../src/protocol/mqttClient.js';
+import type { MqttMessage } from '../../../src/protocol/mqttClient.js';
+import { createMockMqttClient } from '../../helpers/mocks.js';
 
 // Concrete test implementation of abstract DysonDevice
 class TestDevice extends DysonDevice {
@@ -70,34 +71,6 @@ class TestDevice extends DysonDevice {
   public testHandleMessage(message: MqttMessage): void {
     this.handleMessage(message);
   }
-}
-
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    // Helper methods for testing
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
 }
 
 describe('DysonDevice', () => {
@@ -193,6 +166,112 @@ describe('DysonDevice', () => {
 
       expect(mockMqttClient.connect).toHaveBeenCalledTimes(1);
     });
+
+    it('should dispose the previous MQTT client when connecting again', async () => {
+      await device.connect();
+
+      // Connection lost: the old client no longer reports connected
+      mockMqttClient.isConnected.mockReturnValue(false);
+      const secondClient = createMockMqttClient();
+      vi.mocked(mockMqttClientFactory).mockReturnValueOnce(secondClient);
+
+      await device.connect();
+
+      expect(mockMqttClient.removeAllListeners).toHaveBeenCalled();
+      expect(mockMqttClient.disconnect).toHaveBeenCalled();
+      expect(mockMqttClient.removeAllListeners.mock.invocationCallOrder[0])
+        .toBeLessThan(mockMqttClient.disconnect.mock.invocationCallOrder[0]);
+      expect(secondClient.connect).toHaveBeenCalled();
+      expect(secondClient.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('should ignore events from a disposed client after reconnecting', async () => {
+      await device.connect();
+      mockMqttClient.isConnected.mockReturnValue(false);
+      const secondClient = createMockMqttClient();
+      vi.mocked(mockMqttClientFactory).mockReturnValueOnce(secondClient);
+      await device.connect();
+
+      const disconnectHandler = vi.fn();
+      device.on('disconnect', disconnectHandler);
+
+      // Old client's handlers were removed, so its events are not forwarded
+      mockMqttClient._emit('disconnect');
+
+      expect(disconnectHandler).not.toHaveBeenCalled();
+      expect(device.getState().connected).toBe(true);
+    });
+
+    it('should dispose the new client when connect() throws', async () => {
+      mockMqttClient.connect.mockRejectedValueOnce(new Error('Connection refused'));
+
+      await expect(device.connect()).rejects.toThrow('Connection refused');
+
+      expect(mockMqttClient.removeAllListeners).toHaveBeenCalled();
+      expect(mockMqttClient.disconnect).toHaveBeenCalled();
+      expect(device.isConnected()).toBe(false);
+    });
+
+    it('should dispose the new client when subscribeToStatus throws', async () => {
+      mockMqttClient.subscribeToStatus.mockRejectedValueOnce(new Error('Subscribe failed'));
+
+      await expect(device.connect()).rejects.toThrow('Subscribe failed');
+
+      expect(mockMqttClient.removeAllListeners).toHaveBeenCalled();
+      expect(mockMqttClient.disconnect).toHaveBeenCalled();
+      expect(mockMqttClient.requestCurrentState).not.toHaveBeenCalled();
+      expect(device.isConnected()).toBe(false);
+    });
+
+    it('should create a fresh client on retry after a failed connect', async () => {
+      mockMqttClient.subscribeToStatus.mockRejectedValueOnce(new Error('Subscribe failed'));
+      await expect(device.connect()).rejects.toThrow('Subscribe failed');
+
+      const secondClient = createMockMqttClient();
+      vi.mocked(mockMqttClientFactory).mockReturnValueOnce(secondClient);
+      await device.connect();
+
+      expect(mockMqttClientFactory).toHaveBeenCalledTimes(2);
+      expect(secondClient.connect).toHaveBeenCalled();
+      expect(device.isConnected()).toBe(true);
+    });
+  });
+
+  describe('setIpAddress', () => {
+    it('should update the IP address returned by getIpAddress', () => {
+      device.setIpAddress('192.168.1.200');
+      expect(device.getIpAddress()).toBe('192.168.1.200');
+    });
+
+    it('should use the new IP address on the next connect', async () => {
+      device.setIpAddress('10.0.0.5');
+      await device.connect();
+
+      expect(mockMqttClientFactory).toHaveBeenCalledWith(
+        '10.0.0.5',
+        'ABC-AB-12345678',
+        'localPassword123',
+        '438',
+        undefined,
+      );
+    });
+
+    it('should allow connecting a device created without an IP address', async () => {
+      const deviceWithoutIp = new TestDevice(
+        { ...defaultDeviceInfo, ipAddress: undefined },
+        mockMqttClientFactory,
+      );
+      deviceWithoutIp.setIpAddress('192.168.1.150');
+
+      await expect(deviceWithoutIp.connect()).resolves.toBeUndefined();
+      expect(mockMqttClientFactory).toHaveBeenCalledWith(
+        '192.168.1.150',
+        expect.any(String),
+        expect.any(String),
+        '438',
+        undefined,
+      );
+    });
   });
 
   describe('disconnect', () => {
@@ -202,6 +281,13 @@ describe('DysonDevice', () => {
 
       expect(mockMqttClient.disconnect).toHaveBeenCalled();
       expect(device.getState().connected).toBe(false);
+    });
+
+    it('should remove listeners from the MQTT client on disconnect', async () => {
+      await device.connect();
+      await device.disconnect();
+
+      expect(mockMqttClient.removeAllListeners).toHaveBeenCalled();
     });
 
     it('should emit disconnect event', async () => {
@@ -249,6 +335,50 @@ describe('DysonDevice', () => {
       const state = device.getState();
       expect(state.isOn).toBe(true);
       expect(state.fanSpeed).toBe(5);
+    });
+
+    it('should not emit stateChange when nothing changed', () => {
+      device.testUpdateState({ isOn: true, fanSpeed: 5 });
+
+      const stateChangeHandler = vi.fn();
+      device.on('stateChange', stateChangeHandler);
+
+      device.testUpdateState({ isOn: true, fanSpeed: 5 });
+      device.testUpdateState({ isOn: true });
+
+      expect(stateChangeHandler).not.toHaveBeenCalled();
+    });
+
+    it('should emit stateChange when any one field changed', () => {
+      device.testUpdateState({ isOn: true, fanSpeed: 5 });
+
+      const stateChangeHandler = vi.fn();
+      device.on('stateChange', stateChangeHandler);
+
+      device.testUpdateState({ isOn: true, fanSpeed: 6 });
+
+      expect(stateChangeHandler).toHaveBeenCalledTimes(1);
+      expect(stateChangeHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ isOn: true, fanSpeed: 6 }),
+      );
+    });
+
+    it('should emit a copy of the state', () => {
+      const stateChangeHandler = vi.fn();
+      device.on('stateChange', stateChangeHandler);
+
+      device.testUpdateState({ isOn: true });
+      const emitted = stateChangeHandler.mock.calls[0][0] as DeviceState;
+
+      // Mutating the emitted object must not affect the device
+      emitted.isOn = false;
+      emitted.fanSpeed = 99;
+      expect(device.getState().isOn).toBe(true);
+      expect(device.getState().fanSpeed).toBe(0);
+
+      // A later emit is a different object
+      device.testUpdateState({ fanSpeed: 3 });
+      expect(stateChangeHandler.mock.calls[1][0]).not.toBe(emitted);
     });
 
     it('should return immutable state copy', () => {
@@ -442,20 +572,28 @@ describe('DysonDevice', () => {
       expect(errorHandler).toHaveBeenCalledWith(error);
     });
 
-    it('should handle MQTT offline event', () => {
+    it('should not change connected state on MQTT offline event', () => {
+      const stateChangeHandler = vi.fn();
+      device.on('stateChange', stateChangeHandler);
+
       mockMqttClient._emit('offline');
 
-      expect(device.getState().connected).toBe(false);
+      // Only 'disconnect' marks the device as disconnected
+      expect(device.getState().connected).toBe(true);
+      expect(stateChangeHandler).not.toHaveBeenCalled();
     });
 
-    it('should handle MQTT reconnectFailed event', () => {
+    it('should re-emit MQTT reconnectFailed as reconnectFailed', () => {
       const errorHandler = vi.fn();
+      const reconnectFailedHandler = vi.fn();
       device.on('error', errorHandler);
+      device.on('reconnectFailed', reconnectFailedHandler);
 
       mockMqttClient._emit('reconnectFailed');
 
       expect(device.getState().connected).toBe(false);
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+      expect(reconnectFailedHandler).toHaveBeenCalledTimes(1);
+      expect(errorHandler).not.toHaveBeenCalled();
     });
   });
 

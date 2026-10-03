@@ -5,34 +5,17 @@
  * Provides filter life percentage and change indication for HEPA and carbon filters.
  */
 
-import type {
-  API,
-  CharacteristicValue,
-  Logging,
-  PlatformAccessory,
-  Service,
-} from 'homebridge';
+import type { CharacteristicValue } from 'homebridge';
 
 import type { DysonLinkDevice } from '../../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../../devices/types.js';
+import { BaseService } from './baseService.js';
+import type { BaseServiceConfig } from './baseService.js';
 
 /**
  * Configuration for FilterService
  */
-export interface FilterServiceConfig {
-  accessory: PlatformAccessory;
-  device: DysonLinkDevice;
-  api: API;
-  log: Logging;
-  /** Primary service to link this service to */
-  primaryService?: Service;
-}
-
-/**
- * Maximum filter life in hours (approximately 1 year of continuous use)
- * Used to convert hours to percentage
- */
-const MAX_FILTER_LIFE_HOURS = 4300;
+export type FilterServiceConfig = BaseServiceConfig<DysonLinkDevice>;
 
 /**
  * Threshold percentage below which filter change is indicated
@@ -43,31 +26,18 @@ const FILTER_CHANGE_THRESHOLD = 10;
  * FilterService handles the HomeKit FilterMaintenance service
  *
  * Maps Dyson filter data to HomeKit characteristics:
- * - FilterLifeLevel (0-100% based on HEPA filter)
+ * - FilterLifeLevel (0-100%, the most worn of the HEPA and carbon filters)
  * - FilterChangeIndication (1 when filter life <= 10%)
  */
-export class FilterService {
-  private readonly service: Service;
-  private readonly device: DysonLinkDevice;
-  private readonly log: Logging;
-  private readonly api: API;
-  private readonly boundHandleStateChange: (state: DeviceState) => void;
-
+export class FilterService extends BaseService<DysonLinkDevice> {
   constructor(config: FilterServiceConfig) {
-    this.device = config.device;
-    this.log = config.log;
-    this.api = config.api;
+    super(config, {
+      type: config.api.hap.Service.FilterMaintenance,
+      name: 'Filter',
+      subtype: 'filter-maintenance',
+    });
 
-    const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
-
-    // Get or create the FilterMaintenance service with name
-    this.service = config.accessory.getService('filter-maintenance') ||
-      config.accessory.addService(Service.FilterMaintenance, 'Filter', 'filter-maintenance');
-
-    // Set ConfiguredName for better HomeKit display
-    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
-    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Filter');
 
     // Set up FilterLifeLevel characteristic (required)
     this.service.getCharacteristic(Characteristic.FilterLifeLevel)
@@ -77,57 +47,20 @@ export class FilterService {
     this.service.getCharacteristic(Characteristic.FilterChangeIndication)
       .onGet(this.handleFilterChangeIndicationGet.bind(this));
 
-    // Link to primary service if provided
-    if (config.primaryService) {
-      config.primaryService.addLinkedService(this.service);
-    }
-
-    // Subscribe to device state changes
-    this.boundHandleStateChange = this.handleStateChange.bind(this);
-    this.device.on('stateChange', this.boundHandleStateChange);
-
     this.log.debug('FilterService initialized for', config.accessory.displayName);
   }
 
   /**
-   * Get the underlying HomeKit service
+   * Remaining life of the most worn filter, in percent, or undefined when
+   * the device hasn't reported a valid value for either filter.
    */
-  getService(): Service {
-    return this.service;
-  }
-
-  /**
-   * Clean up event listeners
-   */
-  destroy(): void {
-    this.device.off('stateChange', this.boundHandleStateChange);
-  }
-
-  /**
-   * Calculate filter life percentage from hours remaining
-   *
-   * @param hoursRemaining - Hours of filter life remaining
-   * @returns Percentage (0-100)
-   */
-  private calculateFilterLifePercent(hoursRemaining: number | undefined): number {
-    if (
-      hoursRemaining === undefined ||
-      !Number.isFinite(hoursRemaining) ||
-      hoursRemaining < 0
-    ) {
-      return 100; // Assume full if unknown or invalid
+  private getFilterLifePercent(state: DeviceState): number | undefined {
+    const values = [state.hepaFilterLife, state.carbonFilterLife]
+      .filter((value): value is number => value !== undefined && Number.isFinite(value) && value >= 0);
+    if (values.length === 0) {
+      return undefined;
     }
-
-    const percent = Math.round((hoursRemaining / MAX_FILTER_LIFE_HOURS) * 100);
-    return Math.min(100, Math.max(0, percent));
-  }
-
-  /**
-   * Get the primary filter life (HEPA filter, with carbon as fallback)
-   */
-  private getPrimaryFilterLife(): number | undefined {
-    const state = this.device.getState();
-    return state.hepaFilterLife ?? state.carbonFilterLife;
+    return Math.min(100, Math.round(Math.min(...values)));
   }
 
   /**
@@ -135,9 +68,12 @@ export class FilterService {
    * Returns 0-100 percentage
    */
   private handleFilterLifeLevelGet(): CharacteristicValue {
-    const filterLife = this.getPrimaryFilterLife();
-    const percent = this.calculateFilterLifePercent(filterLife);
-    this.log.debug('Get FilterLifeLevel ->', percent, '% (', filterLife, 'hours)');
+    this.assertConnected();
+    const percent = this.getFilterLifePercent(this.device.getState());
+    if (percent === undefined) {
+      return this.cachedValue(this.api.hap.Characteristic.FilterLifeLevel);
+    }
+    this.log.debug('Get FilterLifeLevel ->', percent, '%');
     return percent;
   }
 
@@ -146,37 +82,23 @@ export class FilterService {
    * Returns 1 if filter needs changing, 0 otherwise
    */
   private handleFilterChangeIndicationGet(): CharacteristicValue {
-    const filterLife = this.getPrimaryFilterLife();
-    const percent = this.calculateFilterLifePercent(filterLife);
+    this.assertConnected();
+    const percent = this.getFilterLifePercent(this.device.getState());
+    if (percent === undefined) {
+      return this.cachedValue(this.api.hap.Characteristic.FilterChangeIndication);
+    }
     const needsChange = percent <= FILTER_CHANGE_THRESHOLD ? 1 : 0;
     this.log.debug('Get FilterChangeIndication ->', needsChange, '(', percent, '%)');
     return needsChange;
   }
 
-  /**
-   * Handle device state changes
-   * Updates HomeKit characteristics to reflect current device state
-   */
-  private handleStateChange(state: DeviceState): void {
+  protected handleStateChange(state: DeviceState): void {
+    const percent = this.getFilterLifePercent(state);
+    if (percent === undefined) {
+      return;
+    }
     const Characteristic = this.api.hap.Characteristic;
-
-    const filterLife = state.hepaFilterLife ?? state.carbonFilterLife;
-    const percent = this.calculateFilterLifePercent(filterLife);
-    const needsChange = percent <= FILTER_CHANGE_THRESHOLD ? 1 : 0;
-
-    // Update FilterLifeLevel
-    this.service.updateCharacteristic(Characteristic.FilterLifeLevel, percent);
-
-    // Update FilterChangeIndication
-    this.service.updateCharacteristic(Characteristic.FilterChangeIndication, needsChange);
-  }
-
-  /**
-   * Update characteristics from current device state
-   * Call this after connecting to sync HomeKit with device
-   */
-  updateFromState(): void {
-    const state = this.device.getState();
-    this.handleStateChange(state);
+    this.update(Characteristic.FilterLifeLevel, percent);
+    this.update(Characteristic.FilterChangeIndication, percent <= FILTER_CHANGE_THRESHOLD ? 1 : 0);
   }
 }

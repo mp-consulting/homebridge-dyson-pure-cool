@@ -21,6 +21,9 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
   // Track platform accessories for clean shutdown
   private readonly platformAccessories: DysonPlatformAccessory[] = [];
 
+  // In-flight mDNS scan, shared by every accessory that needs one
+  private discoveryInFlight: Promise<Map<string, string>> | null = null;
+
   constructor(
     public readonly log: Logging,
     public readonly config: PlatformConfig,
@@ -38,7 +41,11 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
     this.api.on('didFinishLaunching', async () => {
       log.debug('Executed didFinishLaunching callback');
       // run the method to discover / register your devices as accessories
-      await this.discoverDevices();
+      try {
+        await this.discoverDevices();
+      } catch (error) {
+        this.log.error('Failed to set up devices:', error);
+      }
     });
 
     // Cleanly disconnect all MQTT connections on shutdown
@@ -106,6 +113,27 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
     return merged;
   }
 
+  private getDiscoveryTimeout(): number {
+    return this.config.discoveryTimeout ?? DEFAULT_DISCOVERY_TIMEOUT;
+  }
+
+  /**
+   * Scan the network for Dyson devices via mDNS.
+   * Concurrent callers share one scan instead of each opening a socket.
+   *
+   * @returns Map of serial number to IP address
+   */
+  discoverDeviceIps(timeout = this.getDiscoveryTimeout()): Promise<Map<string, string>> {
+    if (!this.discoveryInFlight) {
+      this.discoveryInFlight = new MdnsDiscovery()
+        .discover({ timeout })
+        .finally(() => {
+          this.discoveryInFlight = null;
+        });
+    }
+    return this.discoveryInFlight;
+  }
+
   /**
    * Discover and register devices from the platform configuration.
    * Accessories must only be registered once, previously created accessories
@@ -123,16 +151,15 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
     this.log.info(`Found ${devices.length} device(s) in configuration`);
 
     // Run mDNS discovery for devices without IP addresses
-    const devicesNeedingIP = devices.filter((d: { ipAddress?: string }) => !d.ipAddress);
+    const devicesNeedingIP = devices.filter((d: { ipAddress?: string } | null) => !d?.ipAddress);
     let discoveredIPs = new Map<string, string>();
 
     if (devicesNeedingIP.length > 0) {
       this.log.info(`Discovering IP addresses for ${devicesNeedingIP.length} device(s) via mDNS...`);
-      const timeout = this.config.discoveryTimeout ?? DEFAULT_DISCOVERY_TIMEOUT;
+      const timeout = this.getDiscoveryTimeout();
 
       try {
-        const discovery = new MdnsDiscovery();
-        discoveredIPs = await discovery.discover({ timeout });
+        discoveredIPs = await this.discoverDeviceIps(timeout);
         this.log.info(`mDNS discovery found ${discoveredIPs.size} device(s)`);
 
         // Log discovered devices
@@ -146,6 +173,11 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
 
     // loop over the configured devices and register each one if it has not already been registered
     for (const rawDevice of devices) {
+      if (typeof rawDevice?.serial !== 'string' || !rawDevice.serial) {
+        this.log.error('Skipping device configuration without a serial number');
+        continue;
+      }
+
       // Create merged config without mutating original
       const device = this.mergeDeviceConfig(rawDevice);
 
@@ -168,6 +200,16 @@ export class DysonPureCoolPlatform implements DynamicPlatformPlugin {
       if (existingAccessory) {
         // the accessory already exists
         this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
+
+        // Reuse an IP found by mDNS after the configured one stopped working,
+        // as long as the user hasn't changed the configured IP since.
+        const override = existingAccessory.context.ipOverride as { from?: string; to?: string } | undefined;
+        if (override?.to && override.from === device.ipAddress) {
+          this.log.info(`Using previously rediscovered IP ${override.to} for device ${device.serial}`);
+          device.ipAddress = override.to;
+        } else if (override) {
+          delete existingAccessory.context.ipOverride;
+        }
 
         // Update the accessory context with the latest device config
         existingAccessory.context.device = device;

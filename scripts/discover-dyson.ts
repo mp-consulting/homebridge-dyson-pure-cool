@@ -1,7 +1,7 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env npx tsx
 /**
  * Dyson Device Discovery Script
- * Run with: npx ts-node discover-dyson.ts
+ * Run with: npx tsx scripts/discover-dyson.ts
  */
 
 import { Bonjour } from 'bonjour-service';

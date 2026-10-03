@@ -5,67 +5,60 @@
  * Provides humidifier control with target humidity setting.
  */
 
-import type {
-  API,
-  CharacteristicValue,
-  Logging,
-  PlatformAccessory,
-  Service,
-} from 'homebridge';
+import type { CharacteristicValue } from 'homebridge';
 
 import type { DysonLinkDevice } from '../../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../../devices/types.js';
+import { BaseService } from './baseService.js';
+import type { BaseServiceConfig } from './baseService.js';
 
 /**
  * Configuration for HumidifierControlService
  */
-export interface HumidifierControlServiceConfig {
-  accessory: PlatformAccessory;
-  device: DysonLinkDevice;
-  api: API;
-  log: Logging;
-  /** Enable full humidity range (0-100%) instead of Dyson default (30-70%) */
+export interface HumidifierControlServiceConfig extends BaseServiceConfig<DysonLinkDevice> {
+  /** Enable full humidity range (0-100%) instead of default (30-70%) */
   fullRangeHumidity?: boolean;
-  /** Primary service to link this service to */
-  primaryService?: Service;
 }
 
 /**
- * Default humidity limits (Dyson recommendation)
+ * Default humidity range for Dyson humidifiers
  */
 const HUMIDITY_MIN_DEFAULT = 30;
 const HUMIDITY_MAX_DEFAULT = 70;
 
 /**
- * Full range humidity limits
+ * Full humidity range when enabled
  */
 const HUMIDITY_MIN_FULL = 0;
 const HUMIDITY_MAX_FULL = 100;
+
+/** Water level reported when the tank is empty / not empty (%) */
+const WATER_LEVEL = {
+  EMPTY: 0,
+  FULL: 100,
+} as const;
 
 /**
  * HumidifierControlService handles the HomeKit HumidifierDehumidifier service
  *
  * Maps HomeKit characteristics to Dyson device state:
- * - Active: Humidifier on/off
- * - CurrentHumidifierDehumidifierState: OFF, IDLE, HUMIDIFYING
- * - TargetHumidifierDehumidifierState: HUMIDIFIER or AUTO
- * - CurrentRelativeHumidity: Current room humidity
- * - RelativeHumidityHumidifierThreshold: Target humidity
- * - WaterLevel: Water tank status
+ * - Active (0/1) ↔ humidifierEnabled
+ * - CurrentHumidifierDehumidifierState ↔ humidifying when below target
+ * - TargetHumidifierDehumidifierState: AUTO (0) ↔ humidifierAuto, HUMIDIFIER (1) otherwise
+ * - CurrentRelativeHumidity ↔ humidity
+ * - RelativeHumidityHumidifierThreshold ↔ targetHumidity
+ * - WaterLevel ↔ waterTankEmpty
  */
-export class HumidifierControlService {
-  private readonly service: Service;
-  private readonly device: DysonLinkDevice;
-  private readonly log: Logging;
-  private readonly api: API;
+export class HumidifierControlService extends BaseService<DysonLinkDevice> {
   private readonly humidityMin: number;
   private readonly humidityMax: number;
-  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   constructor(config: HumidifierControlServiceConfig) {
-    this.device = config.device;
-    this.log = config.log;
-    this.api = config.api;
+    super(config, {
+      type: config.api.hap.Service.HumidifierDehumidifier,
+      name: 'Humidifier',
+      subtype: 'humidifier',
+    });
 
     // Set humidity range based on configuration
     if (config.fullRangeHumidity) {
@@ -76,16 +69,7 @@ export class HumidifierControlService {
       this.humidityMax = HUMIDITY_MAX_DEFAULT;
     }
 
-    const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
-
-    // Get or create the HumidifierDehumidifier service with name
-    this.service = config.accessory.getService('humidifier') ||
-      config.accessory.addService(Service.HumidifierDehumidifier, 'Humidifier', 'humidifier');
-
-    // Set ConfiguredName for better HomeKit display
-    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
-    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Humidifier');
 
     // Set up Active characteristic
     this.service.getCharacteristic(Characteristic.Active)
@@ -99,7 +83,7 @@ export class HumidifierControlService {
 
     // Set up TargetHumidifierDehumidifierState
     // Values: HUMIDIFIER_OR_DEHUMIDIFIER (0), HUMIDIFIER (1), DEHUMIDIFIER (2)
-    // Dyson only supports HUMIDIFIER mode
+    // Dyson supports manual humidification and an auto mode (mapped to 0)
     this.service.getCharacteristic(Characteristic.TargetHumidifierDehumidifierState)
       .onGet(this.handleTargetStateGet.bind(this))
       .onSet(this.handleTargetStateSet.bind(this))
@@ -128,40 +112,17 @@ export class HumidifierControlService {
     this.service.getCharacteristic(Characteristic.WaterLevel)
       .onGet(this.handleWaterLevelGet.bind(this));
 
-    // Link to primary service if provided
-    if (config.primaryService) {
-      config.primaryService.addLinkedService(this.service);
-    }
-
-    // Subscribe to device state changes
-    this.boundHandleStateChange = this.handleStateChange.bind(this);
-    this.device.on('stateChange', this.boundHandleStateChange);
-
     this.log.debug('HumidifierControlService initialized for', config.accessory.displayName);
-  }
-
-  /**
-   * Get the underlying HomeKit service
-   */
-  getService(): Service {
-    return this.service;
-  }
-
-  /**
-   * Clean up event listeners
-   */
-  destroy(): void {
-    this.device.off('stateChange', this.boundHandleStateChange);
   }
 
   /**
    * Handle Active GET request
    */
   private handleActiveGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const active = state.humidifierEnabled ?? false;
+    this.assertConnected();
+    const active = this.device.getState().humidifierEnabled ? 1 : 0;
     this.log.debug('Get Humidifier Active ->', active);
-    return active ? 1 : 0;
+    return active;
   }
 
   /**
@@ -170,61 +131,38 @@ export class HumidifierControlService {
   private async handleActiveSet(value: CharacteristicValue): Promise<void> {
     const active = value === 1;
     this.log.debug('Set Humidifier Active ->', active);
-
-    try {
-      await this.device.setHumidifier(active);
-    } catch (error) {
-      this.log.error('Failed to set humidifier:', error);
-      throw error;
-    }
+    await this.runCommand('set humidifier', () => this.device.setHumidifier(active));
   }
 
   /**
    * Handle CurrentHumidifierDehumidifierState GET request
    */
   private handleCurrentStateGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const Characteristic = this.api.hap.Characteristic;
-
-    if (!state.humidifierEnabled) {
-      return Characteristic.CurrentHumidifierDehumidifierState.INACTIVE;
-    }
-
-    // Check if actively humidifying (current < target)
-    const current = state.humidity ?? 50;
-    const target = state.targetHumidity ?? 50;
-
-    if (current < target) {
-      return Characteristic.CurrentHumidifierDehumidifierState.HUMIDIFYING;
-    }
-
-    return Characteristic.CurrentHumidifierDehumidifierState.IDLE;
+    this.assertConnected();
+    return this.getCurrentState(this.device.getState());
   }
 
   /**
    * Handle TargetHumidifierDehumidifierState GET request
+   * AUTO (HUMIDIFIER_OR_DEHUMIDIFIER) when the device runs in auto mode,
+   * HUMIDIFIER otherwise
    */
   private handleTargetStateGet(): CharacteristicValue {
-    const Characteristic = this.api.hap.Characteristic;
-    // Always return HUMIDIFIER mode
-    return Characteristic.TargetHumidifierDehumidifierState.HUMIDIFIER;
+    this.assertConnected();
+    return this.getTargetState(this.device.getState());
   }
 
   /**
    * Handle TargetHumidifierDehumidifierState SET request
    */
   private async handleTargetStateSet(value: CharacteristicValue): Promise<void> {
-    const Characteristic = this.api.hap.Characteristic;
+    const TargetState = this.api.hap.Characteristic.TargetHumidifierDehumidifierState;
     this.log.debug('Set TargetHumidifierDehumidifierState ->', value);
 
-    // If AUTO mode selected, enable auto humidification
-    if (value === Characteristic.TargetHumidifierDehumidifierState.HUMIDIFIER_OR_DEHUMIDIFIER) {
-      try {
-        await this.device.setHumidifierAuto();
-      } catch (error) {
-        this.log.error('Failed to set humidifier auto:', error);
-        throw error;
-      }
+    if (value === TargetState.HUMIDIFIER_OR_DEHUMIDIFIER) {
+      await this.runCommand('set humidifier auto', () => this.device.setHumidifierAuto());
+    } else if (value === TargetState.HUMIDIFIER) {
+      await this.runCommand('set humidifier manual', () => this.device.setHumidifier(true));
     }
   }
 
@@ -232,8 +170,11 @@ export class HumidifierControlService {
    * Handle CurrentRelativeHumidity GET request
    */
   private handleCurrentHumidityGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const humidity = state.humidity ?? 50;
+    this.assertConnected();
+    const humidity = this.device.getState().humidity;
+    if (humidity === undefined) {
+      return this.cachedValue(this.api.hap.Characteristic.CurrentRelativeHumidity);
+    }
     this.log.debug('Get Current Humidity ->', humidity, '%');
     return humidity;
   }
@@ -242,12 +183,13 @@ export class HumidifierControlService {
    * Handle RelativeHumidityHumidifierThreshold GET request
    */
   private handleTargetHumidityGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const target = state.targetHumidity ?? 50;
-    // Clamp to configured range
-    const clamped = Math.max(this.humidityMin, Math.min(this.humidityMax, target));
-    this.log.debug('Get Target Humidity ->', clamped, '%');
-    return clamped;
+    this.assertConnected();
+    const target = this.getClampedTarget(this.device.getState());
+    if (target === undefined) {
+      return this.cachedValue(this.api.hap.Characteristic.RelativeHumidityHumidifierThreshold);
+    }
+    this.log.debug('Get Target Humidity ->', target, '%');
+    return target;
   }
 
   /**
@@ -256,76 +198,60 @@ export class HumidifierControlService {
   private async handleTargetHumiditySet(value: CharacteristicValue): Promise<void> {
     const target = value as number;
     this.log.debug('Set Target Humidity ->', target, '%');
-
-    try {
-      await this.device.setTargetHumidity(target);
-    } catch (error) {
-      this.log.error('Failed to set target humidity:', error);
-      throw error;
-    }
+    await this.runCommand('set target humidity', () => this.device.setTargetHumidity(target));
   }
 
   /**
    * Handle WaterLevel GET request
-   * Returns 100 if tank is full, 0 if empty
    */
   private handleWaterLevelGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const waterLevel = state.waterTankEmpty ? 0 : 100;
+    this.assertConnected();
+    const waterLevel = this.device.getState().waterTankEmpty ? WATER_LEVEL.EMPTY : WATER_LEVEL.FULL;
     this.log.debug('Get Water Level ->', waterLevel, '%');
     return waterLevel;
   }
 
-  /**
-   * Handle device state changes
-   */
-  private handleStateChange(state: DeviceState): void {
-    const Characteristic = this.api.hap.Characteristic;
-
-    // Update Active state
-    const active = state.humidifierEnabled ? 1 : 0;
-    this.service.updateCharacteristic(Characteristic.Active, active);
-
-    // Update current state
-    let currentState = Characteristic.CurrentHumidifierDehumidifierState.INACTIVE;
-    if (state.humidifierEnabled) {
-      const current = state.humidity ?? 50;
-      const target = state.targetHumidity ?? 50;
-      currentState = current < target
-        ? Characteristic.CurrentHumidifierDehumidifierState.HUMIDIFYING
-        : Characteristic.CurrentHumidifierDehumidifierState.IDLE;
+  private getCurrentState(state: DeviceState): number {
+    const CurrentState = this.api.hap.Characteristic.CurrentHumidifierDehumidifierState;
+    if (!state.humidifierEnabled) {
+      return CurrentState.INACTIVE;
     }
-    this.service.updateCharacteristic(
-      Characteristic.CurrentHumidifierDehumidifierState,
-      currentState,
-    );
-
-    // Update current humidity
-    this.service.updateCharacteristic(
-      Characteristic.CurrentRelativeHumidity,
-      state.humidity ?? 50,
-    );
-
-    // Update target humidity
-    const target = state.targetHumidity ?? 50;
-    const clampedTarget = Math.max(this.humidityMin, Math.min(this.humidityMax, target));
-    this.service.updateCharacteristic(
-      Characteristic.RelativeHumidityHumidifierThreshold,
-      clampedTarget,
-    );
-
-    // Update water level
-    this.service.updateCharacteristic(
-      Characteristic.WaterLevel,
-      state.waterTankEmpty ? 0 : 100,
-    );
+    // Humidifying while below target; idle when at target or unknown
+    if (state.humidity !== undefined && state.targetHumidity !== undefined &&
+        state.humidity < state.targetHumidity) {
+      return CurrentState.HUMIDIFYING;
+    }
+    return CurrentState.IDLE;
   }
 
-  /**
-   * Update characteristics from current device state
-   */
-  updateFromState(): void {
-    const state = this.device.getState();
-    this.handleStateChange(state);
+  private getTargetState(state: DeviceState): number {
+    const TargetState = this.api.hap.Characteristic.TargetHumidifierDehumidifierState;
+    return state.humidifierAuto ? TargetState.HUMIDIFIER_OR_DEHUMIDIFIER : TargetState.HUMIDIFIER;
+  }
+
+  private getClampedTarget(state: DeviceState): number | undefined {
+    if (state.targetHumidity === undefined) {
+      return undefined;
+    }
+    return Math.max(this.humidityMin, Math.min(this.humidityMax, state.targetHumidity));
+  }
+
+  protected handleStateChange(state: DeviceState): void {
+    const Characteristic = this.api.hap.Characteristic;
+
+    this.update(Characteristic.Active, state.humidifierEnabled ? 1 : 0);
+    this.update(Characteristic.CurrentHumidifierDehumidifierState, this.getCurrentState(state));
+    this.update(Characteristic.TargetHumidifierDehumidifierState, this.getTargetState(state));
+
+    if (state.humidity !== undefined) {
+      this.update(Characteristic.CurrentRelativeHumidity, state.humidity);
+    }
+
+    const target = this.getClampedTarget(state);
+    if (target !== undefined) {
+      this.update(Characteristic.RelativeHumidityHumidifierThreshold, target);
+    }
+
+    this.update(Characteristic.WaterLevel, state.waterTankEmpty ? WATER_LEVEL.EMPTY : WATER_LEVEL.FULL);
   }
 }

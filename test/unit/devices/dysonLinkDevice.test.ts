@@ -2,42 +2,17 @@
  * DysonLinkDevice Unit Tests
  */
 
-import { vi, type Mocked } from 'vitest';
+import { vi } from 'vitest';
 
 import { DysonLinkDevice } from '../../../src/devices/dysonLinkDevice.js';
 import { createDevice, isProductTypeSupported, getSupportedProductTypes } from '../../../src/devices/deviceFactory.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../src/devices/index.js';
-import type { DysonMqttClient, MqttMessage } from '../../../src/protocol/mqttClient.js';
+import type { MqttMessage } from '../../../src/protocol/mqttClient.js';
+import { createMockMqttClient } from '../../helpers/mocks.js';
+import { sentCommand } from '../../helpers/device.js';
 
 /** Flush pending microtasks so queued commands are sent before assertions */
 const flushMicrotasks = () => new Promise(resolve => setTimeout(resolve, 0));
-
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
 
 describe('DysonLinkDevice', () => {
   let device: DysonLinkDevice;
@@ -155,7 +130,7 @@ describe('DysonLinkDevice', () => {
       await cf1Device.setFanPower(true);
       await flushMicrotasks();
 
-      const command = cf1MqttClient.publishCommand.mock.calls[0][0];
+      const command = sentCommand(cf1MqttClient, 0);
       expect(command.data).toMatchObject({ fpwr: 'ON' });
       expect(command.data).not.toHaveProperty('fmod');
     });
@@ -210,7 +185,7 @@ describe('DysonLinkDevice', () => {
       await device.setFanPower(true);
       await flushMicrotasks();
 
-      const command = mockMqttClient.publishCommand.mock.calls[0][0];
+      const command = sentCommand(mockMqttClient, 0);
       expect(command.data).toMatchObject({ oson: 'ON' });
       expect(command.data).not.toHaveProperty('nmod');
     });
@@ -229,7 +204,7 @@ describe('DysonLinkDevice', () => {
       await cf1Device.setFanPower(true);
       await flushMicrotasks();
 
-      const command = cf1MqttClient.publishCommand.mock.calls[0][0];
+      const command = sentCommand(cf1MqttClient, 0);
       expect(command.data).toMatchObject({ fpwr: 'ON', oson: 'ON' });
       expect(command.data).toMatchObject({ auto: 'OFF' });
     });
@@ -274,7 +249,7 @@ describe('DysonLinkDevice', () => {
       await device.setFanPower(true);
       await flushMicrotasks();
 
-      const command = mockMqttClient.publishCommand.mock.calls[0][0];
+      const command = sentCommand(mockMqttClient, 0);
       expect(command.data).not.toHaveProperty('nmod');
     });
   });
@@ -414,6 +389,157 @@ describe('DysonLinkDevice', () => {
           data: expect.objectContaining({ fmod: 'FAN', fnsp: '0004' }),
         }),
       );
+    });
+  });
+
+  describe('command promises', () => {
+    it('should reject when the device is not connected', async () => {
+      await expect(device.setOscillation(true)).rejects.toThrow('Device not connected');
+      expect(mockMqttClient.publishCommand).not.toHaveBeenCalled();
+    });
+
+    it('should reject when the MQTT client reports disconnected', async () => {
+      await device.connect();
+      mockMqttClient.isConnected.mockReturnValue(false);
+
+      await expect(device.setNightMode(true)).rejects.toThrow('Device not connected');
+    });
+
+    it('should reject when publishing fails', async () => {
+      await device.connect();
+      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('Publish failed'));
+
+      await expect(device.setJetFocus(true)).rejects.toThrow('Publish failed');
+    });
+
+    it('should resolve only after the command has been published', async () => {
+      await device.connect();
+
+      await device.setContinuousMonitoring(true);
+
+      // No extra flush needed: the promise settles after publishing
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { rhtm: 'ON' } }),
+      );
+    });
+
+    it('should share one publish between setters called in the same tick', async () => {
+      await device.connect();
+
+      await Promise.all([
+        device.setOscillation(true),
+        device.setNightMode(true),
+        device.setJetFocus(false),
+      ]);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { oson: 'ON', nmod: 'ON', ffoc: 'OFF' } }),
+      );
+    });
+
+    it('should reject every batched setter when the shared publish fails', async () => {
+      await device.connect();
+      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('Publish failed'));
+
+      const results = await Promise.allSettled([
+        device.setOscillation(true),
+        device.setNightMode(true),
+      ]);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
+      expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+    });
+
+    it('should use a new batch for setters in a later tick', async () => {
+      await device.connect();
+      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('Publish failed'));
+
+      await expect(device.setOscillation(true)).rejects.toThrow('Publish failed');
+      await expect(device.setNightMode(true)).resolves.toBeUndefined();
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(2);
+      expect(mockMqttClient.publishCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: { nmod: 'ON' } }),
+      );
+    });
+
+    it('should not leave an unhandled rejection when a setter is not awaited', async () => {
+      await device.connect();
+      mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('Publish failed'));
+
+      // Fire and forget; a stray unhandled rejection would fail the run
+      void device.setOscillation(true).catch(() => {});
+      await flushMicrotasks();
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('power override after a quick off -> on', () => {
+    const stateMessage = (productState: Record<string, string>): MqttMessage => ({
+      topic: '438/ABC-AB-12345678/status/current',
+      payload: Buffer.from('{}'),
+      data: { msg: 'STATE-CHANGE', 'product-state': productState },
+    });
+
+    beforeEach(async () => {
+      await device.connect();
+      // Device reports it is running
+      mockMqttClient._emit('message', stateMessage({ fmod: 'FAN', fnsp: '0005' }));
+      expect(device.getState().isOn).toBe(true);
+    });
+
+    it('should skip ON when the device is already on', async () => {
+      await device.setFanPower(true);
+      expect(mockMqttClient.publishCommand).not.toHaveBeenCalled();
+    });
+
+    it('should send ON after an unconfirmed OFF even though reported isOn is still true', async () => {
+      await device.setFanPower(false);
+      // The device hasn't reported the OFF yet
+      expect(device.getState().isOn).toBe(true);
+
+      await device.setFanPower(true);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(2);
+      expect(sentCommand(mockMqttClient, 0).data).toEqual({ fmod: 'OFF' });
+      expect(sentCommand(mockMqttClient, 1).data).toEqual({ fmod: 'FAN' });
+    });
+
+    it('should keep the override while the device still reports the stale power state', async () => {
+      await device.setFanPower(false);
+      // A stale message still reporting ON does not confirm the OFF
+      mockMqttClient._emit('message', stateMessage({ fmod: 'FAN' }));
+
+      await device.setFanPower(true);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(2);
+      expect(sentCommand(mockMqttClient, 1).data).toEqual({ fmod: 'FAN' });
+    });
+
+    it('should clear the override once a state message confirms the commanded power', async () => {
+      await device.setFanPower(false);
+      await device.setFanPower(true);
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(2);
+
+      // Device confirms the ON we commanded
+      mockMqttClient._emit('message', stateMessage({ fmod: 'FAN' }));
+
+      // Back to normal: ON while reported on is skipped again
+      await device.setFanPower(true);
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(2);
+    });
+
+    it('should clear the override when the device confirms OFF', async () => {
+      await device.setFanPower(false);
+      mockMqttClient._emit('message', stateMessage({ fmod: 'OFF' }));
+      // Later the device is switched on elsewhere (e.g. the Dyson app)
+      mockMqttClient._emit('message', stateMessage({ fmod: 'FAN' }));
+
+      await device.setFanPower(true);
+
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
     });
   });
 

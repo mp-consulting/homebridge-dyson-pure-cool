@@ -7,91 +7,19 @@ import { vi, type Mocked } from 'vitest';
 import { HumidityService } from '../../../../src/accessories/services/humidityService.js';
 import { DysonLinkDevice } from '../../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../../src/devices/index.js';
-import type { DysonMqttClient } from '../../../../src/protocol/mqttClient.js';
-import type { API, Logging, PlatformAccessory, Service, Characteristic } from 'homebridge';
-
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
-
-// Create mock characteristic
-function createMockCharacteristic() {
-  const characteristic = {
-    onGet: vi.fn().mockReturnThis(),
-    onSet: vi.fn().mockReturnThis(),
-    setProps: vi.fn().mockReturnThis(),
-    updateValue: vi.fn().mockReturnThis(),
-    value: 0,
-  };
-  return characteristic as unknown as Mocked<Characteristic>;
-}
-
-// Create mock service
-function createMockService() {
-  const characteristics = new Map<string, ReturnType<typeof createMockCharacteristic>>();
-
-  const service = {
-    setCharacteristic: vi.fn().mockReturnThis(),
-    getCharacteristic: vi.fn((char: unknown) => {
-      const key = String(char);
-      if (!characteristics.has(key)) {
-        characteristics.set(key, createMockCharacteristic());
-      }
-      return characteristics.get(key)!;
-    }),
-    updateCharacteristic: vi.fn().mockReturnThis(),
-    addOptionalCharacteristic: vi.fn().mockReturnThis(),
-    addLinkedService: vi.fn().mockReturnThis(),
-    _getCharacteristics: () => characteristics,
-  };
-
-  return service as unknown as Mocked<Service> & {
-    _getCharacteristics: () => Map<string, ReturnType<typeof createMockCharacteristic>>;
-  };
-}
+import type { API, Logging, PlatformAccessory } from 'homebridge';
+import { createMockHapApi, createMockLog, createMockMqttClient, createMockService } from '../../../helpers/mocks.js';
+import { emitSensorData, setDeviceState } from '../../../helpers/device.js';
 
 // Create mock API
 function createMockApi() {
-  const mockHumidityService = createMockService();
-
-  return {
-    hap: {
-      Service: {
-        HumiditySensor: 'HumiditySensor',
-      },
-      Characteristic: {
-        Name: 'Name',
-        CurrentRelativeHumidity: 'CurrentRelativeHumidity',
-        ConfiguredName: 'ConfiguredName',
-      },
+  return createMockHapApi(
+    {
+      Service: { HumiditySensor: 'HumiditySensor' },
+      Characteristic: { Name: 'Name', CurrentRelativeHumidity: 'CurrentRelativeHumidity', ConfiguredName: 'ConfiguredName' },
     },
-    _mockHumidityService: mockHumidityService,
-  } as unknown as Mocked<API> & {
-    _mockHumidityService: ReturnType<typeof createMockService>;
-  };
+    { _mockHumidityService: createMockService(0) },
+  );
 }
 
 // Create mock accessory
@@ -99,27 +27,10 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
   return {
     displayName: 'Test Dyson',
     UUID: 'test-uuid',
-    getService: vi.fn((serviceType: unknown) => {
-      if (serviceType === 'humidity-sensor') {
-        return api._mockHumidityService;
-      }
-      return undefined;
-    }),
+    getServiceById: vi.fn((): unknown => undefined),
     addService: vi.fn(() => api._mockHumidityService),
     context: {},
   } as unknown as Mocked<PlatformAccessory>;
-}
-
-// Create mock logger
-function createMockLog(): Mocked<Logging> {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    log: vi.fn(),
-    success: vi.fn(),
-  } as unknown as Mocked<Logging>;
 }
 
 describe('HumidityService', () => {
@@ -139,7 +50,7 @@ describe('HumidityService', () => {
     ipAddress: '192.168.1.100',
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockMqttClient = createMockMqttClient();
     mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     mockApi = createMockApi();
@@ -147,9 +58,13 @@ describe('HumidityService', () => {
     mockLog = createMockLog();
 
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
+    // GET handlers report "Not Responding" unless the device is connected
+    await device.connect();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    service?.destroy();
+    await device.disconnect();
     vi.clearAllMocks();
   });
 
@@ -162,7 +77,27 @@ describe('HumidityService', () => {
         log: mockLog,
       });
 
-      expect(mockAccessory.getService).toHaveBeenCalledWith('humidity-sensor');
+      expect(mockAccessory.getServiceById).toHaveBeenCalledWith('HumiditySensor', 'humidity-sensor');
+      expect(mockAccessory.addService).toHaveBeenCalledWith('HumiditySensor', expect.any(String), 'humidity-sensor');
+    });
+
+    it('should not touch ConfiguredName of an existing service', () => {
+      mockAccessory.getServiceById.mockReturnValue(mockApi._mockHumidityService);
+
+      service = new HumidityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      expect(service.getService()).toBe(mockApi._mockHumidityService);
+      expect(mockAccessory.addService).not.toHaveBeenCalled();
+      expect(mockApi._mockHumidityService.addOptionalCharacteristic).not.toHaveBeenCalled();
+      expect(mockApi._mockHumidityService.updateCharacteristic).not.toHaveBeenCalledWith(
+        'ConfiguredName',
+        expect.anything(),
+      );
     });
 
     it('should set configured name', () => {
@@ -222,7 +157,7 @@ describe('HumidityService', () => {
     });
 
     it('should report humidity as-is (direct percentage)', () => {
-      device.updateState({ humidity: 45 });
+      emitSensorData(mockMqttClient, { hact: '0045' });
 
       expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
@@ -231,7 +166,7 @@ describe('HumidityService', () => {
     });
 
     it('should report 0% humidity', () => {
-      device.updateState({ humidity: 0 });
+      emitSensorData(mockMqttClient, { hact: '0000' });
 
       expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
@@ -240,7 +175,7 @@ describe('HumidityService', () => {
     });
 
     it('should report 100% humidity', () => {
-      device.updateState({ humidity: 100 });
+      emitSensorData(mockMqttClient, { hact: '0100' });
 
       expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
@@ -248,30 +183,33 @@ describe('HumidityService', () => {
       );
     });
 
-    it('should return 50% default when humidity is undefined', () => {
-      device.updateState({ humidity: undefined });
+    it('should not push an update when humidity becomes unknown', () => {
+      emitSensorData(mockMqttClient, { hact: '0045' });
+      mockApi._mockHumidityService.updateCharacteristic.mockClear();
 
-      expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
+      setDeviceState(device, { humidity: undefined }, { emit: true });
+
+      expect(mockApi._mockHumidityService.updateCharacteristic).not.toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
-        50,
+        expect.anything(),
       );
     });
 
-    it('should return 50% default when humidity is out of range (negative)', () => {
-      device.updateState({ humidity: -5 });
+    it('should not push an update when humidity is out of range (negative)', () => {
+      emitSensorData(mockMqttClient, { hact: '-5' });
 
-      expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
+      expect(mockApi._mockHumidityService.updateCharacteristic).not.toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
-        50,
+        expect.anything(),
       );
     });
 
-    it('should return 50% default when humidity is out of range (>100)', () => {
-      device.updateState({ humidity: 150 });
+    it('should not push an update when humidity is out of range (>100)', () => {
+      emitSensorData(mockMqttClient, { hact: '0150' });
 
-      expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
+      expect(mockApi._mockHumidityService.updateCharacteristic).not.toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
-        50,
+        expect.anything(),
       );
     });
   });
@@ -286,7 +224,7 @@ describe('HumidityService', () => {
       });
 
       // Set state then call updateFromState
-      device.state.humidity = 65;
+      setDeviceState(device, { humidity: 65 });
 
       mockApi._mockHumidityService.updateCharacteristic.mockClear();
       service.updateFromState();
@@ -314,43 +252,55 @@ describe('HumidityService', () => {
       humidityGetHandler = humidityChar!.onGet.mock.calls[0][0] as (...args: unknown[]) => number;
     });
 
-    it('should return default 50% when humidity is undefined', () => {
+    it('should return the cached HomeKit value when humidity is undefined', () => {
+      mockApi._mockHumidityService._getCharacteristics().get('CurrentRelativeHumidity')!.value = 42;
       const result = humidityGetHandler();
-      expect(result).toBe(50);
+      expect(result).toBe(42);
+    });
+
+    it('should throw HapStatusError when the device is disconnected', () => {
+      mockMqttClient.isConnected.mockReturnValue(false);
+      setDeviceState(device, { humidity: 45 });
+
+      expect(() => humidityGetHandler()).toThrow(
+        expect.objectContaining({ hapStatus: -70402 }) as unknown as Error,
+      );
     });
 
     it('should return humidity value directly', () => {
-      device.state.humidity = 45;
+      setDeviceState(device, { humidity: 45 });
       const result = humidityGetHandler();
       expect(result).toBe(45);
     });
 
     it('should log debug message when GET is called', () => {
-      device.state.humidity = 60;
+      setDeviceState(device, { humidity: 60 });
       humidityGetHandler();
       expect(mockLog.debug).toHaveBeenCalledWith('Get Humidity ->', 60, '%');
     });
 
-    it('should return default 50% for negative humidity', () => {
-      device.state.humidity = -10;
+    it('should return the cached value for negative humidity', () => {
+      mockApi._mockHumidityService._getCharacteristics().get('CurrentRelativeHumidity')!.value = 42;
+      setDeviceState(device, { humidity: -10 });
       const result = humidityGetHandler();
-      expect(result).toBe(50);
+      expect(result).toBe(42);
     });
 
-    it('should return default 50% for humidity > 100', () => {
-      device.state.humidity = 150;
+    it('should return the cached value for humidity > 100', () => {
+      mockApi._mockHumidityService._getCharacteristics().get('CurrentRelativeHumidity')!.value = 42;
+      setDeviceState(device, { humidity: 150 });
       const result = humidityGetHandler();
-      expect(result).toBe(50);
+      expect(result).toBe(42);
     });
 
     it('should return 0% for zero humidity (valid)', () => {
-      device.state.humidity = 0;
+      setDeviceState(device, { humidity: 0 });
       const result = humidityGetHandler();
       expect(result).toBe(0);
     });
 
     it('should return 100% for 100 humidity (valid)', () => {
-      device.state.humidity = 100;
+      setDeviceState(device, { humidity: 100 });
       const result = humidityGetHandler();
       expect(result).toBe(100);
     });
@@ -366,7 +316,7 @@ describe('HumidityService', () => {
         humidityOffset: -5,
       });
 
-      device.updateState({ humidity: 50 });
+      emitSensorData(mockMqttClient, { hact: '0050' });
 
       expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
@@ -383,7 +333,7 @@ describe('HumidityService', () => {
         humidityOffset: 5,
       });
 
-      device.updateState({ humidity: 60 });
+      emitSensorData(mockMqttClient, { hact: '0060' });
 
       expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
@@ -400,7 +350,7 @@ describe('HumidityService', () => {
         humidityOffset: -20,
       });
 
-      device.updateState({ humidity: 10 });
+      emitSensorData(mockMqttClient, { hact: '0010' });
 
       expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
@@ -417,7 +367,7 @@ describe('HumidityService', () => {
         humidityOffset: 20,
       });
 
-      device.updateState({ humidity: 95 });
+      emitSensorData(mockMqttClient, { hact: '0095' });
 
       expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentRelativeHumidity',
@@ -425,7 +375,7 @@ describe('HumidityService', () => {
       );
     });
 
-    it('applies the offset to the 50% default when sensor data is unavailable', () => {
+    it('returns the cached value unmodified (no offset) when sensor data is unavailable', () => {
       service = new HumidityService({
         accessory: mockAccessory,
         device,
@@ -435,9 +385,27 @@ describe('HumidityService', () => {
       });
 
       const humidityChar = mockApi._mockHumidityService._getCharacteristics().get('CurrentRelativeHumidity');
+      humidityChar!.value = 37;
       const handler = humidityChar!.onGet.mock.calls[0][0] as () => number;
 
-      expect(handler()).toBe(40); // 50 + (-10)
+      // The cached value already includes the offset; it must not be applied twice
+      expect(handler()).toBe(37);
+    });
+
+    it('clamps the GET result to 0-100 after applying the offset', () => {
+      service = new HumidityService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        humidityOffset: 20,
+      });
+
+      const humidityChar = mockApi._mockHumidityService._getCharacteristics().get('CurrentRelativeHumidity');
+      const handler = humidityChar!.onGet.mock.calls[0][0] as () => number;
+
+      setDeviceState(device, { humidity: 95 });
+      expect(handler()).toBe(100);
     });
 
     it('defaults to no offset when not provided', () => {
@@ -448,7 +416,7 @@ describe('HumidityService', () => {
         log: mockLog,
       });
 
-      device.updateState({ humidity: 50 });
+      emitSensorData(mockMqttClient, { hact: '0050' });
 
       expect(mockApi._mockHumidityService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentRelativeHumidity',

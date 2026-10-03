@@ -1,36 +1,61 @@
 /**
  * Shared Test Utilities
  *
- * Common mock factories used across all test files.
- * Eliminates duplication of mock creation code.
+ * Common mock factories used across the test suite, so each test file only
+ * declares what is specific to it (characteristic tables, accessory wiring).
  */
 
 import { vi, type Mock, type Mocked } from 'vitest';
-import type { Logging, PlatformAccessory, Service } from 'homebridge';
+import type { API, Logging, Service } from 'homebridge';
 import type { DysonMqttClient } from '../../src/protocol/mqttClient.js';
 import type { DeviceInfo, MqttClientFactory } from '../../src/devices/index.js';
+
+type Handler = (...args: unknown[]) => void;
+
+/**
+ * Minimal event registry backing the mock clients: `on` registers, `_emit`
+ * dispatches, `removeAllListeners` clears (like a real EventEmitter).
+ */
+function createEventRegistry() {
+  const eventHandlers = new Map<string, Handler[]>();
+  return {
+    add(event: string, handler: Handler): void {
+      if (!eventHandlers.has(event)) {
+        eventHandlers.set(event, []);
+      }
+      eventHandlers.get(event)!.push(handler);
+    },
+    emit(event: string, ...args: unknown[]): void {
+      (eventHandlers.get(event) || []).forEach((handler) => handler(...args));
+    },
+    get(event: string): Handler[] {
+      return eventHandlers.get(event) || [];
+    },
+    clear(): void {
+      eventHandlers.clear();
+    },
+  };
+}
 
 // ============================================================================
 // Mock MQTT Client (for DysonMqttClient - used in device/service tests)
 // ============================================================================
 
 export type MockDysonMqttClient = Mocked<DysonMqttClient> & {
+  /** Dispatch an event to the handlers registered with `on` */
   _emit: (event: string, ...args: unknown[]) => void;
 };
 
 /**
  * Create a mock DysonMqttClient with event handler support.
- * Used in device and service tests.
+ * Used in device, accessory and service tests.
  */
 export function createMockMqttClient(): MockDysonMqttClient {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
+  const events = createEventRegistry();
 
   const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
+    on: vi.fn((event: string, handler: Handler) => {
+      events.add(event, handler);
       return mockClient;
     }),
     connect: vi.fn().mockResolvedValue(undefined),
@@ -39,17 +64,25 @@ export function createMockMqttClient(): MockDysonMqttClient {
     requestCurrentState: vi.fn().mockResolvedValue(undefined),
     publishCommand: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
+    removeAllListeners: vi.fn(() => {
+      events.clear();
+      return mockClient;
+    }),
+    _emit: events.emit,
   };
 
   return mockClient as unknown as MockDysonMqttClient;
 }
 
+/**
+ * Create a mock MQTT client factory that returns the given mock client.
+ */
+export function createMockMqttClientFactory(mockClient: MockDysonMqttClient): MqttClientFactory & Mock {
+  return vi.fn().mockReturnValue(mockClient) as unknown as MqttClientFactory & Mock;
+}
+
 // ============================================================================
-// Mock raw MQTT client (for mqttClient.test.ts)
+// Mock raw MQTT client (mqtt library level, for mqttClient.test.ts)
 // ============================================================================
 
 export type MockRawMqttClient = ReturnType<typeof createMockRawMqttClient>;
@@ -59,77 +92,36 @@ export type MockRawMqttClient = ReturnType<typeof createMockRawMqttClient>;
  * Used in protocol-layer tests for DysonMqttClient.
  */
 export function createMockRawMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
+  const events = createEventRegistry();
 
   const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
+    on: vi.fn((event: string, handler: Handler) => {
+      events.add(event, handler);
       return mockClient;
     }),
-    end: vi.fn((force: boolean, opts: object, callback: () => void) => {
+    end: vi.fn((_force?: boolean, _opts?: object, callback?: () => void) => {
+      if (typeof callback === 'function') {
+        callback();
+      }
+    }),
+    subscribe: vi.fn((_topic: string, _opts: object, callback: (error?: Error) => void) => {
       callback();
     }),
-    subscribe: vi.fn((topic: string, opts: object, callback: (error?: Error) => void) => {
+    unsubscribe: vi.fn((_topic: string, callback: (error?: Error) => void) => {
       callback();
     }),
-    unsubscribe: vi.fn((topic: string, callback: (error?: Error) => void) => {
+    publish: vi.fn((_topic: string, _payload: string, _opts: object, callback: (error?: Error) => void) => {
       callback();
     }),
-    publish: vi.fn((topic: string, payload: string, opts: object, callback: (error?: Error) => void) => {
-      callback();
+    removeAllListeners: vi.fn(() => {
+      events.clear();
+      return mockClient;
     }),
-    removeAllListeners: vi.fn(),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-    _getHandlers: (event: string) => eventHandlers.get(event) || [],
+    _emit: events.emit,
+    _getHandlers: events.get,
   };
 
   return mockClient;
-}
-
-// ============================================================================
-// Mock HomeKit Service
-// ============================================================================
-
-/**
- * Create a mock HomeKit Service with characteristic tracking.
- */
-export function createMockService() {
-  const characteristics = new Map<string, {
-    onGet: Mock;
-    onSet: Mock;
-    setProps: Mock;
-    getValue: Mock;
-  }>();
-
-  const mockService = {
-    setCharacteristic: vi.fn().mockReturnThis(),
-    getCharacteristic: vi.fn((char: unknown) => {
-      const uuid = typeof char === 'object' && char !== null && 'UUID' in char
-        ? (char as { UUID: string }).UUID
-        : String(char);
-      if (!characteristics.has(uuid)) {
-        const charMock = {
-          onGet: vi.fn().mockReturnThis(),
-          onSet: vi.fn().mockReturnThis(),
-          setProps: vi.fn().mockReturnThis(),
-          getValue: vi.fn(),
-        };
-        characteristics.set(uuid, charMock);
-      }
-      return characteristics.get(uuid);
-    }),
-    updateCharacteristic: vi.fn(),
-    addOptionalCharacteristic: vi.fn().mockReturnThis(),
-    addLinkedService: vi.fn().mockReturnThis(),
-  };
-
-  return mockService as unknown as Mocked<Service>;
 }
 
 // ============================================================================
@@ -151,26 +143,103 @@ export function createMockLog(): Mocked<Logging> {
 }
 
 // ============================================================================
-// Mock Accessory
+// Mock HAP
 // ============================================================================
 
 /**
- * Create a mock PlatformAccessory.
+ * Stand-in for HAP's HapStatusError, carrying the numeric status.
  */
-export function createMockAccessory(primaryService?: Mocked<Service>) {
+export class HapStatusError extends Error {
+  constructor(public hapStatus: number) {
+    super('HAP ' + hapStatus);
+  }
+}
+
+/**
+ * Create a mock API exposing the given HAP Service/Characteristic tables and
+ * HapStatusError. `extras` are merged onto the API object (e.g. `_mockService`
+ * handles the test wants to reach later).
+ */
+export function createMockHapApi<
+  S extends object,
+  C extends object,
+  X extends object = Record<never, never>,
+>(tables: { Service: S; Characteristic: C }, extras?: X) {
   return {
-    displayName: 'Test Dyson',
-    UUID: 'test-uuid',
-    getService: vi.fn((serviceType: unknown) => {
-      if (primaryService && serviceType === primaryService) {
-        return primaryService;
-      }
-      return undefined;
+    hap: {
+      Service: tables.Service,
+      Characteristic: tables.Characteristic,
+      HapStatusError,
+    },
+    ...extras,
+  } as unknown as Omit<API, 'hap'> & { hap: API['hap'] & { Service: S; Characteristic: C } } & X;
+}
+
+/** A mock characteristic as stored by createMockService */
+export interface MockCharacteristic {
+  onGet: Mock;
+  onSet: Mock;
+  setProps: Mock;
+  getValue: Mock;
+  updateValue: Mock;
+  value: unknown;
+}
+
+export type MockService = Mocked<Service> & {
+  /** Characteristic mocks, keyed by UUID (or String(characteristic) when it has none) */
+  _getCharacteristics: () => Map<string, MockCharacteristic>;
+  /** The mock for one characteristic (created on first access), without recording a getCharacteristic call */
+  _getCharacteristic: (characteristic: unknown) => MockCharacteristic;
+};
+
+/**
+ * Create a mock HomeKit Service with characteristic tracking.
+ *
+ * Like HAP, `updateCharacteristic` and a characteristic's `updateValue` store
+ * the value, so tests can read back what HomeKit would hold.
+ *
+ * @param initialValue - Value of a characteristic before anything updates it
+ */
+export function createMockService(initialValue: unknown = undefined): MockService {
+  const characteristics = new Map<string, MockCharacteristic>();
+
+  const getCharacteristic = (char: unknown): MockCharacteristic => {
+    const key = typeof char === 'object' && char !== null && 'UUID' in char
+      ? (char as { UUID: string }).UUID
+      : String(char);
+    if (!characteristics.has(key)) {
+      const charMock: MockCharacteristic = {
+        onGet: vi.fn().mockReturnThis(),
+        onSet: vi.fn().mockReturnThis(),
+        setProps: vi.fn().mockReturnThis(),
+        getValue: vi.fn(),
+        updateValue: vi.fn((value: unknown) => {
+          charMock.value = value;
+          return charMock;
+        }),
+        value: initialValue,
+      };
+      characteristics.set(key, charMock);
+    }
+    return characteristics.get(key)!;
+  };
+
+  const service = {
+    setCharacteristic: vi.fn().mockReturnThis(),
+    getCharacteristic: vi.fn(getCharacteristic),
+    updateCharacteristic: vi.fn((char: unknown, value: unknown) => {
+      getCharacteristic(char).value = value;
+      return service;
     }),
-    addService: vi.fn(() => primaryService ?? createMockService()),
-    removeService: vi.fn(),
-    context: { device: {} },
-  } as unknown as Mocked<PlatformAccessory>;
+    removeCharacteristic: vi.fn(),
+    characteristics: [] as { UUID: string }[],
+    addOptionalCharacteristic: vi.fn().mockReturnThis(),
+    addLinkedService: vi.fn().mockReturnThis(),
+    _getCharacteristics: () => characteristics,
+    _getCharacteristic: getCharacteristic,
+  };
+
+  return service as unknown as MockService;
 }
 
 // ============================================================================
@@ -179,18 +248,12 @@ export function createMockAccessory(primaryService?: Mocked<Service>) {
 
 /**
  * Default device info for tests (TP04 model).
+ * Spread it (`{ ...DEFAULT_DEVICE_INFO }`) when a test may mutate the result.
  */
-export const DEFAULT_DEVICE_INFO: DeviceInfo = {
+export const DEFAULT_DEVICE_INFO: Readonly<DeviceInfo> = {
   serial: 'ABC-AB-12345678',
   productType: '438',
   name: 'Living Room',
   credentials: 'localPassword123',
   ipAddress: '192.168.1.100',
 };
-
-/**
- * Create a mock MQTT client factory that returns the given mock client.
- */
-export function createMockMqttClientFactory(mockClient: MockDysonMqttClient): MqttClientFactory {
-  return vi.fn().mockReturnValue(mockClient) as unknown as MqttClientFactory;
-}

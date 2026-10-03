@@ -24,7 +24,7 @@ MQTT client wrapper for Dyson devices.
 - `maxReconnectAttempts`: Max reconnection tries (default: 5)
 
 **Events:**
-- `connect`, `disconnect`, `error`, `message`
+- `connect`, `disconnect`, `error`, `message`, `reconnect`, `reconnectFailed`, `offline`
 
 **Methods:**
 - `connect()`: Establish MQTT connection
@@ -33,19 +33,15 @@ MQTT client wrapper for Dyson devices.
 - `publish(topic, payload)`: Publish message
 
 ### messageCodec.ts
-Encodes HomeKit commands to Dyson protocol and decodes device state.
+Decodes device state and provides value conversions for commands.
 
 **Conversions:**
 - Fan speed: HomeKit percentage (0-100) ↔ Dyson speed (1-10, -1 for auto)
 - Temperature: Celsius ↔ Kelvin × 10
-- Oscillation angle: Degrees (45-355)
+- Filter life: hours (Link models) or percent → percent
 
-**Command Types:**
-- Power, speed, oscillation
-- Auto mode, night mode, continuous monitoring
-- Target temperature (heating)
-- Target humidity (humidifier)
-- Jet focus, sleep timer
+Commands are built by `DysonLinkDevice`, which uses the codec's
+`encodeFanSpeed` / `encodeTemperature` helpers.
 
 **State Decoding:**
 - Power state, fan speed, oscillation settings

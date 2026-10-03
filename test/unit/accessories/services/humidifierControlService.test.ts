@@ -2,87 +2,15 @@
  * HumidifierControlService Unit Tests
  */
 
-import { vi, type Mock, type Mocked } from 'vitest';
+import { vi, type Mock } from 'vitest';
 
 import { HumidifierControlService } from '../../../../src/accessories/services/humidifierControlService.js';
 import type { HumidifierControlServiceConfig } from '../../../../src/accessories/services/humidifierControlService.js';
 import { DysonLinkDevice } from '../../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../../src/devices/index.js';
-import type { DysonMqttClient } from '../../../../src/protocol/mqttClient.js';
-import type { API, PlatformAccessory, Service, Logging } from 'homebridge';
-
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
-
-// Create mock HomeKit service
-function createMockService() {
-  const characteristics = new Map<string, {
-    onGet: Mock;
-    onSet: Mock;
-    setProps: Mock;
-    getValue: Mock;
-  }>();
-
-  const mockService = {
-    setCharacteristic: vi.fn().mockReturnThis(),
-    getCharacteristic: vi.fn((char: unknown) => {
-      const uuid = typeof char === 'object' && char !== null && 'UUID' in char
-        ? (char as { UUID: string }).UUID
-        : String(char);
-      if (!characteristics.has(uuid)) {
-        const charMock = {
-          onGet: vi.fn().mockReturnThis(),
-          onSet: vi.fn().mockReturnThis(),
-          setProps: vi.fn().mockReturnThis(),
-          getValue: vi.fn(),
-        };
-        characteristics.set(uuid, charMock);
-      }
-      return characteristics.get(uuid);
-    }),
-    updateCharacteristic: vi.fn(),
-    addOptionalCharacteristic: vi.fn().mockReturnThis(),
-    addLinkedService: vi.fn().mockReturnThis(),
-  };
-
-  return mockService as unknown as Mocked<Service>;
-}
-
-// Create mock logging
-function createMockLog(): Logging {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    log: vi.fn(),
-    success: vi.fn(),
-  } as unknown as Logging;
-}
+import type { API, PlatformAccessory, Logging } from 'homebridge';
+import { HapStatusError, createMockHapApi, createMockLog, createMockMqttClient, createMockService } from '../../../helpers/mocks.js';
+import { setDeviceState } from '../../../helpers/device.js';
 
 // Create mock API with hap
 function createMockApi() {
@@ -112,12 +40,7 @@ function createMockApi() {
     HumidifierDehumidifier: { UUID: 'humidifier-dehumidifier-uuid' },
   };
 
-  return {
-    hap: {
-      Service,
-      Characteristic,
-    },
-  } as unknown as API;
+  return createMockHapApi({ Service, Characteristic });
 }
 
 /**
@@ -171,7 +94,7 @@ describe('HumidifierControlService', () => {
 
     mockAccessory = {
       displayName: 'Living Room Humidifier',
-      getService: vi.fn().mockReturnValue(mockService),
+      getServiceById: vi.fn().mockReturnValue(undefined),
       addService: vi.fn().mockReturnValue(mockService),
     } as unknown as PlatformAccessory;
 
@@ -218,7 +141,30 @@ describe('HumidifierControlService', () => {
 
   describe('initialization', () => {
     it('should get or create HumidifierDehumidifier service', () => {
-      expect(mockAccessory.getService).toHaveBeenCalled();
+      expect(mockAccessory.getServiceById).toHaveBeenCalledWith(
+        mockApi.hap.Service.HumidifierDehumidifier, 'humidifier',
+      );
+      expect(mockAccessory.addService).toHaveBeenCalledWith(
+        mockApi.hap.Service.HumidifierDehumidifier, 'Humidifier', 'humidifier',
+      );
+    });
+
+    it('should not overwrite ConfiguredName of an existing service', () => {
+      const existingService = createMockService();
+      const existingAccessory = {
+        displayName: 'Existing',
+        getServiceById: vi.fn().mockReturnValue(existingService),
+        addService: vi.fn(),
+      } as unknown as PlatformAccessory;
+
+      new HumidifierControlService({ accessory: existingAccessory, device, api: mockApi, log: mockLog });
+
+      expect(existingAccessory.addService).not.toHaveBeenCalled();
+      expect(existingService.addOptionalCharacteristic).not.toHaveBeenCalled();
+      expect(existingService.updateCharacteristic).not.toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+        expect.anything(),
+      );
     });
 
     it('should set configured name', () => {
@@ -278,7 +224,7 @@ describe('HumidifierControlService', () => {
       const fullRangeService = createMockService();
       const fullRangeAccessory = {
         displayName: 'Full Range Humidifier',
-        getService: vi.fn().mockReturnValue(fullRangeService),
+        getServiceById: vi.fn().mockReturnValue(fullRangeService),
         addService: vi.fn().mockReturnValue(fullRangeService),
       } as unknown as PlatformAccessory;
 
@@ -305,6 +251,11 @@ describe('HumidifierControlService', () => {
     it('should return 0 when humidifier is off', () => {
       const result = activeGetHandler();
       expect(result).toBe(0);
+    });
+
+    it('should throw HapStatusError when the device is disconnected', () => {
+      mockMqttClient.isConnected.mockReturnValue(false);
+      expect(() => activeGetHandler()).toThrow(HapStatusError);
     });
 
     it('should return 1 when humidifier is on', async () => {
@@ -373,12 +324,51 @@ describe('HumidifierControlService', () => {
       const result = currentStateGetHandler();
       expect(result).toBe(1); // IDLE
     });
+
+    it('should return IDLE (1) when humidifier is on but humidity is unknown', async () => {
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { hume: 'ON', humt: '0050' } },
+      });
+
+      expect(currentStateGetHandler()).toBe(1);
+    });
   });
 
   describe('TargetHumidifierDehumidifierState characteristic', () => {
-    it('should always return HUMIDIFIER (1)', () => {
+    it('should return HUMIDIFIER (1) when not in auto mode', () => {
       const result = targetStateGetHandler();
       expect(result).toBe(1);
+    });
+
+    it('should return HUMIDIFIER_OR_DEHUMIDIFIER (0) when humidifierAuto is set', () => {
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { hume: 'AUTO' } },
+      });
+      expect(targetStateGetHandler()).toBe(0);
+
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { hume: 'ON' } },
+      });
+      expect(targetStateGetHandler()).toBe(1);
+    });
+
+    it('should push TargetHumidifierDehumidifierState on state change', () => {
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { hume: 'AUTO' } },
+      });
+
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.TargetHumidifierDehumidifierState,
+        0,
+      );
     });
 
     it('should call setHumidifierAuto() when set to HUMIDIFIER_OR_DEHUMIDIFIER (0)', async () => {
@@ -392,20 +382,27 @@ describe('HumidifierControlService', () => {
       );
     });
 
-    it('should not send command when set to HUMIDIFIER (1)', async () => {
+    it('should call setHumidifier(true) when set to HUMIDIFIER (1)', async () => {
+      const setHumidifier = vi.spyOn(device, 'setHumidifier');
       mockMqttClient.publishCommand.mockClear();
       await targetStateSetHandler(1);
       await flushCommands();
 
-      // No command should be sent for manual mode
-      expect(mockMqttClient.publishCommand).not.toHaveBeenCalled();
+      expect(setHumidifier).toHaveBeenCalledWith(true);
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { hume: 'ON' },
+        }),
+      );
     });
   });
 
   describe('CurrentRelativeHumidity characteristic', () => {
-    it('should return 50 as default when humidity is undefined', () => {
+    it('should return the cached HomeKit value when humidity is undefined', () => {
+      mockService.getCharacteristic(mockApi.hap.Characteristic.CurrentRelativeHumidity)!.value = 37;
       const result = currentHumidityGetHandler();
-      expect(result).toBe(50);
+      expect(result).toBe(37);
     });
 
     it('should return current humidity value', async () => {
@@ -421,9 +418,10 @@ describe('HumidifierControlService', () => {
   });
 
   describe('RelativeHumidityHumidifierThreshold characteristic', () => {
-    it('should return 50 as default when target humidity is undefined', () => {
+    it('should return the cached HomeKit value when target humidity is undefined', () => {
+      mockService.getCharacteristic(mockApi.hap.Characteristic.RelativeHumidityHumidifierThreshold)!.value = 45;
       const result = targetHumidityGetHandler();
-      expect(result).toBe(50);
+      expect(result).toBe(45);
     });
 
     it('should return target humidity value', async () => {
@@ -481,7 +479,7 @@ describe('HumidifierControlService', () => {
 
     it('should return 0 when water tank is empty', async () => {
       // Set water tank empty state directly on device state
-      device.state.waterTankEmpty = true;
+      setDeviceState(device, { waterTankEmpty: true });
 
       const result = waterLevelGetHandler();
       expect(result).toBe(0);
@@ -561,9 +559,7 @@ describe('HumidifierControlService', () => {
 
     it('should show water tank empty status', async () => {
       // Update device state with water tank empty
-      device.updateState({
-        waterTankEmpty: true,
-      });
+      setDeviceState(device, { waterTankEmpty: true }, { emit: true });
 
       const Characteristic = mockApi.hap.Characteristic;
 
@@ -621,31 +617,22 @@ describe('HumidifierControlService', () => {
   });
 
   describe('error handling', () => {
-    it('should emit commandError when setHumidifier MQTT publish fails', async () => {
+    it('should throw HapStatusError when setHumidifier MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = vi.fn();
-      device.on('commandError', errorHandler);
-      await activeSetHandler(1);
-      await flushCommands();
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+      await expect(activeSetHandler(1)).rejects.toBeInstanceOf(HapStatusError);
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set humidifier: MQTT error');
     });
 
-    it('should emit commandError when setTargetHumidity MQTT publish fails', async () => {
+    it('should throw HapStatusError when setTargetHumidity MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = vi.fn();
-      device.on('commandError', errorHandler);
-      await targetHumiditySetHandler(50);
-      await flushCommands();
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+      await expect(targetHumiditySetHandler(50)).rejects.toBeInstanceOf(HapStatusError);
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set target humidity: MQTT error');
     });
 
-    it('should emit commandError when setHumidifierAuto MQTT publish fails', async () => {
+    it('should throw HapStatusError when setHumidifierAuto MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = vi.fn();
-      device.on('commandError', errorHandler);
-      await targetStateSetHandler(0);
-      await flushCommands();
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+      await expect(targetStateSetHandler(0)).rejects.toBeInstanceOf(HapStatusError);
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set humidifier auto: MQTT error');
     });
   });
 });

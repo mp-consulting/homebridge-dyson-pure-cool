@@ -2,87 +2,14 @@
  * NightModeService Unit Tests
  */
 
-import { vi, type Mock, type Mocked } from 'vitest';
+import { vi, type Mock } from 'vitest';
 
 import { NightModeService } from '../../../../src/accessories/services/nightModeService.js';
 import type { NightModeServiceConfig } from '../../../../src/accessories/services/nightModeService.js';
 import { DysonLinkDevice } from '../../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../../src/devices/index.js';
-import type { DysonMqttClient } from '../../../../src/protocol/mqttClient.js';
-import type { API, PlatformAccessory, Service, Logging } from 'homebridge';
-
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
-
-// Create mock HomeKit service
-function createMockService() {
-  const characteristics = new Map<string, {
-    onGet: Mock;
-    onSet: Mock;
-    setProps: Mock;
-    getValue: Mock;
-  }>();
-
-  const mockService = {
-    setCharacteristic: vi.fn().mockReturnThis(),
-    getCharacteristic: vi.fn((char: unknown) => {
-      const uuid = typeof char === 'object' && char !== null && 'UUID' in char
-        ? (char as { UUID: string }).UUID
-        : String(char);
-      if (!characteristics.has(uuid)) {
-        const charMock = {
-          onGet: vi.fn().mockReturnThis(),
-          onSet: vi.fn().mockReturnThis(),
-          setProps: vi.fn().mockReturnThis(),
-          getValue: vi.fn(),
-        };
-        characteristics.set(uuid, charMock);
-      }
-      return characteristics.get(uuid);
-    }),
-    updateCharacteristic: vi.fn(),
-    addOptionalCharacteristic: vi.fn().mockReturnThis(),
-    addLinkedService: vi.fn().mockReturnThis(),
-  };
-
-  return mockService as unknown as Mocked<Service>;
-}
-
-// Create mock logging
-function createMockLog(): Logging {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    log: vi.fn(),
-    success: vi.fn(),
-  } as unknown as Logging;
-}
+import type { API, PlatformAccessory, Logging } from 'homebridge';
+import { createMockHapApi, createMockLog, createMockMqttClient, createMockService } from '../../../helpers/mocks.js';
 
 // Create mock API with hap
 function createMockApi() {
@@ -96,12 +23,7 @@ function createMockApi() {
     Switch: { UUID: 'switch-uuid' },
   };
 
-  return {
-    hap: {
-      Service,
-      Characteristic,
-    },
-  } as unknown as API;
+  return createMockHapApi({ Service, Characteristic });
 }
 
 /**
@@ -142,7 +64,7 @@ describe('NightModeService', () => {
     mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
 
-    mockService = createMockService();
+    mockService = createMockService(null);
     mockLog = createMockLog();
     mockApi = createMockApi();
 
@@ -305,16 +227,87 @@ describe('NightModeService', () => {
   });
 
   describe('error handling', () => {
-    it('should emit commandError when setNightMode MQTT publish fails', async () => {
+    it('should log and throw HapStatusError when setNightMode MQTT publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
 
-      const errorHandler = vi.fn();
-      device.on('commandError', errorHandler);
+      await expect(onSetHandler(true)).rejects.toMatchObject({ hapStatus: -70402 });
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set night mode: MQTT error');
+    });
 
-      await onSetHandler(true);
-      await flushCommands();
+    it('should throw HapStatusError when setting while the device is disconnected', async () => {
+      await device.disconnect();
 
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+      await expect(onSetHandler(true)).rejects.toMatchObject({ hapStatus: -70402 });
+      expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('Failed to set night mode:'));
+    });
+
+    it('should throw HapStatusError on GET while the device is disconnected', () => {
+      mockMqttClient.isConnected.mockReturnValue(false);
+
+      expect(() => onGetHandler()).toThrow(expect.objectContaining({ hapStatus: -70402 }));
+    });
+  });
+
+  describe('existing service', () => {
+    it('should reuse a cached service without touching its ConfiguredName', () => {
+      const existingService = createMockService(null);
+      const accessoryWithExistingService = {
+        displayName: 'Living Room',
+        getServiceById: vi.fn().mockReturnValue(existingService),
+        addService: vi.fn(),
+      } as unknown as PlatformAccessory;
+
+      const service = new NightModeService({
+        accessory: accessoryWithExistingService,
+        device,
+        api: mockApi,
+        log: mockLog,
+      });
+
+      expect(accessoryWithExistingService.getServiceById).toHaveBeenCalledWith(mockApi.hap.Service.Switch, 'night-mode');
+      expect(accessoryWithExistingService.addService).not.toHaveBeenCalled();
+      expect(existingService.addOptionalCharacteristic).not.toHaveBeenCalled();
+      expect(existingService.updateCharacteristic).not.toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+        expect.anything(),
+      );
+      expect(service.getService()).toBe(existingService);
+    });
+  });
+
+  describe('state de-duplication', () => {
+    it('should not re-push an unchanged On value, but updateFromState should', () => {
+      nightModeService.updateFromState();
+      mockService.updateCharacteristic.mockClear();
+      const stateChangeSpy = vi.fn();
+      device.on('stateChange', stateChangeSpy);
+
+      // Unrelated state change: On value unchanged
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { fnsp: '0007' } },
+      });
+      expect(stateChangeSpy).toHaveBeenCalled();
+      expect(mockService.updateCharacteristic).not.toHaveBeenCalledWith(mockApi.hap.Characteristic.On, expect.anything());
+
+      nightModeService.updateFromState();
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(mockApi.hap.Characteristic.On, expect.any(Boolean));
+    });
+
+    it('should push On when the nmod field changes', () => {
+      mockService.updateCharacteristic.mockClear();
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { nmod: 'OFF' } },
+      });
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { nmod: 'ON' } },
+      });
+      expect(mockService.updateCharacteristic).toHaveBeenLastCalledWith(mockApi.hap.Characteristic.On, true);
     });
   });
 });

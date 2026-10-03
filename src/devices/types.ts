@@ -77,9 +77,9 @@ export interface DeviceState {
   sleepTimer?: number;
 
   // Filter status
-  /** HEPA filter life remaining (hours) */
+  /** HEPA filter life remaining (percent, 0-100) */
   hepaFilterLife?: number;
-  /** Carbon filter life remaining (hours) */
+  /** Carbon filter life remaining (percent, 0-100) */
   carbonFilterLife?: number;
 
   // Heating (for Hot+Cool models)
@@ -93,6 +93,8 @@ export interface DeviceState {
   // Humidifier (for humidifier models)
   /** Humidifier enabled */
   humidifierEnabled?: boolean;
+  /** Humidifier is in automatic mode */
+  humidifierAuto?: boolean;
   /** Target humidity percentage */
   targetHumidity?: number;
   /** Water tank empty */

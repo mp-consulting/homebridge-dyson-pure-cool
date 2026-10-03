@@ -7,7 +7,7 @@
 
 import { DysonDevice } from './dysonDevice.js';
 import type { DeviceFeatures, DeviceInfo } from './types.js';
-import { MessageCodec, FAN_SPEED, HEATING_TEMP, HUMIDITY, PROTOCOL, FORMAT, TEMPERATURE } from '../protocol/messageCodec.js';
+import { MessageCodec, FAN_SPEED, HEATING_TEMP, HUMIDITY, PROTOCOL, FORMAT } from '../protocol/messageCodec.js';
 import type { MqttClientFactory } from './dysonDevice.js';
 import type { MqttConnectFn } from '../protocol/mqttClient.js';
 import { getDeviceFeatures, getPowerProtocol } from '../config/index.js';
@@ -58,8 +58,15 @@ export class DysonLinkDevice extends DysonDevice {
   /** Pending command fields to be batched and sent */
   private pendingCommandFields: Record<string, string> = {};
 
-  /** Whether a command flush is scheduled */
-  private commandFlushScheduled = false;
+  /** Promise for the scheduled flush, shared by every setter batched into it */
+  private pendingFlush: Promise<void> | null = null;
+
+  /**
+   * Power state most recently commanded but not yet confirmed by the device.
+   * Lets a quick off -> on sequence send ON even though the reported state
+   * still says the fan is on.
+   */
+  private commandedPower: boolean | null = null;
 
   /** Whether a power-off is in progress (prevents concurrent commands from overriding OFF) */
   private turningOff = false;
@@ -94,35 +101,55 @@ export class DysonLinkDevice extends DysonDevice {
    * Queue command fields to be sent. Fields are merged and flushed
    * on the next microtask, allowing concurrent HomeKit updates to
    * produce a single MQTT command.
+   *
+   * @returns A promise that settles once the batched command has been sent,
+   *   rejecting if publishing failed (so HomeKit can surface the error)
    */
-  private queueCommand(fields: Record<string, string>): void {
+  private queueCommand(fields: Record<string, string>): Promise<void> {
     Object.assign(this.pendingCommandFields, fields);
 
-    if (!this.commandFlushScheduled) {
-      this.commandFlushScheduled = true;
-      queueMicrotask(() => {
-        this.flushCommand().catch((error) => {
-          this.emit('error', error instanceof Error ? error : new Error(String(error)));
+    if (!this.pendingFlush) {
+      const flush = new Promise<void>((resolve, reject) => {
+        queueMicrotask(() => {
+          this.flushCommand().then(resolve, reject);
         });
       });
+      // Callers that don't await must not trigger an unhandled rejection;
+      // awaiting callers still receive the error.
+      flush.catch(() => {});
+      this.pendingFlush = flush;
     }
+    return this.pendingFlush;
   }
 
   /**
    * Flush all pending command fields as a single MQTT command
    */
   private async flushCommand(): Promise<void> {
-    this.commandFlushScheduled = false;
+    this.pendingFlush = null;
     const fields = this.pendingCommandFields;
     this.pendingCommandFields = {};
 
     if (Object.keys(fields).length > 0) {
-      try {
-        await this.sendCommand(fields);
-      } catch (error) {
-        this.emit('commandError', error);
-      }
+      await this.sendCommand(fields);
     }
+  }
+
+  /**
+   * Build the fields that switch the fan on in manual or auto mode,
+   * honouring the model's power protocol (`fpwr` vs legacy `fmod`).
+   */
+  private buildPowerOnFields(auto: boolean, speed: number): Record<string, string> {
+    const encodedSpeed = MessageCodec.encodeFanSpeed(auto ? FAN_SPEED.AUTO : speed);
+    if (this.usesFpwrProtocol) {
+      return { fpwr: PROTOCOL.ON, auto: auto ? PROTOCOL.ON : PROTOCOL.OFF, fnsp: encodedSpeed };
+    }
+    return auto ? { fmod: PROTOCOL.AUTO } : { fmod: PROTOCOL.FAN, fnsp: encodedSpeed };
+  }
+
+  /** Last manual speed, or the default when the device hasn't reported one */
+  private currentManualSpeed(): number {
+    return this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
   }
 
   /**
@@ -138,41 +165,29 @@ export class DysonLinkDevice extends DysonDevice {
     if (on) {
       this.turningOff = false;
       // If already on, skip to avoid overriding mode changes
-      // (HomeKit often sends Active=true along with mode changes)
-      if (this.state.isOn) {
+      // (HomeKit often sends Active=true along with mode changes).
+      // Don't skip when an OFF we sent hasn't been confirmed yet: the
+      // reported state is stale and the device is actually turning off.
+      if (this.state.isOn && this.commandedPower !== false) {
         return;
       }
 
-      if (this.usesFpwrProtocol) {
-        if (this.state.autoMode) {
-          this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
-        } else {
-          const speed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
-          const encodedSpeed = String(speed).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
-          this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.OFF, fnsp: encodedSpeed });
-        }
-      } else {
-        if (this.state.autoMode) {
-          this.queueCommand({ fmod: PROTOCOL.AUTO });
-        } else {
-          this.queueCommand({ fmod: PROTOCOL.FAN });
-        }
-      }
+      this.commandedPower = true;
+      const powerOn = this.usesFpwrProtocol
+        ? this.queueCommand(this.buildPowerOnFields(this.state.autoMode, this.currentManualSpeed()))
+        : this.queueCommand({ fmod: this.state.autoMode ? PROTOCOL.AUTO : PROTOCOL.FAN });
 
-      await this.applyActivationDefaults();
+      await Promise.all([powerOn, this.applyActivationDefaults()]);
     } else {
       // Power off: send directly to prevent concurrent mode changes
       // (e.g. TargetAirPurifierState) from overwriting the OFF command
       // via command batching. The turningOff flag prevents other methods
       // called in the same tick from queuing commands that override OFF.
       this.turningOff = true;
+      this.commandedPower = false;
       this.pendingCommandFields = {};
       try {
-        if (this.usesFpwrProtocol) {
-          await this.sendCommand({ fpwr: PROTOCOL.OFF });
-        } else {
-          await this.sendCommand({ fmod: PROTOCOL.OFF });
-        }
+        await this.sendCommand(this.usesFpwrProtocol ? { fpwr: PROTOCOL.OFF } : { fmod: PROTOCOL.OFF });
       } finally {
         this.turningOff = false;
       }
@@ -229,44 +244,28 @@ export class DysonLinkDevice extends DysonDevice {
     if (this.turningOff) {
       return;
     }
-    if (this.usesFpwrProtocol) {
-      if (speed < 0) {
-        this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
-      } else {
-        const clampedSpeed = Math.max(FAN_SPEED.MIN, Math.min(FAN_SPEED.MAX, speed));
-        const encodedSpeed = String(clampedSpeed).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
-        this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.OFF, fnsp: encodedSpeed });
-      }
-    } else {
-      if (speed < 0) {
-        this.queueCommand({ fmod: PROTOCOL.AUTO });
-      } else {
-        const clampedSpeed = Math.max(FAN_SPEED.MIN, Math.min(FAN_SPEED.MAX, speed));
-        const encodedSpeed = String(clampedSpeed).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
-        this.queueCommand({ fnsp: encodedSpeed, fmod: PROTOCOL.FAN });
-      }
-    }
+    await this.queueCommand(this.buildPowerOnFields(speed < 0, speed));
   }
 
   /**
    * Set oscillation on or off
    */
   async setOscillation(on: boolean): Promise<void> {
-    this.queueCommand({ oson: on ? PROTOCOL.ON : PROTOCOL.OFF });
+    await this.queueCommand({ oson: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
    * Set night mode on or off
    */
   async setNightMode(on: boolean): Promise<void> {
-    this.queueCommand({ nmod: on ? PROTOCOL.ON : PROTOCOL.OFF });
+    await this.queueCommand({ nmod: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
    * Set continuous monitoring on or off
    */
   async setContinuousMonitoring(on: boolean): Promise<void> {
-    this.queueCommand({ rhtm: on ? PROTOCOL.ON : PROTOCOL.OFF });
+    await this.queueCommand({ rhtm: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
@@ -276,48 +275,21 @@ export class DysonLinkDevice extends DysonDevice {
     if (this.turningOff) {
       return;
     }
-    if (this.usesFpwrProtocol) {
-      if (on) {
-        this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.ON, fnsp: PROTOCOL.AUTO });
-      } else {
-        const currentSpeed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
-        const encodedSpeed = String(currentSpeed).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
-        this.queueCommand({ fpwr: PROTOCOL.ON, auto: PROTOCOL.OFF, fnsp: encodedSpeed });
-      }
-    } else {
-      if (on) {
-        this.queueCommand({ fmod: PROTOCOL.AUTO });
-      } else {
-        const currentSpeed = this.state.fanSpeed > 0 ? this.state.fanSpeed : FAN_SPEED.DEFAULT;
-        const encodedSpeed = String(currentSpeed).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR);
-        this.queueCommand({ fmod: PROTOCOL.FAN, fnsp: encodedSpeed });
-      }
-    }
+    await this.queueCommand(this.buildPowerOnFields(on, this.currentManualSpeed()));
   }
 
   /**
    * Set jet focus (front airflow direction) on or off
    */
   async setJetFocus(on: boolean): Promise<void> {
-    this.queueCommand({ ffoc: on ? PROTOCOL.ON : PROTOCOL.OFF });
+    await this.queueCommand({ ffoc: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
    * Set heating mode on or off (HP models only)
    */
   async setHeating(on: boolean): Promise<void> {
-    this.queueCommand({ hmod: on ? PROTOCOL.HEAT : PROTOCOL.OFF });
-  }
-
-  /**
-   * Set heating mode on or off (HP-series only)
-   * Alias for setHeating with feature check.
-   */
-  async setHeatingMode(on: boolean): Promise<void> {
-    if (!this.supportedFeatures.heating) {
-      throw new Error('Heating not supported on this device');
-    }
-    await this.setHeating(on);
+    await this.queueCommand({ hmod: on ? PROTOCOL.HEAT : PROTOCOL.OFF });
   }
 
   /**
@@ -330,24 +302,21 @@ export class DysonLinkDevice extends DysonDevice {
       HEATING_TEMP.MIN_CELSIUS,
       Math.min(HEATING_TEMP.MAX_CELSIUS, celsius),
     );
-    const kelvinTimes10 = Math.round(
-      (clampedTemp + TEMPERATURE.KELVIN_OFFSET) * TEMPERATURE.KELVIN_MULTIPLIER,
-    );
-    this.queueCommand({ hmax: String(kelvinTimes10) });
+    await this.queueCommand({ hmax: MessageCodec.encodeTemperature(clampedTemp) });
   }
 
   /**
    * Set humidifier mode on or off (PH models only)
    */
   async setHumidifier(on: boolean): Promise<void> {
-    this.queueCommand({ hume: on ? PROTOCOL.ON : PROTOCOL.OFF });
+    await this.queueCommand({ hume: on ? PROTOCOL.ON : PROTOCOL.OFF });
   }
 
   /**
    * Set humidifier to auto mode (PH models only)
    */
   async setHumidifierAuto(): Promise<void> {
-    this.queueCommand({ hume: PROTOCOL.AUTO });
+    await this.queueCommand({ hume: PROTOCOL.AUTO });
   }
 
   /**
@@ -360,7 +329,7 @@ export class DysonLinkDevice extends DysonDevice {
       HUMIDITY.MIN_PERCENT,
       Math.min(HUMIDITY.MAX_PERCENT, Math.round(percent)),
     );
-    this.queueCommand({
+    await this.queueCommand({
       humt: String(clampedPercent).padStart(FORMAT.PAD_LENGTH, FORMAT.PAD_CHAR),
     });
   }
@@ -371,7 +340,7 @@ export class DysonLinkDevice extends DysonDevice {
   override async disconnect(): Promise<void> {
     // Clear pending commands to prevent stale fields from being sent on reconnect
     this.pendingCommandFields = {};
-    this.commandFlushScheduled = false;
+    this.commandedPower = null;
     await super.disconnect();
   }
 
@@ -398,6 +367,11 @@ export class DysonLinkDevice extends DysonDevice {
     this.emit('debug', `Received state: fmod=${productState.fmod}, auto=${productState.auto}, fnsp=${productState.fnsp}`);
 
     const parsedState = MessageCodec.parseRawState(productState);
+
+    // Once the device reports the power state we commanded, it's confirmed
+    if (parsedState.isOn !== undefined && parsedState.isOn === this.commandedPower) {
+      this.commandedPower = null;
+    }
 
     if (Object.keys(parsedState).length > 0) {
       this.updateState(parsedState);

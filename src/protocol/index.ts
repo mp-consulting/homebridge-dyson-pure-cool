@@ -14,7 +14,6 @@ export type {
 export { MessageCodec } from './messageCodec.js';
 export {
   FAN_SPEED,
-  OSCILLATION_ANGLE,
   TEMPERATURE,
   HEATING_TEMP,
   HUMIDITY,
@@ -24,7 +23,6 @@ export {
   PERCENT,
 } from './messageCodec.js';
 export type {
-  CommandData,
   RawStateData,
   DysonMessage,
 } from './messageCodec.js';

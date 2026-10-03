@@ -5,25 +5,17 @@
  * Provides overall air quality level, PM2.5, PM10, and VOC readings.
  */
 
-import type {
-  API,
-  CharacteristicValue,
-  Logging,
-  PlatformAccessory,
-  Service,
-} from 'homebridge';
+import type { CharacteristicValue } from 'homebridge';
 
 import type { DysonLinkDevice } from '../../devices/dysonLinkDevice.js';
 import type { DeviceState } from '../../devices/types.js';
+import { BaseService } from './baseService.js';
+import type { BaseServiceConfig, CharacteristicType } from './baseService.js';
 
 /**
  * Configuration for AirQualityService
  */
-export interface AirQualityServiceConfig {
-  accessory: PlatformAccessory;
-  device: DysonLinkDevice;
-  api: API;
-  log: Logging;
+export interface AirQualityServiceConfig extends BaseServiceConfig<DysonLinkDevice> {
   /** Whether device supports NO2 sensor */
   hasNo2Sensor?: boolean;
   /**
@@ -31,9 +23,20 @@ export interface AirQualityServiceConfig {
    * Basic sensors use pact/vact index (0-9 scale) instead of PM2.5 µg/m³
    */
   basicAirQualitySensor?: boolean;
-  /** Primary service to link this service to */
-  primaryService?: Service;
 }
+
+/** HomeKit AirQuality values */
+const AIR_QUALITY = {
+  UNKNOWN: 0,
+  EXCELLENT: 1,
+  GOOD: 2,
+  FAIR: 3,
+  INFERIOR: 4,
+  POOR: 5,
+} as const;
+
+/** Upper bounds for EXCELLENT, GOOD, FAIR and INFERIOR; anything above is POOR */
+type Thresholds = { EXCELLENT: number; GOOD: number; FAIR: number; INFERIOR: number };
 
 /**
  * HomeKit AirQuality levels based on PM2.5 µg/m³
@@ -81,170 +84,130 @@ const VACT_THRESHOLDS = {
 const VOC_SCALING_FACTOR = 0.125;
 
 /**
+ * HomeKit AirQuality levels based on PM10 µg/m³ (EPA AQI breakpoints)
+ */
+const PM10_THRESHOLDS = {
+  EXCELLENT: 54,
+  GOOD: 154,
+  FAIR: 254,
+  INFERIOR: 354,
+};
+
+/**
+ * Thresholds for advanced sensor VOC / NO2 indices.
+ * Dyson reports these as index × 10 (va10, noxl); after dividing by
+ * INDEX_DIVISOR the Dyson app scale is 0-3 good, 4-6 fair, 7-8 poor, 9+ very poor.
+ */
+const INDEX_THRESHOLDS = {
+  EXCELLENT: 1,
+  GOOD: 3,
+  FAIR: 6,
+  INFERIOR: 8,
+};
+
+/** Divisor converting va10/noxl readings to the Dyson 0-10 index */
+const INDEX_DIVISOR = 10;
+
+/**
  * AirQualityService handles the HomeKit AirQualitySensor service
  *
  * Maps Dyson air quality data to HomeKit characteristics:
- * - AirQuality (1-5 scale calculated from PM2.5)
- * - PM2_5Density (µg/m³)
- * - PM10Density (µg/m³)
+ * - AirQuality (1-5 scale, the worst of the available pollutant readings)
+ * - PM2_5Density (µg/m³, advanced sensors only)
+ * - PM10Density (µg/m³, advanced sensors only)
  * - VOCDensity (index value, not actual µg/m³)
- * - NitrogenDioxideDensity (index value, for Formaldehyde models)
+ * - NitrogenDioxideDensity (index value, for NO2 models)
  */
-export class AirQualityService {
-  private readonly service: Service;
-  private readonly device: DysonLinkDevice;
-  private readonly log: Logging;
-  private readonly api: API;
+export class AirQualityService extends BaseService<DysonLinkDevice> {
   private readonly hasNo2Sensor: boolean;
   private readonly basicAirQualitySensor: boolean;
-  private readonly boundHandleStateChange: (state: DeviceState) => void;
 
   constructor(config: AirQualityServiceConfig) {
-    this.device = config.device;
-    this.log = config.log;
-    this.api = config.api;
+    super(config, {
+      type: config.api.hap.Service.AirQualitySensor,
+      name: 'Air Quality',
+      subtype: 'air-quality-sensor',
+    });
     this.hasNo2Sensor = config.hasNo2Sensor ?? false;
     this.basicAirQualitySensor = config.basicAirQualitySensor ?? false;
 
-    const Service = this.api.hap.Service;
     const Characteristic = this.api.hap.Characteristic;
-
-    // Get or create the AirQualitySensor service with name
-    this.service = config.accessory.getService('air-quality-sensor') ||
-      config.accessory.addService(Service.AirQualitySensor, 'Air Quality', 'air-quality-sensor');
-
-    // Set ConfiguredName for better HomeKit display
-    this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
-    this.service.updateCharacteristic(Characteristic.ConfiguredName, 'Air Quality');
 
     // Set up AirQuality characteristic (required)
     this.service.getCharacteristic(Characteristic.AirQuality)
       .onGet(this.handleAirQualityGet.bind(this));
 
-    // Set up PM2.5 Density characteristic
-    this.service.getCharacteristic(Characteristic.PM2_5Density)
-      .onGet(this.handlePM25Get.bind(this));
-
-    // Set up PM10 Density characteristic
-    this.service.getCharacteristic(Characteristic.PM10Density)
-      .onGet(this.handlePM10Get.bind(this));
+    if (this.basicAirQualitySensor) {
+      // Basic sensors report a 0-9 particulate index, not densities. Exposing
+      // it as PM2.5 µg/m³ (and PM10 as 0) would show misleading numbers, so
+      // drop those characteristics, including from cached services.
+      this.removeCharacteristicIfPresent(Characteristic.PM2_5Density);
+      this.removeCharacteristicIfPresent(Characteristic.PM10Density);
+    } else {
+      this.service.getCharacteristic(Characteristic.PM2_5Density)
+        .onGet(() => this.handleDensityGet(Characteristic.PM2_5Density, 'PM2.5', this.device.getState().pm25));
+      this.service.getCharacteristic(Characteristic.PM10Density)
+        .onGet(() => this.handleDensityGet(Characteristic.PM10Density, 'PM10', this.device.getState().pm10));
+    }
 
     // Set up VOC Density characteristic
     // Note: HomeKit expects µg/m³ but Dyson provides an index value
     this.service.getCharacteristic(Characteristic.VOCDensity)
-      .onGet(this.handleVOCGet.bind(this));
+      .onGet(() => this.handleDensityGet(Characteristic.VOCDensity, 'VOC index', this.device.getState().vocIndex));
 
-    // Set up NO2 Density characteristic (for Formaldehyde models)
+    // Set up NO2 Density characteristic (for NO2 models)
     if (this.hasNo2Sensor) {
       this.service.getCharacteristic(Characteristic.NitrogenDioxideDensity)
-        .onGet(this.handleNO2Get.bind(this));
+        .onGet(() => this.handleDensityGet(
+          Characteristic.NitrogenDioxideDensity, 'NO2 index', this.device.getState().no2Index,
+        ));
     }
-
-    // Link to primary service if provided
-    if (config.primaryService) {
-      config.primaryService.addLinkedService(this.service);
-    }
-
-    // Subscribe to device state changes
-    this.boundHandleStateChange = this.handleStateChange.bind(this);
-    this.device.on('stateChange', this.boundHandleStateChange);
 
     this.log.debug('AirQualityService initialized for', config.accessory.displayName);
   }
 
-  /**
-   * Get the underlying HomeKit service
-   */
-  getService(): Service {
-    return this.service;
-  }
-
-  /**
-   * Clean up event listeners
-   */
-  destroy(): void {
-    this.device.off('stateChange', this.boundHandleStateChange);
+  private removeCharacteristicIfPresent(characteristic: CharacteristicType): void {
+    const existing = this.service.characteristics?.find((c) => c.UUID === characteristic.UUID);
+    if (existing) {
+      this.service.removeCharacteristic(existing);
+    }
   }
 
   /**
    * Calculate HomeKit AirQuality level from sensor data
    *
-   * For advanced sensors: Uses PM2.5 value in µg/m³
-   * For basic sensors (Link): Uses pact index (0-9 scale)
+   * For advanced sensors: the worst of PM2.5, PM10, VOC and NO2
+   * For basic sensors (Link): the worse of the pact and vact indices
    *
-   * @param pm25 - PM2.5 value in µg/m³ or pact index for basic sensors
-   * @param vocIndex - VOC index value for basic sensors
    * @returns HomeKit AirQuality value (0-5)
    */
-  private calculateAirQuality(pm25: number | undefined, vocIndex?: number): number {
-    // 0 = UNKNOWN
-    if (pm25 === undefined || pm25 < 0) {
-      return 0;
-    }
-
+  private calculateAirQuality(state: DeviceState): number {
     if (this.basicAirQualitySensor) {
       // Basic sensors (Link series) - pm25 is actually pact index (0-9)
-      // Calculate quality from pact (particulate) and vact (VOC) indices
-      // Use the worse of the two readings
-      const pactQuality = this.calculateBasicPactQuality(pm25);
-      const vactQuality = vocIndex !== undefined ? this.calculateBasicVactQuality(vocIndex) : 1;
+      if (!isValidReading(state.pm25)) {
+        return AIR_QUALITY.UNKNOWN;
+      }
+      const pactQuality = rate(state.pm25, PACT_THRESHOLDS);
+      const vactQuality = isValidReading(state.vocIndex)
+        ? rate(state.vocIndex * VOC_SCALING_FACTOR, VACT_THRESHOLDS)
+        : AIR_QUALITY.EXCELLENT;
       return Math.max(pactQuality, vactQuality);
     }
 
-    // Advanced sensors - pm25 is actual PM2.5 in µg/m³
-    // Map PM2.5 to HomeKit AirQuality levels
-    if (pm25 <= PM25_THRESHOLDS.EXCELLENT) {
-      return 1; // EXCELLENT
-    } else if (pm25 <= PM25_THRESHOLDS.GOOD) {
-      return 2; // GOOD
-    } else if (pm25 <= PM25_THRESHOLDS.FAIR) {
-      return 3; // FAIR
-    } else if (pm25 <= PM25_THRESHOLDS.INFERIOR) {
-      return 4; // INFERIOR
-    } else {
-      return 5; // POOR
+    const ratings: number[] = [];
+    if (isValidReading(state.pm25)) {
+      ratings.push(rate(state.pm25, PM25_THRESHOLDS));
     }
-  }
-
-  /**
-   * Calculate air quality from basic sensor pact index (0-9)
-   * Based on reference implementation thresholds
-   */
-  private calculateBasicPactQuality(pact: number): number {
-    if (pact <= PACT_THRESHOLDS.EXCELLENT) {
-      return 1; // EXCELLENT
+    if (isValidReading(state.pm10)) {
+      ratings.push(rate(state.pm10, PM10_THRESHOLDS));
     }
-    if (pact <= PACT_THRESHOLDS.GOOD) {
-      return 2; // GOOD
+    if (isValidReading(state.vocIndex)) {
+      ratings.push(rate(state.vocIndex / INDEX_DIVISOR, INDEX_THRESHOLDS));
     }
-    if (pact <= PACT_THRESHOLDS.FAIR) {
-      return 3; // FAIR
+    if (this.hasNo2Sensor && isValidReading(state.no2Index)) {
+      ratings.push(rate(state.no2Index / INDEX_DIVISOR, INDEX_THRESHOLDS));
     }
-    if (pact <= PACT_THRESHOLDS.INFERIOR) {
-      return 4; // INFERIOR
-    }
-    return 5; // POOR
-  }
-
-  /**
-   * Calculate air quality from basic sensor vact index
-   * Based on reference implementation thresholds
-   */
-  private calculateBasicVactQuality(vact: number): number {
-    const scaled = vact * VOC_SCALING_FACTOR;
-    if (scaled <= VACT_THRESHOLDS.EXCELLENT) {
-      return 1; // EXCELLENT
-    }
-    if (scaled <= VACT_THRESHOLDS.GOOD) {
-      return 2; // GOOD
-    }
-    if (scaled <= VACT_THRESHOLDS.FAIR) {
-      return 3; // FAIR
-    }
-    if (scaled <= VACT_THRESHOLDS.INFERIOR) {
-      return 4; // INFERIOR
-    }
-    return 5; // POOR
+    return ratings.length > 0 ? Math.max(...ratings) : AIR_QUALITY.UNKNOWN;
   }
 
   /**
@@ -252,8 +215,9 @@ export class AirQualityService {
    * Returns 0-5 (UNKNOWN to POOR)
    */
   private handleAirQualityGet(): CharacteristicValue {
+    this.assertConnected();
     const state = this.device.getState();
-    const airQuality = this.calculateAirQuality(state.pm25, state.vocIndex);
+    const airQuality = this.calculateAirQuality(state);
     if (this.basicAirQualitySensor) {
       this.log.debug('Get AirQuality ->', airQuality, '(pact:', state.pm25, ', vact:', state.vocIndex, ')');
     } else {
@@ -263,95 +227,68 @@ export class AirQualityService {
   }
 
   /**
-   * Handle PM2.5 Density GET request
-   * Returns µg/m³
+   * Handle a density GET request. Returns the last value HomeKit has while
+   * the sensor has no valid reading.
    */
-  private handlePM25Get(): CharacteristicValue {
-    const state = this.device.getState();
-    const pm25 = state.pm25 ?? 0;
-    this.log.debug('Get PM2.5 Density ->', pm25, 'µg/m³');
-    return pm25;
+  private handleDensityGet(
+    characteristic: CharacteristicType,
+    label: string,
+    value: number | undefined,
+  ): CharacteristicValue {
+    this.assertConnected();
+    if (!isValidReading(value)) {
+      return this.cachedValue(characteristic);
+    }
+    this.log.debug(`Get ${label} ->`, value);
+    return value;
   }
 
-  /**
-   * Handle PM10 Density GET request
-   * Returns µg/m³
-   */
-  private handlePM10Get(): CharacteristicValue {
-    const state = this.device.getState();
-    const pm10 = state.pm10 ?? 0;
-    this.log.debug('Get PM10 Density ->', pm10, 'µg/m³');
-    return pm10;
-  }
-
-  /**
-   * Handle VOC Density GET request
-   * Note: Dyson provides an index value, not actual µg/m³
-   */
-  private handleVOCGet(): CharacteristicValue {
-    const state = this.device.getState();
-    const voc = state.vocIndex;
-    const validVoc = (voc !== undefined && !isNaN(voc)) ? voc : 0;
-    this.log.debug('Get VOC Index ->', validVoc);
-    return validVoc;
-  }
-
-  /**
-   * Handle NO2 Density GET request
-   * Note: Dyson provides an index value, not actual µg/m³
-   */
-  private handleNO2Get(): CharacteristicValue {
-    const state = this.device.getState();
-    const no2 = state.no2Index ?? 0;
-    this.log.debug('Get NO2 Index ->', no2);
-    return no2;
-  }
-
-  /**
-   * Handle device state changes
-   * Updates HomeKit characteristics to reflect current device state
-   */
-  private handleStateChange(state: DeviceState): void {
+  protected handleStateChange(state: DeviceState): void {
     const Characteristic = this.api.hap.Characteristic;
 
-    // Update AirQuality
-    const airQuality = this.calculateAirQuality(state.pm25, state.vocIndex);
-    this.service.updateCharacteristic(Characteristic.AirQuality, airQuality);
+    this.update(Characteristic.AirQuality, this.calculateAirQuality(state));
 
-    // Update PM2.5 (or pact index for basic sensors)
-    this.service.updateCharacteristic(
-      Characteristic.PM2_5Density,
-      state.pm25 ?? 0,
-    );
+    if (!this.basicAirQualitySensor) {
+      if (isValidReading(state.pm25)) {
+        this.update(Characteristic.PM2_5Density, state.pm25);
+      }
+      if (isValidReading(state.pm10)) {
+        this.update(Characteristic.PM10Density, state.pm10);
+      }
+    }
 
-    // Update PM10 (not available on basic sensors)
-    this.service.updateCharacteristic(
-      Characteristic.PM10Density,
-      state.pm10 ?? 0,
-    );
+    if (isValidReading(state.vocIndex)) {
+      this.update(Characteristic.VOCDensity, state.vocIndex);
+    }
 
-    // Update VOC (ensure valid number - NaN ?? 0 still returns NaN)
-    const vocValue = state.vocIndex;
-    this.service.updateCharacteristic(
-      Characteristic.VOCDensity,
-      (vocValue !== undefined && !isNaN(vocValue)) ? vocValue : 0,
-    );
-
-    // Update NO2 (if sensor present)
-    if (this.hasNo2Sensor) {
-      this.service.updateCharacteristic(
-        Characteristic.NitrogenDioxideDensity,
-        state.no2Index ?? 0,
-      );
+    if (this.hasNo2Sensor && isValidReading(state.no2Index)) {
+      this.update(Characteristic.NitrogenDioxideDensity, state.no2Index);
     }
   }
+}
 
-  /**
-   * Update characteristics from current device state
-   * Call this after connecting to sync HomeKit with device
-   */
-  updateFromState(): void {
-    const state = this.device.getState();
-    this.handleStateChange(state);
+/**
+ * Whether a sensor reading is a usable, non-negative number
+ */
+function isValidReading(value: number | undefined): value is number {
+  return value !== undefined && Number.isFinite(value) && value >= 0;
+}
+
+/**
+ * Map a reading to a HomeKit AirQuality level using upper-bound thresholds
+ */
+function rate(value: number, thresholds: Thresholds): number {
+  if (value <= thresholds.EXCELLENT) {
+    return AIR_QUALITY.EXCELLENT;
   }
+  if (value <= thresholds.GOOD) {
+    return AIR_QUALITY.GOOD;
+  }
+  if (value <= thresholds.FAIR) {
+    return AIR_QUALITY.FAIR;
+  }
+  if (value <= thresholds.INFERIOR) {
+    return AIR_QUALITY.INFERIOR;
+  }
+  return AIR_QUALITY.POOR;
 }

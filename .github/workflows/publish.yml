@@ -6,21 +6,24 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # id-token is only needed here, for npm provenance (OIDC)
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: 'npm'
+          # No npm cache in the job holding id-token: write (cache poisoning risk)
 
       # Use the npm bundled with Node 24. A global `npm install -g npm@latest`
       # self-upgrade can land a build whose bundled `sigstore` dependency is

@@ -2,89 +2,14 @@
  * HeaterCoolerService Unit Tests
  */
 
-import { vi, type Mock, type Mocked } from 'vitest';
+import { vi, type Mock } from 'vitest';
 
 import { HeaterCoolerService } from '../../../../src/accessories/services/heaterCoolerService.js';
 import type { HeaterCoolerServiceConfig } from '../../../../src/accessories/services/heaterCoolerService.js';
 import { DysonLinkDevice } from '../../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../../src/devices/index.js';
-import type { DysonMqttClient } from '../../../../src/protocol/mqttClient.js';
-import type { API, PlatformAccessory, Service, Logging } from 'homebridge';
-
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
-
-// Create mock HomeKit service
-function createMockService() {
-  const characteristics = new Map<string, {
-    onGet: Mock;
-    onSet: Mock;
-    setProps: Mock;
-    getValue: Mock;
-    updateValue: Mock;
-  }>();
-
-  const mockService = {
-    setCharacteristic: vi.fn().mockReturnThis(),
-    getCharacteristic: vi.fn((char: unknown) => {
-      const uuid = typeof char === 'object' && char !== null && 'UUID' in char
-        ? (char as { UUID: string }).UUID
-        : String(char);
-      if (!characteristics.has(uuid)) {
-        const charMock = {
-          onGet: vi.fn().mockReturnThis(),
-          onSet: vi.fn().mockReturnThis(),
-          setProps: vi.fn().mockReturnThis(),
-          getValue: vi.fn(),
-          updateValue: vi.fn().mockReturnThis(),
-        };
-        characteristics.set(uuid, charMock);
-      }
-      return characteristics.get(uuid);
-    }),
-    updateCharacteristic: vi.fn(),
-    addOptionalCharacteristic: vi.fn().mockReturnThis(),
-    addLinkedService: vi.fn().mockReturnThis(),
-  };
-
-  return mockService as unknown as Mocked<Service>;
-}
-
-// Create mock logging
-function createMockLog(): Logging {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    log: vi.fn(),
-    success: vi.fn(),
-  } as unknown as Logging;
-}
+import type { API, PlatformAccessory, Logging } from 'homebridge';
+import { createMockHapApi, createMockLog, createMockMqttClient, createMockService } from '../../../helpers/mocks.js';
 
 // Create mock API with hap
 function createMockApi() {
@@ -102,12 +27,7 @@ function createMockApi() {
     HeaterCooler: { UUID: 'heater-cooler-uuid' },
   };
 
-  return {
-    hap: {
-      Service,
-      Characteristic,
-    },
-  } as unknown as API;
+  return createMockHapApi({ Service, Characteristic });
 }
 
 /**
@@ -160,7 +80,7 @@ describe('HeaterCoolerService', () => {
 
     mockAccessory = {
       displayName: 'Living Room',
-      getService: vi.fn().mockReturnValue(null),
+      getServiceById: vi.fn().mockReturnValue(undefined),
       addService: vi.fn().mockReturnValue(mockService),
     } as unknown as PlatformAccessory;
 
@@ -203,7 +123,35 @@ describe('HeaterCoolerService', () => {
 
   describe('initialization', () => {
     it('should get or create HeaterCooler service', () => {
-      expect(mockAccessory.getService).toHaveBeenCalled();
+      expect(mockAccessory.getServiceById).toHaveBeenCalledWith(
+        mockApi.hap.Service.HeaterCooler,
+        'heater-cooler',
+      );
+      expect(mockAccessory.addService).toHaveBeenCalledWith(
+        mockApi.hap.Service.HeaterCooler,
+        'Heater',
+        'heater-cooler',
+      );
+    });
+
+    it('should not touch ConfiguredName of an existing service', () => {
+      const existingService = createMockService();
+      const accessory = {
+        displayName: 'Living Room',
+        getServiceById: vi.fn().mockReturnValue(existingService),
+        addService: vi.fn(),
+      } as unknown as PlatformAccessory;
+
+      const svc = new HeaterCoolerService({ accessory, device, api: mockApi, log: mockLog });
+
+      expect(svc.getService()).toBe(existingService);
+      expect(accessory.addService).not.toHaveBeenCalled();
+      expect(existingService.addOptionalCharacteristic).not.toHaveBeenCalled();
+      expect(existingService.updateCharacteristic).not.toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.ConfiguredName,
+        expect.anything(),
+      );
+      svc.destroy();
     });
 
     it('should set configured name', () => {
@@ -274,14 +222,44 @@ describe('HeaterCoolerService', () => {
       expect(result).toBe(1);
     });
 
-    it('should enable heating when set to 1', async () => {
+    it('should enable heating only when set to 1 while the fan is already on', async () => {
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { fmod: 'FAN', hmod: 'OFF' } },
+      });
+      expect(device.getState().isOn).toBe(true);
+
       await activeSetHandler(1);
       await flushCommands();
 
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { hmod: 'HEAT' },
         }),
+      );
+    });
+
+    it('should send heating and fan power in ONE MQTT publish when set to 1 while off', async () => {
+      expect(device.getState().isOn).toBe(false);
+
+      await activeSetHandler(1);
+      await flushCommands();
+
+      // HP02 (455) uses the legacy fmod power protocol
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
+      expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ hmod: 'HEAT', fmod: 'FAN' }),
+        }),
+      );
+    });
+
+    it('should throw HapStatusError when the device is disconnected on GET', async () => {
+      mockMqttClient.isConnected.mockReturnValue(false);
+      expect(() => activeGetHandler()).toThrow(
+        expect.objectContaining({ hapStatus: -70402 }) as unknown as Error,
       );
     });
 
@@ -334,6 +312,16 @@ describe('HeaterCoolerService', () => {
       expect(result).toBe(2); // HEATING
     });
 
+    it('should return HEATING (2) when on and heating with unknown temperatures', () => {
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { fmod: 'FAN', hmod: 'HEAT' } },
+      });
+
+      expect(currentStateGetHandler()).toBe(2); // HEATING
+    });
+
     it('should return IDLE (1) when at target temperature', async () => {
       // Set up: current temp ~22°C, target 22°C
       mockMqttClient._emit('message', {
@@ -378,9 +366,11 @@ describe('HeaterCoolerService', () => {
   });
 
   describe('CurrentTemperature characteristic', () => {
-    it('should return 20°C as default when no reading', () => {
-      const result = currentTempGetHandler();
-      expect(result).toBe(20);
+    it('should return the cached HomeKit value when there is no reading', () => {
+      const char = mockService.getCharacteristic(mockApi.hap.Characteristic.CurrentTemperature);
+      (char as unknown as { value: unknown }).value = 18.5;
+
+      expect(currentTempGetHandler()).toBe(18.5);
     });
 
     it('should convert Kelvin*10 to Celsius', async () => {
@@ -397,9 +387,35 @@ describe('HeaterCoolerService', () => {
   });
 
   describe('HeatingThresholdTemperature characteristic', () => {
-    it('should return 20°C as default when not set', () => {
+    it('should return the cached HomeKit value (initially 20°C) when not set', () => {
       const result = heatingThresholdGetHandler();
       expect(result).toBe(20);
+    });
+
+    it('should clamp a device target below 10°C to 10°C', () => {
+      // 2782 K*10 = 278.2 K ≈ 5°C
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { hmax: '2782' } },
+      });
+
+      expect(heatingThresholdGetHandler()).toBe(10);
+      expect(mockService.updateCharacteristic).toHaveBeenCalledWith(
+        mockApi.hap.Characteristic.HeatingThresholdTemperature,
+        10,
+      );
+    });
+
+    it('should clamp a device target above 38°C to 38°C', () => {
+      // 3132 K*10 = 313.2 K ≈ 40°C
+      mockMqttClient._emit('message', {
+        topic: 'status',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': { hmax: '3132' } },
+      });
+
+      expect(heatingThresholdGetHandler()).toBe(38);
     });
 
     it('should convert Kelvin*10 to Celsius', async () => {
@@ -489,22 +505,25 @@ describe('HeaterCoolerService', () => {
   });
 
   describe('error handling', () => {
-    it('should emit commandError when setHeatingMode MQTT publish fails', async () => {
+    it('should throw HapStatusError and log when the Active SET publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = vi.fn();
-      device.on('commandError', errorHandler);
-      await activeSetHandler(1);
-      await flushCommands();
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+
+      await expect(activeSetHandler(1)).rejects.toMatchObject({ hapStatus: -70402 });
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set heater active: MQTT error');
     });
 
-    it('should emit commandError when setTargetTemperature MQTT publish fails', async () => {
+    it('should throw HapStatusError and log when setTargetTemperature publish fails', async () => {
       mockMqttClient.publishCommand.mockRejectedValueOnce(new Error('MQTT error'));
-      const errorHandler = vi.fn();
-      device.on('commandError', errorHandler);
-      await heatingThresholdSetHandler(22);
-      await flushCommands();
-      expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
+
+      await expect(heatingThresholdSetHandler(22)).rejects.toMatchObject({ hapStatus: -70402 });
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set target temperature: MQTT error');
+    });
+
+    it('should throw HapStatusError when the device is not connected', async () => {
+      mockMqttClient.isConnected.mockReturnValue(false);
+
+      await expect(heatingThresholdSetHandler(22)).rejects.toMatchObject({ hapStatus: -70402 });
+      expect(mockLog.error).toHaveBeenCalledWith('Failed to set target temperature: Device not connected');
     });
   });
 });

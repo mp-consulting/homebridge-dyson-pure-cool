@@ -7,91 +7,19 @@ import { vi, type Mocked } from 'vitest';
 import { TemperatureService } from '../../../../src/accessories/services/temperatureService.js';
 import { DysonLinkDevice } from '../../../../src/devices/dysonLinkDevice.js';
 import type { DeviceInfo, MqttClientFactory } from '../../../../src/devices/index.js';
-import type { DysonMqttClient } from '../../../../src/protocol/mqttClient.js';
-import type { API, Logging, PlatformAccessory, Service, Characteristic } from 'homebridge';
-
-// Create mock MQTT client
-function createMockMqttClient() {
-  const eventHandlers: Map<string, ((...args: unknown[]) => void)[]> = new Map();
-
-  const mockClient = {
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!eventHandlers.has(event)) {
-        eventHandlers.set(event, []);
-      }
-      eventHandlers.get(event)!.push(handler);
-      return mockClient;
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    subscribeToStatus: vi.fn().mockResolvedValue(undefined),
-    requestCurrentState: vi.fn().mockResolvedValue(undefined),
-    publishCommand: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    _emit: (event: string, ...args: unknown[]) => {
-      const handlers = eventHandlers.get(event) || [];
-      handlers.forEach((handler) => handler(...args));
-    },
-  };
-
-  return mockClient as unknown as Mocked<DysonMqttClient> & { _emit: (event: string, ...args: unknown[]) => void };
-}
-
-// Create mock characteristic
-function createMockCharacteristic() {
-  const characteristic = {
-    onGet: vi.fn().mockReturnThis(),
-    onSet: vi.fn().mockReturnThis(),
-    setProps: vi.fn().mockReturnThis(),
-    updateValue: vi.fn().mockReturnThis(),
-    value: 0,
-  };
-  return characteristic as unknown as Mocked<Characteristic>;
-}
-
-// Create mock service
-function createMockService() {
-  const characteristics = new Map<string, ReturnType<typeof createMockCharacteristic>>();
-
-  const service = {
-    setCharacteristic: vi.fn().mockReturnThis(),
-    getCharacteristic: vi.fn((char: unknown) => {
-      const key = String(char);
-      if (!characteristics.has(key)) {
-        characteristics.set(key, createMockCharacteristic());
-      }
-      return characteristics.get(key)!;
-    }),
-    updateCharacteristic: vi.fn().mockReturnThis(),
-    addOptionalCharacteristic: vi.fn().mockReturnThis(),
-    addLinkedService: vi.fn().mockReturnThis(),
-    _getCharacteristics: () => characteristics,
-  };
-
-  return service as unknown as Mocked<Service> & {
-    _getCharacteristics: () => Map<string, ReturnType<typeof createMockCharacteristic>>;
-  };
-}
+import type { API, Logging, PlatformAccessory } from 'homebridge';
+import { createMockHapApi, createMockLog, createMockMqttClient, createMockService } from '../../../helpers/mocks.js';
+import { emitSensorData, setDeviceState } from '../../../helpers/device.js';
 
 // Create mock API
 function createMockApi() {
-  const mockTempService = createMockService();
-
-  return {
-    hap: {
-      Service: {
-        TemperatureSensor: 'TemperatureSensor',
-      },
-      Characteristic: {
-        Name: 'Name',
-        CurrentTemperature: 'CurrentTemperature',
-        ConfiguredName: 'ConfiguredName',
-      },
+  return createMockHapApi(
+    {
+      Service: { TemperatureSensor: 'TemperatureSensor' },
+      Characteristic: { Name: 'Name', CurrentTemperature: 'CurrentTemperature', ConfiguredName: 'ConfiguredName' },
     },
-    _mockTempService: mockTempService,
-  } as unknown as Mocked<API> & {
-    _mockTempService: ReturnType<typeof createMockService>;
-  };
+    { _mockTempService: createMockService(0) },
+  );
 }
 
 // Create mock accessory
@@ -99,27 +27,10 @@ function createMockAccessory(api: ReturnType<typeof createMockApi>) {
   return {
     displayName: 'Test Dyson',
     UUID: 'test-uuid',
-    getService: vi.fn((serviceType: unknown) => {
-      if (serviceType === 'temperature-sensor') {
-        return api._mockTempService;
-      }
-      return undefined;
-    }),
+    getServiceById: vi.fn((): unknown => undefined),
     addService: vi.fn(() => api._mockTempService),
     context: {},
   } as unknown as Mocked<PlatformAccessory>;
-}
-
-// Create mock logger
-function createMockLog(): Mocked<Logging> {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    log: vi.fn(),
-    success: vi.fn(),
-  } as unknown as Mocked<Logging>;
 }
 
 describe('TemperatureService', () => {
@@ -139,7 +50,7 @@ describe('TemperatureService', () => {
     ipAddress: '192.168.1.100',
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockMqttClient = createMockMqttClient();
     mockMqttClientFactory = vi.fn().mockReturnValue(mockMqttClient);
     mockApi = createMockApi();
@@ -147,9 +58,13 @@ describe('TemperatureService', () => {
     mockLog = createMockLog();
 
     device = new DysonLinkDevice(defaultDeviceInfo, mockMqttClientFactory);
+    // GET handlers report "Not Responding" unless the device is connected
+    await device.connect();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    service?.destroy();
+    await device.disconnect();
     vi.clearAllMocks();
   });
 
@@ -162,7 +77,27 @@ describe('TemperatureService', () => {
         log: mockLog,
       });
 
-      expect(mockAccessory.getService).toHaveBeenCalledWith('temperature-sensor');
+      expect(mockAccessory.getServiceById).toHaveBeenCalledWith('TemperatureSensor', 'temperature-sensor');
+      expect(mockAccessory.addService).toHaveBeenCalledWith('TemperatureSensor', expect.any(String), 'temperature-sensor');
+    });
+
+    it('should not touch ConfiguredName of an existing service', () => {
+      mockAccessory.getServiceById.mockReturnValue(mockApi._mockTempService);
+
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+      });
+
+      expect(service.getService()).toBe(mockApi._mockTempService);
+      expect(mockAccessory.addService).not.toHaveBeenCalled();
+      expect(mockApi._mockTempService.addOptionalCharacteristic).not.toHaveBeenCalled();
+      expect(mockApi._mockTempService.updateCharacteristic).not.toHaveBeenCalledWith(
+        'ConfiguredName',
+        expect.anything(),
+      );
     });
 
     it('should set configured name', () => {
@@ -224,7 +159,7 @@ describe('TemperatureService', () => {
     it('should convert 2950 (Kelvin×10) to 21.85°C', () => {
       // 2950 / 10 = 295K; 295K - 273.15 = 21.85°C
       // Simulate state change
-      device.updateState({ temperature: 2950 });
+      emitSensorData(mockMqttClient, { tact: '2950' });
 
       expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentTemperature',
@@ -233,7 +168,7 @@ describe('TemperatureService', () => {
     });
 
     it('should convert 2731 (Kelvin×10) to ~0°C', () => {
-      device.updateState({ temperature: 2731 });
+      emitSensorData(mockMqttClient, { tact: '2731' });
 
       expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentTemperature',
@@ -241,22 +176,34 @@ describe('TemperatureService', () => {
       );
     });
 
-    it('should return 20°C default when temperature is undefined', () => {
-      device.updateState({ temperature: undefined });
+    it('should not push an update when the temperature becomes unknown', () => {
+      emitSensorData(mockMqttClient, { tact: '2950' });
+      mockApi._mockTempService.updateCharacteristic.mockClear();
 
-      expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
+      setDeviceState(device, { temperature: undefined }, { emit: true });
+
+      expect(mockApi._mockTempService.updateCharacteristic).not.toHaveBeenCalledWith(
         'CurrentTemperature',
-        20,
+        expect.anything(),
       );
     });
 
-    it('should return 20°C default when temperature is 0', () => {
-      device.updateState({ temperature: 0 });
+    it('should not push an update when the temperature is 0 (invalid)', () => {
+      emitSensorData(mockMqttClient, { tact: '0000' });
 
-      expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
+      expect(mockApi._mockTempService.updateCharacteristic).not.toHaveBeenCalledWith(
         'CurrentTemperature',
-        20,
+        expect.anything(),
       );
+    });
+
+    it('should only push a value once when it does not change', () => {
+      emitSensorData(mockMqttClient, { tact: '2950' });
+      emitSensorData(mockMqttClient, { hact: '0040' }); // unrelated change re-emits state
+
+      const calls = mockApi._mockTempService.updateCharacteristic.mock.calls
+        .filter((c) => c[0] === 'CurrentTemperature');
+      expect(calls).toHaveLength(1);
     });
   });
 
@@ -270,7 +217,7 @@ describe('TemperatureService', () => {
       });
 
       // Set state then call updateFromState
-      device.state.temperature = 2932; // ~20°C
+      setDeviceState(device, { temperature: 2932 }); // ~20°C
 
       mockApi._mockTempService.updateCharacteristic.mockClear();
       service.updateFromState();
@@ -298,33 +245,46 @@ describe('TemperatureService', () => {
       temperatureGetHandler = tempChar!.onGet.mock.calls[0][0] as (...args: unknown[]) => number;
     });
 
-    it('should return default 20°C when temperature is undefined', () => {
+    it('should return the cached HomeKit value when temperature is undefined', () => {
+      mockApi._mockTempService._getCharacteristics().get('CurrentTemperature')!.value = 18.4;
       const result = temperatureGetHandler();
-      expect(result).toBe(20);
+      expect(result).toBe(18.4);
+    });
+
+    it('should throw HapStatusError when the device is disconnected', () => {
+      mockMqttClient.isConnected.mockReturnValue(false);
+      setDeviceState(device, { temperature: 2950 });
+
+      expect(() => temperatureGetHandler()).toThrow(mockApi.hap.HapStatusError);
+      expect(() => temperatureGetHandler()).toThrow(
+        expect.objectContaining({ hapStatus: -70402 }) as unknown as Error,
+      );
     });
 
     it('should return converted temperature for valid Kelvin×10 value', () => {
-      device.state.temperature = 2950; // ~21.85°C
+      setDeviceState(device, { temperature: 2950 }); // ~21.85°C
       const result = temperatureGetHandler();
       expect(result).toBeCloseTo(21.9, 1);
     });
 
     it('should log debug message when GET is called', () => {
-      device.state.temperature = 2950;
+      setDeviceState(device, { temperature: 2950 });
       temperatureGetHandler();
       expect(mockLog.debug).toHaveBeenCalledWith('Get Temperature ->', expect.any(Number), '°C');
     });
 
-    it('should return default 20°C for zero temperature', () => {
-      device.state.temperature = 0;
+    it('should return the cached value for zero temperature', () => {
+      mockApi._mockTempService._getCharacteristics().get('CurrentTemperature')!.value = 21;
+      setDeviceState(device, { temperature: 0 });
       const result = temperatureGetHandler();
-      expect(result).toBe(20);
+      expect(result).toBe(21);
     });
 
-    it('should return default 20°C for negative temperature', () => {
-      device.state.temperature = -100;
+    it('should return the cached value for negative temperature', () => {
+      mockApi._mockTempService._getCharacteristics().get('CurrentTemperature')!.value = 21;
+      setDeviceState(device, { temperature: -100 });
       const result = temperatureGetHandler();
-      expect(result).toBe(20);
+      expect(result).toBe(21);
     });
   });
 
@@ -339,7 +299,7 @@ describe('TemperatureService', () => {
       });
 
       // 2950 → 21.85°C, then -2 → 19.85 → rounded to 19.9
-      device.updateState({ temperature: 2950 });
+      emitSensorData(mockMqttClient, { tact: '2950' });
 
       expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentTemperature',
@@ -357,7 +317,7 @@ describe('TemperatureService', () => {
       });
 
       // 2950 → 21.85°C, then +1.5 → 23.35 → rounded to 23.4
-      device.updateState({ temperature: 2950 });
+      emitSensorData(mockMqttClient, { tact: '2950' });
 
       expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentTemperature',
@@ -365,7 +325,7 @@ describe('TemperatureService', () => {
       );
     });
 
-    it('applies the offset to the 20°C default when sensor data is unavailable', () => {
+    it('returns the cached value unmodified (no offset) when sensor data is unavailable', () => {
       service = new TemperatureService({
         accessory: mockAccessory,
         device,
@@ -375,10 +335,53 @@ describe('TemperatureService', () => {
       });
 
       const tempChar = mockApi._mockTempService._getCharacteristics().get('CurrentTemperature');
+      tempChar!.value = 19;
       const handler = tempChar!.onGet.mock.calls[0][0] as () => number;
 
-      // state.temperature undefined → 20 + (-3) = 17
-      expect(handler()).toBe(17);
+      // The cached value already includes the offset; it must not be applied twice
+      expect(handler()).toBe(19);
+    });
+
+    it('clamps to -40°C when the offset drives the reading below the minimum', () => {
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        temperatureOffset: -80,
+      });
+
+      // 2731 → ~0°C, then -80 → -80 → clamped to -40
+      emitSensorData(mockMqttClient, { tact: '2731' });
+
+      expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentTemperature',
+        -40,
+      );
+      const handler = mockApi._mockTempService._getCharacteristics()
+        .get('CurrentTemperature')!.onGet.mock.calls[0][0] as () => number;
+      expect(handler()).toBe(-40);
+    });
+
+    it('clamps to 100°C when the offset drives the reading above the maximum', () => {
+      service = new TemperatureService({
+        accessory: mockAccessory,
+        device,
+        api: mockApi as unknown as API,
+        log: mockLog,
+        temperatureOffset: 90,
+      });
+
+      // 2950 → 21.85°C, then +90 → 111.85 → clamped to 100
+      emitSensorData(mockMqttClient, { tact: '2950' });
+
+      expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
+        'CurrentTemperature',
+        100,
+      );
+      const handler = mockApi._mockTempService._getCharacteristics()
+        .get('CurrentTemperature')!.onGet.mock.calls[0][0] as () => number;
+      expect(handler()).toBe(100);
     });
 
     it('defaults to no offset when not provided', () => {
@@ -389,7 +392,7 @@ describe('TemperatureService', () => {
         log: mockLog,
       });
 
-      device.updateState({ temperature: 2950 });
+      emitSensorData(mockMqttClient, { tact: '2950' });
 
       expect(mockApi._mockTempService.updateCharacteristic).toHaveBeenCalledWith(
         'CurrentTemperature',
@@ -411,7 +414,7 @@ describe('TemperatureService', () => {
       const tempChar = mockApi._mockTempService._getCharacteristics().get('CurrentTemperature');
       const handler = tempChar!.onGet.mock.calls[0][0] as () => number;
 
-      device.state.temperature = 2950; // ~21.85°C ≈ 71.3°F
+      setDeviceState(device, { temperature: 2950 }); // ~21.85°C ≈ 71.3°F
       handler();
 
       expect(mockLog.debug).toHaveBeenCalledWith(
@@ -434,7 +437,7 @@ describe('TemperatureService', () => {
       const tempChar = mockApi._mockTempService._getCharacteristics().get('CurrentTemperature');
       const handler = tempChar!.onGet.mock.calls[0][0] as () => number;
 
-      device.state.temperature = 2950;
+      setDeviceState(device, { temperature: 2950 });
       handler();
 
       expect(mockLog.debug).toHaveBeenCalledWith(
@@ -456,7 +459,7 @@ describe('TemperatureService', () => {
       const tempChar = mockApi._mockTempService._getCharacteristics().get('CurrentTemperature');
       const handler = tempChar!.onGet.mock.calls[0][0] as () => number;
 
-      device.state.temperature = 2950;
+      setDeviceState(device, { temperature: 2950 });
       const result = handler();
       expect(result).toBeCloseTo(21.9, 0.05);
     });
