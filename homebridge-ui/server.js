@@ -19,6 +19,7 @@ import { isIPv4 } from 'node:net';
 import { getProductTypeDisplayNames, getDeviceFeatures, getHeatingDevices } from '../dist/config/index.js';
 import { DysonMqttClient } from '../dist/protocol/mqttClient.js';
 import { MdnsDiscovery } from '../dist/discovery/mdnsDiscovery.js';
+import { registerAssistant } from './assistant.js';
 
 // =============================================================================
 // Constants
@@ -630,6 +631,9 @@ class DysonUiServer extends HomebridgePluginUiServer {
     this.onRequest('/get-product-types', handleGetProductTypes);
     this.onRequest('/get-device-state', (p) => handleGetDeviceState(this, p));
     this.onRequest('/set-continuous-monitoring', (p) => handleSetContinuousMonitoring(this, p));
+
+    // Assistant: /ai/status, /ai/explain, /ai/ask, /ai/config (configured in Homebridge AI Kit)
+    registerAssistant(this);
 
     this.ready();
   }

@@ -19,6 +19,7 @@
 - **Jet Focus** - Toggle focused/diffused airflow direction
 - **Thermostat** - Heating control for Hot+Cool models (HP series)
 - **Humidifier** - Humidity control for Humidify+Cool models (PH series)
+- **Assistant (optional)** - Explains sign-in and device connection errors in the setup wizard, using the AI provider you set up in Homebridge AI Kit
 
 ## Supported Devices
 
@@ -228,6 +229,32 @@ Enable debug logging in Homebridge to see detailed plugin output:
 homebridge -D
 ```
 
+## Assistant
+
+The setup wizard can explain problems with the **Assistant**. It is off until you set
+up an AI provider once for all MP Consulting plugins in
+[Homebridge AI Kit](https://github.com/mp-consulting/homebridge-ai-kit) (or the
+Homebridge Glass UI): the plugin reads the shared `HomebridgeAiKit` platform block from
+`config.json` and has no AI settings of its own. When it is not set up, the wizard looks
+exactly as before, with a small tip under the sign-in form.
+
+When it is enabled, **Explain** buttons appear under a failed sign-in, a failed
+verification code, a failed device list download, and on a device card when the device
+cannot be reached on the local network (reading its state or changing continuous
+monitoring failed). The answer streams into an Assistant panel below.
+
+What is sent to the provider: the error message, which step failed, the account
+country and polling interval, and for a device its name, product type and model,
+firmware version, and whether it has heating, a saved IP address and continuous
+monitoring. Your Dyson email and password, verification codes, the devices' local
+credentials, serial numbers and IP addresses are never sent (e-mail, IP addresses and
+serial numbers are also masked in error messages), and the provider's API key stays on
+the Homebridge server.
+
+The wizard has no "Describe Your Setup" helper: it rebuilds the whole configuration
+from its own device list and options on every save, so suggested changes to other keys
+would not survive.
+
 ## Contributing
 
 Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
@@ -237,6 +264,12 @@ Contributions are welcome! Please read the contributing guidelines before submit
 3. Make your changes
 4. Run tests: `npm test`
 5. Submit a pull request
+
+The build vendors `@mp-consulting/homebridge-ui-kit`, Bootstrap and Bootstrap Icons into
+`homebridge-ui/public/lib/` with `mp-ui-kit-copy --vendor`. Until
+`@mp-consulting/homebridge-ai-kit` 2.0.0 and `@mp-consulting/homebridge-ui-kit` 1.2.0
+are published, both are installed from sibling checkouts (`file:../homebridge-mcp-server`
+and `file:../homebridge-ui-kit`); they must become `^2.0.0` and `^1.2.0` before release.
 
 ## Changelog
 

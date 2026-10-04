@@ -157,6 +157,8 @@
     // Clear inline errors when navigating
     hideInlineError(el.errorLogin);
     hideInlineError(el.errorOtp);
+    clearExplain('login-problem');
+    clearExplain('otp-problem');
 
     // Show/hide resync hint and cancel button on step 1 based on state
     if (step === 1) {
@@ -338,8 +340,147 @@
           ${actionEl}
         </div>
         ${settingsPanel}
+        ${isSelectable ? '<div class="device-assistant mt-2 d-none" onclick="event.stopPropagation()"></div>' : ''}
       </div>
     `;
+  }
+
+  // =============================================================================
+  // Assistant (Homebridge AI Kit)
+  // =============================================================================
+  // Shown only when the shared HomebridgeAiKit platform is set up and enabled.
+  // Nothing sent to it may contain the account login, codes, local credentials,
+  // serial numbers or IP addresses.
+
+  const assistant = { enabled: false, available: false };
+
+  async function initAssistant() {
+    try {
+      if (window.MpKit && MpKit.ai) {
+        const status = await MpKit.ai.status();
+        assistant.available = true;
+        assistant.enabled = !!(status && status.enabled);
+      }
+    } catch (e) {
+      // Routes missing or older Homebridge UI: no Assistant
+    }
+    $('assistant-hint').classList.toggle('d-none', !(assistant.available && !assistant.enabled));
+  }
+
+  // Error text without e-mail addresses, IPv4 addresses or Dyson serial numbers (e.g. "ABC-EU-ABC1234A")
+  function scrubForAssistant(text) {
+    return String(text ?? '')
+      .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '<email>')
+      .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '<address>')
+      .replace(/\b[A-Z0-9]{3}-[A-Z]{2}-[A-Z0-9]{6,}\b/g, '<serial>');
+  }
+
+  // Device facts the Assistant may see (whitelist: no serial, IP or local credentials)
+  function assistantDevice(d) {
+    return {
+      name: d.name || undefined,
+      productType: d.productType,
+      model: productTypes[d.productType] || undefined,
+      firmwareVersion: d.version || d.firmwareVersion || undefined,
+      hasHeating: d.hasHeating === true,
+      ipAddressSaved: !!d.ipAddress,
+      continuousMonitoring: d.isContinuousMonitoringEnabled === true,
+    };
+  }
+
+  // Plugin settings the Assistant may see, as one sentence
+  function assistantContext(extra) {
+    return [
+      extra,
+      el.country.value ? `Dyson account country: ${el.country.value}.` : '',
+      `Polling interval: ${parseInt(el.options.polling.value, 10) || 60} seconds.`,
+    ].filter(Boolean).join(' ');
+  }
+
+  // Streams an explanation of `error` into `answerEl`
+  async function explainWithAssistant(button, answerEl, { error, context, device, title }) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    answerEl.classList.remove('d-none');
+    const answer = MpKit.ai.renderAnswer(answerEl, { title });
+    try {
+      const res = await MpKit.ai.explain({ error: scrubForAssistant(error), context, device }, { onChunk: answer.append });
+      answer.done(res);
+    } catch (e) {
+      answer.error(e);
+    } finally {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+    }
+  }
+
+  // Adds an "Explain" button (and its answer panel) under an error the wizard shows
+  function offerExplain(slotId, { message, context, title }) {
+    const slot = $(slotId);
+    if (!slot || !assistant.enabled) {
+      return;
+    }
+    slot.innerHTML = `
+      <div class="d-flex justify-content-end">
+        ${MpKit.ai.renderButton({ label: 'Explain', size: 'sm', className: 'js-explain', title: 'Explain this problem' })}
+      </div>
+      <div class="assistant-answer mt-2 d-none"></div>`;
+    slot.classList.remove('d-none');
+    const button = slot.querySelector('.js-explain');
+    button.addEventListener('click', () => explainWithAssistant(button, slot.querySelector('.assistant-answer'), {
+      error: message,
+      context: assistantContext(context),
+      title,
+    }));
+  }
+
+  function clearExplain(slotId) {
+    const slot = $(slotId);
+    slot.classList.add('d-none');
+    slot.innerHTML = '';
+  }
+
+  function showLoginProblem(message, context) {
+    showInlineError(el.errorLogin, message);
+    offerExplain('login-problem', {
+      message,
+      context: context || 'Signing in to the Dyson account from the setup wizard (account status check, then '
+        + 'requesting a verification code) failed.',
+      title: 'Why did the sign-in fail?',
+    });
+  }
+
+  /**
+   * Shows why a device in a device list could not be reached, with an Explain
+   * button. Only rendered when the Assistant is on: without it the wizard keeps
+   * its existing behaviour (console warning or toast).
+   */
+  function showDeviceProblem(container, device, message, context) {
+    if (!assistant.enabled) {
+      return;
+    }
+    const card = [...container.querySelectorAll('.device-card[data-serial]')].find((c) => c.dataset.serial === device.serial);
+    const slot = card?.querySelector('.device-assistant');
+    if (!slot) {
+      return;
+    }
+    slot.innerHTML = `
+      <div class="d-flex align-items-start justify-content-between gap-2 small text-warning-emphasis">
+        <span><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(message)}</span>
+        ${MpKit.ai.renderButton({ label: 'Explain', size: 'sm', className: 'flex-shrink-0 js-explain', title: 'Explain this device problem' })}
+      </div>
+      <div class="assistant-answer mt-2 d-none"></div>`;
+    slot.classList.remove('d-none');
+    const button = slot.querySelector('.js-explain');
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      explainWithAssistant(button, slot.querySelector('.assistant-answer'), {
+        error: message,
+        context: assistantContext(context),
+        device: assistantDevice(device),
+        title: `Why can ${device.name || 'this device'} not be reached?`,
+      });
+    });
   }
 
   // Auto-save config when on step 0 (existing config view)
@@ -385,6 +526,8 @@
       }
     } catch (error) {
       console.warn(`Failed to fetch state for ${device.serial}:`, error.message);
+      showDeviceProblem(el.existingDeviceList, device, error.message,
+        'Reading the device state over the local network (mDNS discovery or saved IP, then MQTT on port 1883) from the plugin settings failed.');
     } finally {
       checkbox.disabled = false;
     }
@@ -460,6 +603,8 @@
         } catch (error) {
           checkbox.checked = !enabled;
           hb.toast.error(error.message || 'Failed to set continuous monitoring');
+          showDeviceProblem(el.existingDeviceList, dev, error.message || 'Failed to set continuous monitoring',
+            'Turning continuous monitoring on or off over the local network (MQTT on port 1883) from the plugin settings failed.');
         } finally {
           checkbox.disabled = false;
         }
@@ -584,6 +729,8 @@
         } catch (error) {
           checkbox.checked = !enabled;
           hb.toast.error(error.message || 'Failed to set continuous monitoring');
+          showDeviceProblem(el.deviceList, device, error.message || 'Failed to set continuous monitoring',
+            'Turning continuous monitoring on or off over the local network (MQTT on port 1883) during setup failed.');
         } finally {
           checkbox.disabled = false;
         }
@@ -719,6 +866,7 @@
       return;
     }
 
+    clearExplain('login-problem');
     setButtonLoading(el.buttons.connect, true);
 
     try {
@@ -732,7 +880,7 @@
         await fetchDevices();
       }
     } catch (error) {
-      showInlineError(el.errorLogin, error.message || 'Authentication failed');
+      showLoginProblem(error.message || 'Authentication failed');
     } finally {
       setButtonLoading(el.buttons.connect, false);
     }
@@ -750,6 +898,7 @@
     }
 
     state.isSubmitting = true;
+    clearExplain('otp-problem');
     setButtonLoading(el.buttons.verifyOtp, true);
 
     try {
@@ -759,6 +908,12 @@
       await fetchDevices();
     } catch (error) {
       showInlineError(el.errorOtp, error.message || 'Verification failed');
+      offerExplain('otp-problem', {
+        message: error.message || 'Verification failed',
+        context: 'Verifying the 6-digit code that Dyson emailed (POST /v3/userregistration/email/verify, together with '
+          + 'the account password) in the setup wizard failed.',
+        title: 'Why did verification fail?',
+      });
       el.otpCode.value = '';
       el.otpCode.focus();
     } finally {
@@ -787,6 +942,9 @@
     } catch (error) {
       hb.toast.error(error.message || 'Failed to fetch devices');
       goToStep(1);
+      showLoginProblem(error.message || 'Failed to fetch devices',
+        'Signing in worked, but reading the device list and local credentials from the Dyson cloud '
+        + '(GET /v2/provisioningservice/manifest) failed.');
     } finally {
       hb.hideSpinner();
     }
@@ -890,6 +1048,9 @@
     }
 
     hb.disableSaveButton();
+
+    // Before any device card renders, so their device-state checks can offer an Explain button
+    await initAssistant();
 
     // Auto-detect country from browser locale (may be overridden by existing config below)
     const detectedCountry = detectCountry();

@@ -151,6 +151,8 @@
           </div>
 
           <div class="alert alert-danger d-none mb-3" id="error-login" role="alert"></div>
+          <!-- Assistant: explain the sign-in error (filled by wizard.js) -->
+          <div id="login-problem" class="mb-3 d-none"></div>
 
           <div class="d-flex justify-content-between">
             <button class="btn btn-outline-secondary d-none" id="btn-cancel-resync">Cancel</button>
@@ -159,6 +161,11 @@
               <span class="spinner-border spinner-border-sm d-none" role="status"></span>
             </button>
           </div>
+
+          <p id="assistant-hint" class="small text-muted mt-3 mb-0 d-none">
+            <i class="bi bi-info-circle me-1"></i>Tip: install and enable <strong>Homebridge AI Kit</strong> to get the Assistant,
+            which explains sign-in and device connection errors here.
+          </p>
         </div>
       </div>
     </div>
@@ -183,6 +190,8 @@
           </div>
 
           <div class="alert alert-danger d-none mb-3" id="error-otp" role="alert"></div>
+          <!-- Assistant: explain the verification error (filled by wizard.js) -->
+          <div id="otp-problem" class="mb-3 d-none"></div>
 
           <div class="d-flex gap-2">
             <button class="btn btn-outline-secondary" id="btn-back-to-login">Back</button>

@@ -134,6 +134,7 @@ describe('homebridge-ui server', () => {
   it('registers all request handlers', () => {
     expect([...mocks.handlers.keys()]).toEqual(expect.arrayContaining([
       '/authenticate', '/verify-otp', '/get-devices', '/get-product-types', '/get-device-state', '/set-continuous-monitoring',
+      '/ai/status', '/ai/explain', '/ai/ask', '/ai/config',
     ]));
   });
 
