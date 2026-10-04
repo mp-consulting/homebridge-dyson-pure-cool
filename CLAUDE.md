@@ -69,6 +69,7 @@ npm run typecheck
 - Local Homebridge test config lives in `test/hbConfig/` (gitignored, contains credentials); copy `test/hbConfig/config.sample.json` to `config.json` to start
 - `scripts/discover-dyson.ts` lists Dyson devices advertising on the LAN via mDNS
 - Shared Homebridge/HAP mocks are in `test/helpers/`
+- The wizard saves through `homebridge-ui/public/config-merge.js` (merges its fields into the saved config so keys it does not render survive); it is a classic browser script, so `test/unit/homebridge-ui/configMerge.test.ts` runs it in a VM context
 
 ## Configuration
 

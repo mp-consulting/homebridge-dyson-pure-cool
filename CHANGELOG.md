@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-10-04
+
+### Fixed
+
+- **Saving from the settings page dropped config keys it does not show**: the setup wizard rebuilt the whole plugin config from its own fields on every save (including auto-save), so options such as `isSingleAccessoryModeEnabled`, `isSingleSensorAccessoryModeEnabled`, `enableHeater`, `enableHumidifier` and `enableContinuousMonitoring`, the child bridge's `_bridge` block, and hand-set per-device overrides (e.g. `isNightModeEnabled`, `fullRangeHumidity`, `isHeatingDisabled`) were silently removed. The wizard's fields are now merged into the saved config: other top-level keys are kept, and each device is matched to its saved entry by serial number so its other keys are kept. A device removed in the wizard is still removed.
+- **Re-syncing the Dyson account reset per-device settings**: the temperature/humidity offsets, Fahrenheit logging, heating service type and continuous monitoring set in the wizard are now kept for devices that were already configured.
+
 ## [1.3.2] - 2026-10-03
 
 ### Changed

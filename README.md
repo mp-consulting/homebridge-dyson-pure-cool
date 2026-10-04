@@ -65,6 +65,8 @@ The easiest way to set up the plugin is through the Homebridge Config UI X setti
 
 Your local device credentials are securely retrieved and stored - your Dyson account password is never saved.
 
+Saving from the settings page only updates the options it shows: other keys you set in `config.json` (such as `isSingleAccessoryModeEnabled`, `enableHeater`, a child bridge's `_bridge` block, or per-device overrides) are kept. Removing a device in the settings page removes its entry.
+
 ### Manual Device Configuration
 
 If you prefer not to use your Dyson account, you can configure devices manually:
