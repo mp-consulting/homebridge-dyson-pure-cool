@@ -267,10 +267,7 @@ Contributions are welcome! Please read the contributing guidelines before submit
 5. Submit a pull request
 
 The build vendors `@mp-consulting/homebridge-ui-kit`, Bootstrap and Bootstrap Icons into
-`homebridge-ui/public/lib/` with `mp-ui-kit-copy --vendor`. Until
-`@mp-consulting/homebridge-ai-core` 2.0.0 and `@mp-consulting/homebridge-ui-kit` 1.2.0
-are published, both are installed from sibling checkouts (`file:../homebridge-mcp-server/packages/ai-core`
-and `file:../homebridge-ui-kit`); they must become `^2.0.0` and `^1.2.0` before release.
+`homebridge-ui/public/lib/` with `mp-ui-kit-copy --vendor`.
 The Assistant routes come from `@mp-consulting/homebridge-ai-core`, the slim core of
 Homebridge AI Kit (its only runtime dependency is `ajv`), so the plugin does not pull in
 the MCP SDK, socket.io or zod.
