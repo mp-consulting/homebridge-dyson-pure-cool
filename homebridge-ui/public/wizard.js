@@ -489,8 +489,7 @@
       return;
     }
     try {
-      await hb.updatePluginConfig([buildConfig()]);
-      await hb.savePluginConfig();
+      await saveConfig();
       hb.toast.success('Settings saved');
     } catch (error) {
       hb.toast.error('Failed to save: ' + (error.message || 'Unknown error'));
@@ -852,6 +851,16 @@
     };
   }
 
+  // Saves the wizard's fields merged into the current config, so keys the
+  // wizard does not render (other options, `_bridge`, per-device overrides)
+  // are kept. Other platform blocks, if any, are left as they are.
+  async function saveConfig() {
+    const configs = (await hb.getPluginConfig()) || [];
+    const merged = DysonConfigMerge.mergePluginConfig(configs[0] ?? state.existingConfig, buildConfig());
+    await hb.updatePluginConfig([merged, ...configs.slice(1)]);
+    await hb.savePluginConfig();
+  }
+
   // =============================================================================
   // API Handlers
   // =============================================================================
@@ -927,7 +936,8 @@
 
     try {
       const response = await hb.request('/get-devices', { token: state.authToken });
-      state.devices = response.devices;
+      // Keep the saved per-device settings of devices already configured
+      state.devices = DysonConfigMerge.withSavedDeviceSettings(response.devices, state.existingConfig?.devices);
       state.isResync = false;
 
       if (state.devices.length === 0) {
@@ -954,8 +964,7 @@
     setButtonLoading(el.buttons.save, true);
 
     try {
-      await hb.updatePluginConfig([buildConfig()]);
-      await hb.savePluginConfig();
+      await saveConfig();
       hb.toast.success('Configuration saved!');
       hb.enableSaveButton();
       goToStep('success');

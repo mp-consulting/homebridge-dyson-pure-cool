@@ -66,6 +66,7 @@ export default tseslint.config(
         homebridge: 'readonly',
         bootstrap: 'readonly',
         MpKit: 'readonly',
+        DysonConfigMerge: 'readonly',
         console: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',

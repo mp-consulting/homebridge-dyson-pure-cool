@@ -15,10 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **UI assets are vendored with `mp-ui-kit-copy --vendor`** from `@mp-consulting/homebridge-ui-kit` 1.2.0 instead of a hand-written copy script; `homebridge-ui/public/lib/` keeps the same layout and now also contains `ai.css`.
+- **The Assistant's wizard caveat no longer applies.** The README said the wizard has no "Describe Your Setup" helper because it rebuilds the whole configuration on every save; since 1.3.3 saving keeps the keys the wizard does not show, so that is no longer true. There is still no "Describe Your Setup" helper in the wizard.
 
 ### Release blockers
 
 - `@mp-consulting/homebridge-ai-kit` (`file:../homebridge-mcp-server`) and `@mp-consulting/homebridge-ui-kit` (`file:../homebridge-ui-kit`) are local, unpublished checkouts. Change them to `^2.0.0` and `^1.2.0` once published, and regenerate `package-lock.json`.
+
+## [1.3.3] - 2026-10-04
+
+### Fixed
+
+- **Saving from the settings page dropped config keys it does not show**: the setup wizard rebuilt the whole plugin config from its own fields on every save (including auto-save), so options such as `isSingleAccessoryModeEnabled`, `isSingleSensorAccessoryModeEnabled`, `enableHeater`, `enableHumidifier` and `enableContinuousMonitoring`, the child bridge's `_bridge` block, and hand-set per-device overrides (e.g. `isNightModeEnabled`, `fullRangeHumidity`, `isHeatingDisabled`) were silently removed. The wizard's fields are now merged into the saved config: other top-level keys are kept, and each device is matched to its saved entry by serial number so its other keys are kept. A device removed in the wizard is still removed.
+- **Re-syncing the Dyson account reset per-device settings**: the temperature/humidity offsets, Fahrenheit logging, heating service type and continuous monitoring set in the wizard are now kept for devices that were already configured.
 
 ## [1.3.2] - 2026-10-03
 
