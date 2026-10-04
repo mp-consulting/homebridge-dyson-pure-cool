@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-10-04
+
+### Fixed
+
+- **Assistant answer panel layout** (`@mp-consulting/homebridge-ui-kit` 1.2.1). The panel's header no longer squeezes the title into a narrow column next to the "Assistant" badge: it wraps onto its own line when there is not enough room. The panel is also `width: 100%` with `box-sizing: border-box` and `min-width: 0`, so long words and URLs wrap instead of widening its container. The answer slots themselves were already full width (under each device card's row, and under the sign-in and verification code errors), so no wizard markup changed.
+
 ## [1.4.0] - 2026-10-04
 
 ### Added
