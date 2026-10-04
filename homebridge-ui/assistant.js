@@ -1,4 +1,4 @@
-import { registerAiRoutes } from '@mp-consulting/homebridge-ai-kit/plugin';
+import { registerAiRoutes } from '@mp-consulting/homebridge-ai-core/plugin';
 
 export const ASSISTANT_PLUGIN_NAME = '@mp-consulting/homebridge-dyson-pure-cool';
 

@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Assistant in the setup wizard.** When an AI provider is set up in Homebridge AI Kit (the shared `HomebridgeAiKit` platform block), an **Explain** button appears under a failed sign-in, a failed verification code and a failed device list download, and on a device card when the device cannot be reached on the local network (reading its state or changing continuous monitoring failed). The explanation streams into an Assistant panel, with Dyson context (cloud sign-in and verification code, local MQTT on port 1883, mDNS discovery, the wizard's and MQTT's common errors). Only the error, the wizard step, the account country, the polling interval and non-sensitive device facts (name, product type/model, firmware, heating/saved-IP/continuous-monitoring flags) are sent: never the Dyson login, verification codes, local credentials, serial numbers or IP addresses; e-mail, IP addresses and serial numbers in error messages are masked. Without the AI Kit nothing changes, apart from a small tip under the sign-in form.
-- `homebridge-ui/server.js` registers the `/ai/status`, `/ai/explain`, `/ai/ask` and `/ai/config` routes through `homebridge-ui/assistant.js` with `registerAiRoutes` from `@mp-consulting/homebridge-ai-kit/plugin` (new runtime dependency).
+- `homebridge-ui/server.js` registers the `/ai/status`, `/ai/explain`, `/ai/ask` and `/ai/config` routes through `homebridge-ui/assistant.js` with `registerAiRoutes` from `@mp-consulting/homebridge-ai-core/plugin` (new runtime dependency: the slim core of Homebridge AI Kit, so the plugin does not pull in the MCP SDK, socket.io or zod).
 
 ### Changed
 
@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Release blockers
 
-- `@mp-consulting/homebridge-ai-kit` (`file:../homebridge-mcp-server`) and `@mp-consulting/homebridge-ui-kit` (`file:../homebridge-ui-kit`) are local, unpublished checkouts. Change them to `^2.0.0` and `^1.2.0` once published, and regenerate `package-lock.json`.
+- `@mp-consulting/homebridge-ai-core` (`file:../homebridge-mcp-server/packages/ai-core`) and `@mp-consulting/homebridge-ui-kit` (`file:../homebridge-ui-kit`) are local, unpublished checkouts. Change them to `^2.0.0` and `^1.2.0` once published, and regenerate `package-lock.json`.
 
 ## [1.3.3] - 2026-10-04
 

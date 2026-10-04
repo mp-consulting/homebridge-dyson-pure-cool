@@ -20,7 +20,7 @@ This is a Homebridge plugin for Dyson Pure Cool air purifiers and fans. It provi
 - `homebridge-ui/` - Uses Homebridge custom UI framework for plugin configuration management (pairing wizard & config)
   - `public/` - Frontend HTML/JS/CSS
   - `server.js` - Backend API for the UI
-  - `assistant.js` - Registers the Assistant routes (`/ai/*`, from `@mp-consulting/homebridge-ai-kit/plugin`) with the
+  - `assistant.js` - Registers the Assistant routes (`/ai/*`, from `@mp-consulting/homebridge-ai-core/plugin`) with the
     Dyson system context; tested in `test/unit/homebridge-ui/assistant.test.ts`
   - The wizard's Assistant UI (`MpKit.ai`) only appears when `/ai/status` reports it enabled; never send the Dyson
     login, codes, local credentials, serial numbers or IPs to it (device fields go through the `assistantDevice()`
