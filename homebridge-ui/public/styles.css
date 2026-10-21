@@ -38,7 +38,7 @@
   flex-direction: column;
   align-items: center;
   color: var(--bs-secondary-color);
-  transition: all 0.3s ease;
+  transition: color 200ms ease;
 }
 
 .step-progress li .step-number {
@@ -54,33 +54,27 @@
   font-weight: 600;
   font-size: 0.875rem;
   margin-bottom: 0.5rem;
-  transition: all 0.3s ease;
+  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;
 }
 
 .step-progress li .step-label {
   font-size: 0.8rem;
   font-weight: 500;
-  transition: all 0.3s ease;
+  transition: color 200ms ease;
   white-space: nowrap;
 }
 
-/* Active step - highlighted with ring and pulse */
+/* Active step - highlighted with ring */
 .step-progress li.active .step-number {
   background: var(--bs-primary);
   color: white;
   border-color: var(--bs-primary);
   box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), 0.25);
-  animation: pulse 2s ease-in-out infinite;
 }
 
 .step-progress li.active .step-label {
   color: var(--bs-primary);
   font-weight: 600;
-}
-
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), 0.25); }
-  50% { box-shadow: 0 0 0 8px rgba(var(--bs-primary-rgb), 0.15); }
 }
 
 /* Completed step */
@@ -102,7 +96,7 @@
   margin: 0 0.5rem;
   margin-bottom: 1.5rem;
   border-radius: 2px;
-  transition: all 0.3s ease;
+  transition: background-color 200ms ease;
   flex-shrink: 0;
 }
 
@@ -117,11 +111,11 @@
 
 .wizard-step.active {
   display: block;
-  animation: fadeIn 0.3s ease;
+  animation: fadeIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -132,7 +126,7 @@
   padding: 1rem;
   margin-bottom: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
 
 .device-card:hover {
@@ -189,12 +183,12 @@
 .success-icon {
   font-size: 4rem;
   color: var(--bs-success);
-  animation: scaleIn 0.5s ease;
+  animation: scaleIn 300ms cubic-bezier(0.23, 1, 0.32, 1) 100ms both;
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0); }
-  to { transform: scale(1); }
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 /* Alert styling */
@@ -235,4 +229,16 @@
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.5px;
+}
+
+/* Reduced motion: keep fades, drop movement */
+@keyframes fadeOnly {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wizard-step.active,
+  .success-icon {
+    animation: fadeOnly 150ms ease-out;
+  }
 }

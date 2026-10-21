@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Settings page** uses `@mp-consulting/homebridge-ui-kit` 1.4.0: long device names wrap to two lines, tabs scroll instead of wrapping, buttons press in, hover effects only apply with a mouse or trackpad, dialogs and toasts ease in and out, and the Assistant glow no longer repaints every frame.
+- **Setup wizard**: the active step no longer pulses forever, steps fade in over 200ms with an ease-out curve, and the success check scales in from 90% instead of from nothing. Reduced motion keeps only the fade, and transitions name the properties they animate instead of `all`.
+
 ## [1.4.2] - 2026-10-04
 
 ### Fixed
