@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.5] - 2026-10-22
+
+### Notes
+
+- Development dependencies only: vitest 5.0.5, ESLint 10.13, typescript-eslint 8.71.2, `@types/node` 26.6.5, vite 8.3.4 and `bootstrap-icons` 1.13.2. The settings page bundles `bootstrap-icons`, but 1.13.2 changes no icons, so nothing changes for users.
+
 ## [1.4.4] - 2026-10-22
 
 ### Changed
