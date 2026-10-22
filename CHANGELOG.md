@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.4] - 2026-10-22
+
+### Changed
+
+- **Assistant** uses `@mp-consulting/homebridge-ai-core` 2.2.0. Cancelling an Assistant request now stops the provider call instead of letting it run to the end. Provider requests are retried on network errors, HTTP 408, 429 and 5xx (`maxRetries` in the `HomebridgeAiKit` block, default 2, 0 turns it off). OpenAI uses the Responses API by default (`openaiApi: 'chat'` keeps Chat Completions for proxies and local servers), and Claude requests use prompt caching. The default OpenAI model is now `gpt-6.1-sol` and the default Gemini model `gemini-3.8-flash`; configs that name a model are unaffected.
+
 ## [1.4.3] - 2026-10-21
 
 ### Changed
