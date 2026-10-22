@@ -203,12 +203,16 @@ function decryptCredentials(encryptedCredentials) {
 // =============================================================================
 
 /** Drop the held password, challenge and expiry timer */
+let pendingAuth = null;
+let challengeId = null;
+let pendingAuthTimer = null;
+
 function clearPendingAuth(ctx) {
-  ctx.pendingAuth = null;
-  ctx.challengeId = null;
-  if (ctx._pendingAuthTimer) {
-    clearTimeout(ctx._pendingAuthTimer);
-    ctx._pendingAuthTimer = null;
+  pendingAuth = null;
+  challengeId = null;
+  if (pendingAuthTimer) {
+    clearTimeout(pendingAuthTimer);
+    pendingAuthTimer = null;
   }
 }
 
@@ -218,20 +222,20 @@ async function handleAuthenticate(ctx, payload) {
   const countryCode = validateCountryCode(payload?.countryCode ?? 'US');
 
   // A new attempt invalidates any previous challenge
-  ctx.challengeId = null;
-  ctx.pendingAuth = { email, password, countryCode };
+  challengeId = null;
+  pendingAuth = { email, password, countryCode };
 
   // Clear any existing timeout and set a new one to avoid holding credentials in memory
-  if (ctx._pendingAuthTimer) {
-    clearTimeout(ctx._pendingAuthTimer);
+  if (pendingAuthTimer) {
+    clearTimeout(pendingAuthTimer);
   }
-  ctx._pendingAuthTimer = setTimeout(() => {
-    if (ctx.pendingAuth) {
+  pendingAuthTimer = setTimeout(() => {
+    if (pendingAuth) {
       console.log('[DysonUI] Clearing stale pending auth (timeout)');
-      ctx.pendingAuth = null;
-      ctx.challengeId = null;
+      pendingAuth = null;
+      challengeId = null;
     }
-    ctx._pendingAuthTimer = null;
+    pendingAuthTimer = null;
   }, PENDING_AUTH_TIMEOUT);
 
   console.log(`[DysonUI] Auth: country: ${countryCode}`);
@@ -264,7 +268,7 @@ async function handleAuthenticate(ctx, payload) {
     });
 
     if (auth?.challengeId) {
-      ctx.challengeId = auth.challengeId;
+      challengeId = auth.challengeId;
       console.log('[DysonUI] 2FA required');
       return { success: true, requires2FA: true };
     }
@@ -286,17 +290,17 @@ async function handleAuthenticate(ctx, payload) {
 async function handleVerifyOtp(ctx, payload) {
   const otpCode = validateOtpCode(payload?.otpCode);
 
-  if (!ctx.challengeId || !ctx.pendingAuth) {
+  if (!challengeId || !pendingAuth) {
     throw new RequestError('No pending authentication', { status: 400 });
   }
 
-  const { email, password, countryCode } = ctx.pendingAuth;
+  const { email, password, countryCode } = pendingAuth;
   console.log('[DysonUI] Verify OTP');
 
   try {
     const response = await dysonRequest(`/v3/userregistration/email/verify?country=${encodeURIComponent(countryCode)}`, {
       method: 'POST',
-      body: JSON.stringify({ email, password, challengeId: ctx.challengeId, otpCode }),
+      body: JSON.stringify({ email, password, challengeId: challengeId, otpCode }),
     });
 
     console.log('[DysonUI] Verify success');
