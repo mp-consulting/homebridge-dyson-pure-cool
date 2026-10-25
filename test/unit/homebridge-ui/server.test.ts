@@ -157,6 +157,68 @@ describe('homebridge-ui server', () => {
       expect(logged).toMatch(/Response status: 200 \(\d+ bytes\)/);
     });
 
+    it.each([
+      ['json', JSON.stringify({ Message: 'Too many requests: hunter2', token: SECRET_TOKEN, challengeId: SECRET_CHALLENGE }), 'rate-limit'],
+      ['html', '<!doctype html><html>user@example.com hunter2 123456</html>', 'unspecified'],
+      ['other', 'not JSON: hunter2', 'unspecified'],
+      ['empty', '', 'unspecified'],
+    ])('preserves 429 and logs safe metadata for a %s response', async (format, body, category) => {
+      mockFetch(
+        jsonResponse({ version: '1' }),
+        jsonResponse({ accountStatus: 'ACTIVE' }),
+        jsonResponse({ challengeId: SECRET_CHALLENGE }),
+        new Response(body, { status: 429, headers: [
+          ['content-type', format === 'json' ? 'application/json; charset=utf-8' : 'text/html'],
+          ['retry-after', '120'],
+          ['cf-ray', '0123456789abcdef-LHR'],
+          ['set-cookie', '__cfruid=COOKIE-SECRET; Path=/; HttpOnly'],
+          ['set-cookie', 'PRIVATE-COOKIE-NAME=OTHER-SECRET; Path=/'],
+        ] }),
+      );
+      await handler('/authenticate')(validAuth);
+      await expect(handler('/verify-otp')({ otpCode: '123456' })).rejects.toMatchObject({
+        message: 'HTTP 429', requestError: { status: 429 },
+      });
+      const logged = allLogged();
+      for (const secret of [SECRET_TOKEN, SECRET_CHALLENGE, 'hunter2', 'user@example.com',
+        'COOKIE-SECRET', 'OTHER-SECRET', 'PRIVATE-COOKIE-NAME']) {
+        expect(logged).not.toContain(secret);
+      }
+      expect(logged).toContain('"retryAfter":"120"');
+      expect(logged).toContain('"cfRay":"0123456789abcdef-LHR"');
+      expect(logged).toContain('"cookieNames":["__cfruid"]');
+      expect(logged).toContain('"otherCookieCount":1');
+      expect(logged).toContain(`"bodyFormat":"${format}"`);
+      expect(logged).toContain(`"errorCategory":"${category}"`);
+      expect(mocks.instance.pendingAuth).toBeNull();
+      expect(fetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('omits unexpected header values and arbitrary error messages on 429', async () => {
+      mockFetch(new Response(JSON.stringify({ Message: 'Invalid SECRET-MESSAGE' }), {
+        status: 429, headers: {
+          'content-type': 'application/SECRET-TYPE',
+          'retry-after': 'SECRET-RETRY',
+          'cf-ray': 'SECRET-RAY',
+        },
+      }));
+      await expect(handler('/authenticate')(validAuth)).rejects.toThrow('HTTP 429');
+      expect(allLogged()).not.toContain('SECRET-');
+      expect(allLogged()).toContain('"retryAfter":"omitted"');
+      expect(allLogged()).toContain('"cfRay":"omitted"');
+      expect(allLogged()).toContain('"contentType":"other"');
+    });
+
+    it('accepts HTTP-date retry intervals and handles absent diagnostic headers', async () => {
+      mockFetch(new Response(null, { status: 429, headers: {
+        'retry-after': 'Sun, 25 Oct 2026 12:00:00 GMT',
+      } }));
+      await expect(handler('/authenticate')(validAuth)).rejects.toThrow('HTTP 429');
+      expect(allLogged()).toContain('"retryAfter":"Sun, 25 Oct 2026 12:00:00 GMT"');
+      expect(allLogged()).toContain('"cfRay":"absent"');
+      expect(allLogged()).toContain('"contentType":"absent"');
+    });
+
     it('does not log device credentials from the manifest', async () => {
       mockFetch(jsonResponse([{ Serial: 'ABC-US-1', ProductType: '438', Name: 'Fan', LocalCredentials: 'LOCALCREDS-SECRET' }]));
 

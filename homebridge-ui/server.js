@@ -49,6 +49,47 @@ const DEFAULT_HEADERS = {
 // HTTP Client (native fetch)
 // =============================================================================
 
+// Only emit validated metadata and fixed categories, never arbitrary response text.
+function logRateLimitDiagnostics(response, body) {
+  const headers = response.headers;
+  const validatedHeader = (name, pattern) => {
+    const value = headers.get(name);
+    return value === null ? 'absent' : pattern.test(value) ? value : 'omitted';
+  };
+  const contentType = headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+  const knownTypes = ['application/json', 'application/problem+json', 'text/html', 'text/plain'];
+  const retryAfter = validatedHeader('retry-after', /^(?:\d{1,10}|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT)$/);
+  const cfRay = validatedHeader('cf-ray', /^[a-fA-F0-9]{16,32}(?:-[A-Z]{3})?$/);
+  const cookies = headers.getSetCookie?.() ?? [];
+  const knownCookies = new Set(['__cfduid', '__cfruid', '__cf_bm', '_cfuvid', 'cf_clearance']);
+  const cookieNames = [...new Set(cookies.map(cookie => cookie.slice(0, cookie.indexOf('=')).trim()))];
+  const recognizedCookies = cookieNames.filter(name => knownCookies.has(name));
+  let bodyFormat = body.trim() ? 'other' : 'empty';
+  let errorCategory = 'unspecified';
+  try {
+    const data = JSON.parse(body);
+    bodyFormat = 'json';
+    // Examine only conventional error fields; never output their actual contents.
+    const fields = [data?.Message, data?.message, data?.error, data?.title];
+    if (fields.some(value => typeof value === 'string' && /too many requests|rate.?limit|throttl/i.test(value))) {
+      errorCategory = 'rate-limit';
+    }
+  } catch {
+    if (/^\s*(?:<!doctype html|<html)\b/i.test(body)) {
+      bodyFormat = 'html';
+    }
+  }
+  console.warn('[DysonUI] HTTP 429 diagnostics: ' + JSON.stringify({
+    contentType: contentType === undefined ? 'absent' : knownTypes.includes(contentType) ? contentType : 'other',
+    retryAfter,
+    cfRay,
+    cookieNames: recognizedCookies,
+    otherCookieCount: cookieNames.length - recognizedCookies.length,
+    bodyFormat,
+    errorCategory,
+  }));
+}
+
 async function dysonRequest(endpoint, options = {}) {
   const url = `${DYSON_API_BASE_URL}${endpoint}`;
   const method = options.method || 'GET';
@@ -82,6 +123,11 @@ async function dysonRequest(endpoint, options = {}) {
     const text = await response.text();
     // Never log the body: it carries auth tokens, challenge IDs and device credentials
     console.log(`[DysonUI] Response status: ${response.status} (${Buffer.byteLength(text ?? '', 'utf8')} bytes)`);
+
+    if (response.status === 429) {
+      logRateLimitDiagnostics(response, text ?? '');
+      throw new RequestError('HTTP 429', { status: 429 });
+    }
 
     if (!text?.trim()) {
       return null;

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.6] - 2026-10-25
+
+### Added
+
+- Safe diagnostics for Dyson HTTP 429 responses: validated retry interval and Cloudflare request ID, recognized content type and Cloudflare cookie names, response format, and a fixed error category. Raw response bodies, arbitrary error messages, credentials, and cookie values are not logged. This gathers evidence for issue #29; it does not change the authentication requests or claim to fix Dyson rate limiting.
+
+### Fixed
+
+- Preserve HTTP 429 for empty, HTML, or malformed response bodies instead of returning an empty result or reporting a JSON parsing error.
+
 ## [1.4.5] - 2026-10-22
 
 ### Notes
