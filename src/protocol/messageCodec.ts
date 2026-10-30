@@ -92,6 +92,7 @@ export interface RawStateData {
   nmod?: string | [string, string];
   rhtm?: string | [string, string];
   ffoc?: string | [string, string];
+  fdir?: string | [string, string];
   hmod?: string | [string, string];
   hmax?: string | [string, string];
   hsta?: string | [string, string];
@@ -114,6 +115,14 @@ export interface RawStateData {
   fltf?: string | [string, string];
   cflr?: string | [string, string];
   [key: string]: string | [string, string] | undefined;
+}
+
+/**
+ * Options for {@link MessageCodec.parseRawState}
+ */
+export interface ParseStateOptions {
+  /** Field carrying the front airflow state (`fdir` on gen2, `ffoc` on gen1) */
+  airflowField?: 'fdir' | 'ffoc';
 }
 
 /**
@@ -150,8 +159,12 @@ export class MessageCodec {
   /**
    * Parse raw state data into DeviceState
    * Handles both CURRENT-STATE (direct values) and STATE-CHANGE ([old, new] arrays)
+   *
+   * @param options.airflowField - Field carrying the front airflow state: `fdir`
+   *   on gen2 models, `ffoc` on the gen1 HP02. When omitted, `fdir` is used if
+   *   present and `ffoc` otherwise.
    */
-  static parseRawState(raw: RawStateData): Partial<DeviceState> {
+  static parseRawState(raw: RawStateData, options: ParseStateOptions = {}): Partial<DeviceState> {
     const state: Partial<DeviceState> = {};
 
     // Fan power
@@ -223,9 +236,10 @@ export class MessageCodec {
     }
 
     // Front airflow
-    const ffoc = MessageCodec.extractValue(raw.ffoc);
-    if (ffoc !== undefined) {
-      state.frontAirflow = ffoc === PROTOCOL.ON;
+    const airflowField = options.airflowField ?? (raw.fdir !== undefined ? 'fdir' : 'ffoc');
+    const airflow = MessageCodec.extractValue(raw[airflowField]);
+    if (airflow !== undefined) {
+      state.frontAirflow = airflow === PROTOCOL.ON;
     }
 
     // Environmental sensor data

@@ -224,12 +224,12 @@ describe('FanService', () => {
       await activeSetHandler(1);
       await flushCommands();
 
-      // setFanPower uses fmod command - FAN mode for manual, AUTO for auto mode
+      // Gen2 models (TP04 438) take power via fpwr, with auto/fnsp for mode/speed
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           msg: 'STATE-SET',
           'mode-reason': 'LAPP',
-          data: { fmod: 'FAN' },
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0004' },
         }),
       );
     });
@@ -240,7 +240,7 @@ describe('FanService', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'OFF' },
+          data: { fpwr: 'OFF' },
         }),
       );
     });
@@ -299,10 +299,9 @@ describe('FanService', () => {
       await targetStateSetHandler(1);
       await flushCommands();
 
-      // Newer models use fmod only, no fpwr/auto fields
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'AUTO' },
+          data: { fpwr: 'ON', auto: 'ON', fnsp: 'AUTO' },
         }),
       );
     });
@@ -311,10 +310,9 @@ describe('FanService', () => {
       await targetStateSetHandler(0);
       await flushCommands();
 
-      // Newer models use fmod and fnsp for manual mode
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ fmod: 'FAN', fnsp: '0004' }),
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0004' },
         }),
       );
     });
@@ -394,7 +392,7 @@ describe('FanService', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'OFF' },
+          data: { fpwr: 'OFF' },
         }),
       );
     });
@@ -442,7 +440,7 @@ describe('FanService', () => {
       expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'FAN', fnsp: '0007' },
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0007' },
         }),
       );
     });
@@ -460,7 +458,7 @@ describe('FanService', () => {
       expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'FAN', fnsp: '0006' },
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0006' },
         }),
       );
     });

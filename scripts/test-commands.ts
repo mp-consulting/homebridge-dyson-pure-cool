@@ -14,7 +14,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import mqtt from 'mqtt';
 import readline from 'readline';
-import { getDeviceByProductType } from '../src/config/deviceCatalog.js';
+import { getDeviceByProductType, getCommandProtocol } from '../src/config/deviceCatalog.js';
 
 interface DeviceConfig {
   serial: string;
@@ -92,10 +92,10 @@ const config = loadConfig(deviceIndex);
 
 const MQTT_PORT = 1883;
 
-// Determine if this is a Pure Cool Link device (TP02, DP01) - uses fpwr/auto protocol
-// Note: HP02 (455) is called "Hot+Cool Link" but uses fmod like newer devices
+// Gen2 devices (everything newer than HP02/TP02/DP01) use fpwr/auto for power
+// and fdir for airflow; the gen1 Link series uses fmod and ffoc
 const deviceInfo = getDeviceByProductType(config.productType);
-const isLinkSeries = config.productType === '475' || config.productType === '469';
+const usesGen2 = getCommandProtocol(config.productType) === 'gen2';
 
 console.log('='.repeat(60));
 console.log('Dyson Device Command Tester');
@@ -105,7 +105,7 @@ console.log(`Serial: ${config.serial}`);
 console.log(`Product Type: ${config.productType}`);
 console.log(`Model: ${deviceInfo?.modelName || 'Unknown'} (${deviceInfo?.modelCode || 'Unknown'})`);
 console.log(`Series: ${deviceInfo?.series || 'Unknown'}`);
-console.log(`Is Link Series: ${isLinkSeries}`);
+console.log(`Command Protocol: ${usesGen2 ? 'gen2 (fpwr/fdir)' : 'gen1 (fmod/ffoc)'}`);
 console.log(`IP Address: ${config.ipAddress}`);
 console.log('='.repeat(60));
 
@@ -162,7 +162,7 @@ function showHelp(): void {
   console.log('\n=== Available Commands ===');
   console.log('');
   console.log('  Power Control:');
-  if (isLinkSeries) {
+  if (usesGen2) {
     console.log('    on       - Turn fan ON (fpwr: ON, auto: OFF, fnsp: 0004)');
     console.log('    off      - Turn fan OFF (fpwr: OFF)');
     console.log('    auto     - Turn fan ON in AUTO mode (fpwr: ON, auto: ON, fnsp: AUTO)');
@@ -232,7 +232,7 @@ function processCommand(input: string): boolean {
 
     // Power commands
     case 'on':
-      if (isLinkSeries) {
+      if (usesGen2) {
         sendCommand({ fpwr: 'ON', auto: 'OFF', fnsp: '0004' });
       } else {
         sendCommand({ fmod: 'FAN' });
@@ -240,7 +240,7 @@ function processCommand(input: string): boolean {
       break;
 
     case 'off':
-      if (isLinkSeries) {
+      if (usesGen2) {
         sendCommand({ fpwr: 'OFF' });
       } else {
         sendCommand({ fmod: 'OFF' });
@@ -248,7 +248,7 @@ function processCommand(input: string): boolean {
       break;
 
     case 'auto':
-      if (isLinkSeries) {
+      if (usesGen2) {
         sendCommand({ fpwr: 'ON', auto: 'ON', fnsp: 'AUTO' });
       } else {
         sendCommand({ fmod: 'AUTO' });
@@ -262,7 +262,7 @@ function processCommand(input: string): boolean {
         console.log('Invalid speed. Usage: speed N (1-10)');
       } else {
         const encodedSpeed = String(speed).padStart(4, '0');
-        if (isLinkSeries) {
+        if (usesGen2) {
           sendCommand({ fpwr: 'ON', auto: 'OFF', fnsp: encodedSpeed });
         } else {
           sendCommand({ fmod: 'FAN', fnsp: encodedSpeed });
@@ -296,9 +296,9 @@ function processCommand(input: string): boolean {
     // Jet focus
     case 'jet':
       if (arg === 'on') {
-        sendCommand({ ffoc: 'ON' });
+        sendCommand(usesGen2 ? { fdir: 'ON' } : { ffoc: 'ON' });
       } else if (arg === 'off') {
-        sendCommand({ ffoc: 'OFF' });
+        sendCommand(usesGen2 ? { fdir: 'OFF' } : { ffoc: 'OFF' });
       } else {
         console.log('Usage: jet on|off');
       }
@@ -395,7 +395,7 @@ client.on('message', (topic, payload) => {
       console.log(`\n<<< Received ${msgType}:`);
 
       // Show relevant fields
-      const relevantFields = ['fpwr', 'fmod', 'fnsp', 'auto', 'oson', 'nmod', 'ffoc', 'rhtm', 'hmod', 'hmax', 'hsta'];
+      const relevantFields = ['fpwr', 'fmod', 'fnsp', 'auto', 'oson', 'nmod', 'ffoc', 'fdir', 'rhtm', 'hmod', 'hmax', 'hsta'];
       const filteredState: Record<string, unknown> = {};
       for (const field of relevantFields) {
         if (state?.[field] !== undefined) {

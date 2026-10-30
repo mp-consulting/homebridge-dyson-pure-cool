@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.8] - 2026-10-30
+
+### Fixed
+
+- Power on/off and Jet Focus did nothing on newer models such as the HP09 (#29). The MyDyson app drives every model newer than the Link series with `fpwr` (power), `auto`/`fnsp` (mode and speed) and `fdir` (airflow direction), but the plugin sent the gen1 `fmod` and `ffoc` fields, which these models ignore. Fan speed and Night Mode were unaffected. The Jet Focus switch now also follows `fdir` reports from the device.
+- Pure Cool Link TP02 (475) and DP01 (469) now use `fmod` for power and mode, like the HP02 and the MyDyson app, instead of `fpwr`/`auto`.
+
 ## [1.4.7] - 2026-10-30
 
 ### Fixed

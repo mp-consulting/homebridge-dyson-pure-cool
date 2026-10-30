@@ -21,17 +21,17 @@ export type DeviceSeries =
   | 'cool';               // CF1 (plain fan, no sensors)
 
 /**
- * MQTT protocol used for the fan power (on/off) command.
+ * MQTT command protocol generation, as the MyDyson app splits its machines.
  *
- * - `fmod`: legacy field carrying power *and* mode (`OFF`/`FAN`/`AUTO`).
- *   Accepted by most purifier models.
- * - `fpwr`: dedicated power field (`ON`/`OFF`), with `auto`/`fnsp` carrying
- *   mode/speed separately. Used by the Pure Cool Link series and by newer
- *   fans (e.g. CF1) that do NOT honour `fmod` for power.
+ * - `gen1` (HP02 455, TP02 475, DP01 469): power and mode share the `fmod`
+ *   field (`OFF`/`FAN`/`AUTO`); airflow focus is `ffoc`.
+ * - `gen2` (every newer model): dedicated `fpwr` power field (`ON`/`OFF`),
+ *   with `auto`/`fnsp` carrying mode/speed; airflow direction is `fdir`
+ *   (`ON` = front, `OFF` = back). These models ignore `fmod` and `ffoc`.
  *
- * Defaults to `fmod` when unspecified — see {@link getPowerProtocol}.
+ * Defaults to `gen2` when unspecified — see {@link getCommandProtocol}.
  */
-export type PowerProtocol = 'fmod' | 'fpwr';
+export type CommandProtocol = 'gen1' | 'gen2';
 
 /**
  * Device model definition
@@ -49,11 +49,8 @@ export interface DeviceModel {
   features: DeviceFeatures;
   /** Whether this is a formaldehyde-detecting model */
   formaldehyde: boolean;
-  /**
-   * Fan power command protocol. Defaults to `fmod` when omitted.
-   * Set to `fpwr` for devices that only respond to the dedicated power field.
-   */
-  powerProtocol?: PowerProtocol;
+  /** MQTT command protocol. Defaults to `gen2` when omitted. */
+  commandProtocol?: CommandProtocol;
 }
 
 // ============================================================================
@@ -179,8 +176,7 @@ const FEATURES_BIG_QUIET: DeviceFeatures = {
 /**
  * Cool series (plain fan: no air-quality sensors, no filters).
  *
- * Currently CF1 only, which takes power via the dedicated `fpwr` field rather
- * than `fmod` — see the `powerProtocol` on its catalog entry.
+ * Currently CF1 only.
  */
 const FEATURES_COOL_FAN: DeviceFeatures = {
   ...DEFAULT_FEATURES,
@@ -207,7 +203,7 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
     series: 'pure-cool-link',
     features: FEATURES_PURE_COOL_LINK,
     formaldehyde: false,
-    powerProtocol: 'fpwr',
+    commandProtocol: 'gen1',
   },
   {
     productType: '469',
@@ -216,7 +212,7 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
     series: 'pure-cool-link',
     features: FEATURES_PURE_COOL_LINK,
     formaldehyde: false,
-    powerProtocol: 'fpwr',
+    commandProtocol: 'gen1',
   },
 
   // Pure Cool Series
@@ -269,6 +265,7 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
     series: 'hot-cool-link',
     features: FEATURES_HOT_COOL_LINK,
     formaldehyde: false,
+    commandProtocol: 'gen1',
   },
 
   // Hot+Cool Series
@@ -405,8 +402,6 @@ export const DEVICE_CATALOG: readonly DeviceModel[] = [
     series: 'cool',
     features: FEATURES_COOL_FAN,
     formaldehyde: false,
-    // CF1 ignores `fmod` for power; it only responds to the dedicated `fpwr` field.
-    powerProtocol: 'fpwr',
   },
 ] as const;
 
@@ -459,14 +454,14 @@ export function getDeviceFeatures(productType: string): DeviceFeatures {
 }
 
 /**
- * Get the fan power command protocol by product type.
+ * Get the MQTT command protocol by product type.
  *
  * @param productType - Dyson product type code
- * @returns `'fpwr'` for devices that require the dedicated power field,
- *          otherwise `'fmod'` (the default for unspecified / unknown types)
+ * @returns `'gen1'` for the Link series (HP02, TP02, DP01), otherwise `'gen2'`
+ *          (the default for unspecified / unknown types)
  */
-export function getPowerProtocol(productType: string): PowerProtocol {
-  return productTypeMap.get(productType)?.powerProtocol ?? 'fmod';
+export function getCommandProtocol(productType: string): CommandProtocol {
+  return productTypeMap.get(productType)?.commandProtocol ?? 'gen2';
 }
 
 /**

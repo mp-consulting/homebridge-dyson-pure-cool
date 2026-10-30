@@ -344,6 +344,21 @@ describe('MessageCodec', () => {
       expect(state.frontAirflow).toBe(true);
     });
 
+    it('should decode front airflow direction from fdir', () => {
+      expect(MessageCodec.parseRawState({ fdir: 'ON' }).frontAirflow).toBe(true);
+      expect(MessageCodec.parseRawState({ fdir: 'OFF' }).frontAirflow).toBe(false);
+    });
+
+    it('should prefer fdir over ffoc when no airflow field is given', () => {
+      expect(MessageCodec.parseRawState({ fdir: 'OFF', ffoc: 'ON' }).frontAirflow).toBe(false);
+    });
+
+    it('should read only the requested airflow field', () => {
+      expect(MessageCodec.parseRawState({ ffoc: 'ON' }, { airflowField: 'fdir' }).frontAirflow).toBeUndefined();
+      expect(MessageCodec.parseRawState({ fdir: 'ON' }, { airflowField: 'ffoc' }).frontAirflow).toBeUndefined();
+      expect(MessageCodec.parseRawState({ fdir: 'ON', ffoc: 'OFF' }, { airflowField: 'ffoc' }).frontAirflow).toBe(false);
+    });
+
     it('should return empty object for message without state data', () => {
       const message: DysonMessage = {
         msg: 'UNKNOWN',
