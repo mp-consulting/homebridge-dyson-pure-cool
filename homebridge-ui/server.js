@@ -40,8 +40,10 @@ const DECRYPT_IV = Buffer.from([
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
 
+// MyDyson Android's OkHttp default. Cloudflare rate-limits the email auth/verify
+// endpoints with HTTP 429 for the legacy 'android client' UA (issue #29).
 const DEFAULT_HEADERS = {
-  'User-Agent': 'android client',
+  'User-Agent': 'okhttp/4.12.0',
   'Accept': 'application/json',
 };
 
