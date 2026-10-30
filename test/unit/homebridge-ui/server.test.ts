@@ -321,6 +321,16 @@ describe('homebridge-ui server', () => {
       expect(mocks.instance.pendingAuth.countryCode).toBe('GB');
     });
 
+    it('sends the OkHttp default User-Agent used by the MyDyson Android app', async () => {
+      const fetchMock = mockFetch(jsonResponse({ version: '1' }), jsonResponse({ accountStatus: 'ACTIVE' }), jsonResponse({ challengeId: 'c' }));
+
+      await handler('/authenticate')(validAuth);
+
+      for (const [, init] of fetchMock.mock.calls) {
+        expect(init.headers['User-Agent']).toBe('okhttp/4.12.0');
+      }
+    });
+
     it.each(['12345', '1234567', 'abcdef', 123456, undefined])('rejects invalid OTP code %s', async (otpCode) => {
       await expect(handler('/verify-otp')({ otpCode })).rejects.toThrow('Verification code must be 6 digits');
     });

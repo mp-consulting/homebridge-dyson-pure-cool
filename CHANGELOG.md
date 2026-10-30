@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.7] - 2026-10-30
+
+### Fixed
+
+- Dyson account sign-in failing with HTTP 429 (`Retry-After: 3600`) on the OTP request or verification step (#29). Dyson's Cloudflare rule rejects the `android client` User-Agent the setup wizard sent; the wizard now sends `okhttp/4.12.0`, the OkHttp default the MyDyson Android app sends.
+
 ## [1.4.6] - 2026-10-25
 
 ### Added

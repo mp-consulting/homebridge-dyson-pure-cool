@@ -41,7 +41,9 @@ const DECRYPT_IV = Buffer.from([
 ]);
 
 const DEFAULT_HEADERS = {
-  'User-Agent': 'android client',
+  // Cloudflare returns HTTP 429 (Retry-After: 3600) for `android client` on the
+  // verify/auth endpoints; the OkHttp default UA is accepted (see issue #29)
+  'User-Agent': 'okhttp/4.12.0',
   'Accept': 'application/json',
 };
 
