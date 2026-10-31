@@ -10,6 +10,7 @@ import {
   isProductTypeSupported,
   getSupportedProductTypes,
   getDeviceFeatures,
+  getCommandProtocol,
   getDeviceModelName,
   getProductTypeDisplayNames,
   getDevicesBySeries,
@@ -124,6 +125,29 @@ describe('Device Catalog', () => {
     it('should return DEFAULT_FEATURES for unknown product type', () => {
       const features = getDeviceFeatures('999');
       expect(features).toEqual(DEFAULT_FEATURES);
+    });
+  });
+
+  describe('getCommandProtocol', () => {
+    // Mirrors the MyDyson app, which drives only HP02/TP02/DP01 with the gen1
+    // fmod/ffoc fields and every newer machine with fpwr/auto/fdir.
+    it('should use gen1 for the Link series only', () => {
+      const gen1 = DEVICE_CATALOG
+        .filter(d => getCommandProtocol(d.productType) === 'gen1')
+        .map(d => d.productType)
+        .sort();
+      expect(gen1).toEqual(['455', '469', '475']);
+    });
+
+    it.each(['438', '438E', '438K', '520', '527', '527E', '527K', '358', '358E', '358K', '664', '739'])(
+      'should use gen2 for %s',
+      (productType) => {
+        expect(getCommandProtocol(productType)).toBe('gen2');
+      },
+    );
+
+    it('should default to gen2 for unknown product types', () => {
+      expect(getCommandProtocol('999')).toBe('gen2');
     });
   });
 

@@ -38,9 +38,11 @@ This is a Homebridge plugin for Dyson Pure Cool air purifiers and fans. It provi
 ### Device Protocol
 
 Dyson devices use MQTT for local communication:
-- **Older Link models** (HP02, TP02, DP01): Use `auto`/`fpwr` fields for mode control
-- **Newer models** (HP04+, TP04+): Use `fmod` field for mode control
-- State fields: `ffoc` (jet focus), `nmod` (night mode), `rhtm` (continuous monitoring), `fnsp` (fan speed), etc.
+- The command protocol is catalog-driven (`commandProtocol` in `deviceCatalog.ts`) and mirrors the MyDyson app:
+  - **gen1** (HP02 455, TP02 475, DP01 469): `fmod` (`OFF`/`FAN`/`AUTO`) carries power and mode; `ffoc` is jet focus
+  - **gen2** (every newer model, the default): `fpwr` for power, `auto`/`fnsp` for mode/speed, `fdir` for airflow
+    direction (`ON` = front); these models ignore `fmod` and `ffoc`
+- Shared state fields: `nmod` (night mode), `rhtm` (continuous monitoring), `fnsp` (fan speed), `oson` (oscillation), etc.
 
 ## Development Commands
 

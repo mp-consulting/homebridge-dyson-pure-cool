@@ -91,12 +91,12 @@ describe('DysonLinkDevice', () => {
       await device.setFanPower(true);
       await flushMicrotasks();
 
-      // Newer models use fmod only (no auto field)
+      // Gen2 models (TP04 438) take power via fpwr, with auto/fnsp for mode/speed
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           msg: 'STATE-SET',
           'mode-reason': 'LAPP',
-          data: { fmod: 'FAN' },
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0004' },
         }),
       );
     });
@@ -107,13 +107,13 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'OFF' },
+          data: { fpwr: 'OFF' },
         }),
       );
     });
   });
 
-  describe('setFanPower for CF1 (739, fpwr protocol)', () => {
+  describe('setFanPower for CF1 (739, gen2 protocol)', () => {
     let cf1Device: DysonLinkDevice;
     let cf1MqttClient: ReturnType<typeof createMockMqttClient>;
 
@@ -147,6 +147,94 @@ describe('DysonLinkDevice', () => {
     });
   });
 
+  describe('gen2 protocol (HP09 527K)', () => {
+    let hp09Device: DysonLinkDevice;
+    let hp09MqttClient: ReturnType<typeof createMockMqttClient>;
+
+    beforeEach(async () => {
+      hp09MqttClient = createMockMqttClient();
+      hp09Device = new DysonLinkDevice(
+        { ...defaultDeviceInfo, productType: '527K' },
+        vi.fn().mockReturnValue(hp09MqttClient),
+      );
+      await hp09Device.connect();
+    });
+
+    it('should turn on and off with fpwr', async () => {
+      await hp09Device.setFanPower(true);
+      await hp09Device.setFanPower(false);
+
+      expect(sentCommand(hp09MqttClient, 0).data).toEqual({ fpwr: 'ON', auto: 'OFF', fnsp: '0004' });
+      expect(sentCommand(hp09MqttClient, 1).data).toEqual({ fpwr: 'OFF' });
+    });
+
+    it('should set jet focus with fdir, not ffoc', async () => {
+      await hp09Device.setJetFocus(true);
+      await hp09Device.setJetFocus(false);
+
+      expect(sentCommand(hp09MqttClient, 0).data).toEqual({ fdir: 'ON' });
+      expect(sentCommand(hp09MqttClient, 1).data).toEqual({ fdir: 'OFF' });
+    });
+
+    it('should read the airflow direction from fdir and ignore ffoc', () => {
+      const emit = (productState: Record<string, string>) => hp09MqttClient._emit('message', {
+        topic: '527K/ABC-AB-12345678/status/current',
+        payload: Buffer.from('{}'),
+        data: { msg: 'STATE-CHANGE', 'product-state': productState },
+      });
+
+      emit({ fdir: 'ON' });
+      expect(hp09Device.getState().frontAirflow).toBe(true);
+
+      emit({ ffoc: 'OFF' });
+      expect(hp09Device.getState().frontAirflow).toBe(true);
+
+      emit({ fdir: 'OFF' });
+      expect(hp09Device.getState().frontAirflow).toBe(false);
+    });
+  });
+
+  describe.each([
+    ['455', 'HP02'],
+    ['475', 'TP02'],
+    ['469', 'DP01'],
+  ])('gen1 protocol (%s %s)', (productType) => {
+    let linkDevice: DysonLinkDevice;
+    let linkMqttClient: ReturnType<typeof createMockMqttClient>;
+
+    beforeEach(async () => {
+      linkMqttClient = createMockMqttClient();
+      linkDevice = new DysonLinkDevice(
+        { ...defaultDeviceInfo, productType },
+        vi.fn().mockReturnValue(linkMqttClient),
+      );
+      await linkDevice.connect();
+    });
+
+    it('should turn on and off with fmod', async () => {
+      await linkDevice.setFanPower(true);
+      await flushMicrotasks();
+      await linkDevice.setFanPower(false);
+
+      expect(sentCommand(linkMqttClient, 0).data).toEqual({ fmod: 'FAN' });
+      expect(sentCommand(linkMqttClient, 1).data).toEqual({ fmod: 'OFF' });
+    });
+
+    it('should set speed and auto mode with fmod', async () => {
+      await linkDevice.setFanSpeed(5);
+      await linkDevice.setAutoMode(true);
+
+      expect(sentCommand(linkMqttClient, 0).data).toEqual({ fmod: 'FAN', fnsp: '0005' });
+      expect(sentCommand(linkMqttClient, 1).data).toEqual({ fmod: 'AUTO' });
+    });
+
+    it('should set jet focus with ffoc', async () => {
+      await linkDevice.setJetFocus(true);
+
+      expect(sentCommand(linkMqttClient, 0).data).toEqual({ ffoc: 'ON' });
+    });
+  });
+
   describe('activation defaults', () => {
     beforeEach(async () => {
       await device.connect();
@@ -158,7 +246,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'FAN' },
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0004' },
         }),
       );
     });
@@ -170,11 +258,11 @@ describe('DysonLinkDevice', () => {
       await flushMicrotasks();
 
       // All queued in one tick, so they merge into a single MQTT message.
-      // Auto mode wins over the FAN value queued by setFanPower.
+      // Auto mode wins over the manual values queued by setFanPower.
       expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'AUTO', oson: 'ON', nmod: 'ON' },
+          data: { fpwr: 'ON', auto: 'ON', fnsp: 'AUTO', oson: 'ON', nmod: 'ON' },
         }),
       );
     });
@@ -237,7 +325,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'OFF' },
+          data: { fpwr: 'OFF' },
         }),
       );
     });
@@ -263,10 +351,9 @@ describe('DysonLinkDevice', () => {
       await device.setFanSpeed(5);
       await flushMicrotasks();
 
-      // Newer models use fnsp and fmod only (no auto field)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fnsp: '0005', fmod: 'FAN' },
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0005' },
         }),
       );
     });
@@ -277,7 +364,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fnsp: '0001', fmod: 'FAN' },
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0001' },
         }),
       );
     });
@@ -288,7 +375,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fnsp: '0010', fmod: 'FAN' },
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0010' },
         }),
       );
     });
@@ -297,10 +384,9 @@ describe('DysonLinkDevice', () => {
       await device.setFanSpeed(-1);
       await flushMicrotasks();
 
-      // Newer models use fmod only (no auto field)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'AUTO' },
+          data: { fpwr: 'ON', auto: 'ON', fnsp: 'AUTO' },
         }),
       );
     });
@@ -371,10 +457,9 @@ describe('DysonLinkDevice', () => {
       await device.setAutoMode(true);
       await flushMicrotasks();
 
-      // Newer models use fmod only (no fpwr/auto fields)
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { fmod: 'AUTO' },
+          data: { fpwr: 'ON', auto: 'ON', fnsp: 'AUTO' },
         }),
       );
     });
@@ -383,10 +468,9 @@ describe('DysonLinkDevice', () => {
       await device.setAutoMode(false);
       await flushMicrotasks();
 
-      // Newer models use fmod and fnsp for manual mode
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ fmod: 'FAN', fnsp: '0004' }),
+          data: { fpwr: 'ON', auto: 'OFF', fnsp: '0004' },
         }),
       );
     });
@@ -434,7 +518,7 @@ describe('DysonLinkDevice', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(1);
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { oson: 'ON', nmod: 'ON', ffoc: 'OFF' } }),
+        expect.objectContaining({ data: { oson: 'ON', nmod: 'ON', fdir: 'OFF' } }),
       );
     });
 
@@ -503,8 +587,8 @@ describe('DysonLinkDevice', () => {
       await device.setFanPower(true);
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(2);
-      expect(sentCommand(mockMqttClient, 0).data).toEqual({ fmod: 'OFF' });
-      expect(sentCommand(mockMqttClient, 1).data).toEqual({ fmod: 'FAN' });
+      expect(sentCommand(mockMqttClient, 0).data).toEqual({ fpwr: 'OFF' });
+      expect(sentCommand(mockMqttClient, 1).data).toEqual({ fpwr: 'ON', auto: 'OFF', fnsp: '0005' });
     });
 
     it('should keep the override while the device still reports the stale power state', async () => {
@@ -515,7 +599,7 @@ describe('DysonLinkDevice', () => {
       await device.setFanPower(true);
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledTimes(2);
-      expect(sentCommand(mockMqttClient, 1).data).toEqual({ fmod: 'FAN' });
+      expect(sentCommand(mockMqttClient, 1).data).toEqual({ fpwr: 'ON', auto: 'OFF', fnsp: '0005' });
     });
 
     it('should clear the override once a state message confirms the commanded power', async () => {

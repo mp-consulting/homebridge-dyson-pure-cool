@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.8] - 2026-10-30
+
+### Fixed
+
+- Power on/off and Jet Focus did nothing on newer models such as the HP09 (#29). The MyDyson app drives every model newer than the Link series with `fpwr` (power), `auto`/`fnsp` (mode and speed) and `fdir` (airflow direction), but the plugin sent the gen1 `fmod` and `ffoc` fields, which these models ignore. Fan speed and Night Mode were unaffected. The Jet Focus switch now also follows `fdir` reports from the device.
+- Pure Cool Link TP02 (475) and DP01 (469) now use `fmod` for power and mode, like the HP02 and the MyDyson app, instead of `fpwr`/`auto`.
+
+## [1.4.7] - 2026-10-30
+
+### Fixed
+
+- Dyson account sign-in failing with HTTP 429 (`Retry-After: 3600`) on the OTP request or verification step (#29). Dyson's Cloudflare rule rejects the `android client` User-Agent the setup wizard sent; the wizard now sends `okhttp/4.12.0`, the OkHttp default the MyDyson Android app sends.
+
+## [1.4.6] - 2026-10-25
+
+### Added
+
+- Safe diagnostics for Dyson HTTP 429 responses: validated retry interval and Cloudflare request ID, recognized content type and Cloudflare cookie names, response format, and a fixed error category. Raw response bodies, arbitrary error messages, credentials, and cookie values are not logged. This gathers evidence for issue #29; it does not change the authentication requests or claim to fix Dyson rate limiting.
+
+### Fixed
+
+- Preserve HTTP 429 for empty, HTML, or malformed response bodies instead of returning an empty result or reporting a JSON parsing error.
+
+## [1.4.5] - 2026-10-22
+
+### Notes
+
+- Development dependencies only: vitest 5.0.5, ESLint 10.13, typescript-eslint 8.71.2, `@types/node` 26.6.5, vite 8.3.4 and `bootstrap-icons` 1.13.2. The settings page bundles `bootstrap-icons`, but 1.13.2 changes no icons, so nothing changes for users.
+
 ## [1.4.4] - 2026-10-22
 
 ### Changed

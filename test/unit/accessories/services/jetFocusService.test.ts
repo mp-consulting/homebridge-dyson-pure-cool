@@ -181,7 +181,7 @@ describe('JetFocusService', () => {
         expect.objectContaining({
           msg: 'STATE-SET',
           'mode-reason': 'LAPP',
-          data: { ffoc: 'ON' },
+          data: { fdir: 'ON' },
         }),
       );
     });
@@ -192,7 +192,7 @@ describe('JetFocusService', () => {
 
       expect(mockMqttClient.publishCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { ffoc: 'OFF' },
+          data: { fdir: 'OFF' },
         }),
       );
     });
@@ -201,7 +201,7 @@ describe('JetFocusService', () => {
   describe('state change handling', () => {
     it('should update On characteristic when device state changes', async () => {
       // Update device state with frontAirflow
-      emitProductState(mockMqttClient, { ffoc: 'ON' });
+      emitProductState(mockMqttClient, { fdir: 'ON' });
 
       const Characteristic = mockApi.hap.Characteristic;
 
@@ -213,12 +213,12 @@ describe('JetFocusService', () => {
 
     it('should update characteristic when jet focus turns off', async () => {
       // First turn on
-      emitProductState(mockMqttClient, { ffoc: 'ON' });
+      emitProductState(mockMqttClient, { fdir: 'ON' });
 
       mockService.updateCharacteristic.mockClear();
 
       // Then turn off
-      emitProductState(mockMqttClient, { ffoc: 'OFF' });
+      emitProductState(mockMqttClient, { fdir: 'OFF' });
 
       const Characteristic = mockApi.hap.Characteristic;
 
@@ -329,17 +329,17 @@ describe('JetFocusService', () => {
       expect(mockService.updateCharacteristic).toHaveBeenCalledWith(mockApi.hap.Characteristic.On, expect.any(Boolean));
     });
 
-    it('should push On when the ffoc field changes', () => {
+    it('should push On when the fdir field changes', () => {
       mockService.updateCharacteristic.mockClear();
       mockMqttClient._emit('message', {
         topic: 'status',
         payload: Buffer.from('{}'),
-        data: { msg: 'STATE-CHANGE', 'product-state': { ffoc: 'OFF' } },
+        data: { msg: 'STATE-CHANGE', 'product-state': { fdir: 'OFF' } },
       });
       mockMqttClient._emit('message', {
         topic: 'status',
         payload: Buffer.from('{}'),
-        data: { msg: 'STATE-CHANGE', 'product-state': { ffoc: 'ON' } },
+        data: { msg: 'STATE-CHANGE', 'product-state': { fdir: 'ON' } },
       });
       expect(mockService.updateCharacteristic).toHaveBeenLastCalledWith(mockApi.hap.Characteristic.On, true);
     });

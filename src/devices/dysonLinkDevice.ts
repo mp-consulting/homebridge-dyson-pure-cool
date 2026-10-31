@@ -10,7 +10,7 @@ import type { DeviceFeatures, DeviceInfo } from './types.js';
 import { MessageCodec, FAN_SPEED, HEATING_TEMP, HUMIDITY, PROTOCOL, FORMAT } from '../protocol/messageCodec.js';
 import type { MqttClientFactory } from './dysonDevice.js';
 import type { MqttConnectFn } from '../protocol/mqttClient.js';
-import { getDeviceFeatures, getPowerProtocol } from '../config/index.js';
+import { getDeviceFeatures, getCommandProtocol } from '../config/index.js';
 
 // ============================================================================
 // DysonLinkDevice
@@ -50,10 +50,11 @@ export class DysonLinkDevice extends DysonDevice {
   readonly supportedFeatures: DeviceFeatures;
 
   /**
-   * Whether this device uses the dedicated `fpwr` power field instead of the
-   * legacy `fmod` field. Derived from the device catalog (see PowerProtocol).
+   * Whether this device uses the gen2 protocol (`fpwr`/`auto` for power and
+   * mode, `fdir` for airflow) instead of the gen1 `fmod`/`ffoc` fields.
+   * Derived from the device catalog (see CommandProtocol).
    */
-  private readonly usesFpwrProtocol: boolean;
+  private readonly usesGen2Protocol: boolean;
 
   /** Pending command fields to be batched and sent */
   private pendingCommandFields: Record<string, string> = {};
@@ -90,11 +91,10 @@ export class DysonLinkDevice extends DysonDevice {
     this.productType = deviceInfo.productType;
     this.supportedFeatures = getDeviceFeatures(deviceInfo.productType);
 
-    // Power command protocol is catalog-driven. Most models use the legacy
-    // `fmod` field (power + mode combined); a subset — the Pure Cool Link
-    // series (TP02/DP01) and newer fans like the CF1 (739) — only honour the
-    // dedicated `fpwr` field for power, with `auto`/`fnsp` for mode/speed.
-    this.usesFpwrProtocol = getPowerProtocol(deviceInfo.productType) === 'fpwr';
+    // Command protocol is catalog-driven, matching the MyDyson app: only the
+    // Link series (HP02/TP02/DP01) uses `fmod` (power + mode combined) and
+    // `ffoc`; every newer model ignores those and needs `fpwr`/`auto`/`fdir`.
+    this.usesGen2Protocol = getCommandProtocol(deviceInfo.productType) === 'gen2';
   }
 
   /**
@@ -137,11 +137,11 @@ export class DysonLinkDevice extends DysonDevice {
 
   /**
    * Build the fields that switch the fan on in manual or auto mode,
-   * honouring the model's power protocol (`fpwr` vs legacy `fmod`).
+   * honouring the model's protocol (gen2 `fpwr` vs gen1 `fmod`).
    */
   private buildPowerOnFields(auto: boolean, speed: number): Record<string, string> {
     const encodedSpeed = MessageCodec.encodeFanSpeed(auto ? FAN_SPEED.AUTO : speed);
-    if (this.usesFpwrProtocol) {
+    if (this.usesGen2Protocol) {
       return { fpwr: PROTOCOL.ON, auto: auto ? PROTOCOL.ON : PROTOCOL.OFF, fnsp: encodedSpeed };
     }
     return auto ? { fmod: PROTOCOL.AUTO } : { fmod: PROTOCOL.FAN, fnsp: encodedSpeed };
@@ -155,9 +155,8 @@ export class DysonLinkDevice extends DysonDevice {
   /**
    * Set fan power on or off
    *
-   * Uses the dedicated `fpwr` field (with `auto`/`fnsp`) for devices whose
-   * catalog entry declares `powerProtocol: 'fpwr'`, otherwise the legacy
-   * `fmod` field. See {@link getPowerProtocol}.
+   * Uses the dedicated `fpwr` field (with `auto`/`fnsp`) for gen2 devices and
+   * the legacy `fmod` field for the gen1 Link series. See {@link getCommandProtocol}.
    *
    * @param on - True to turn on, false to turn off
    */
@@ -173,7 +172,7 @@ export class DysonLinkDevice extends DysonDevice {
       }
 
       this.commandedPower = true;
-      const powerOn = this.usesFpwrProtocol
+      const powerOn = this.usesGen2Protocol
         ? this.queueCommand(this.buildPowerOnFields(this.state.autoMode, this.currentManualSpeed()))
         : this.queueCommand({ fmod: this.state.autoMode ? PROTOCOL.AUTO : PROTOCOL.FAN });
 
@@ -187,7 +186,7 @@ export class DysonLinkDevice extends DysonDevice {
       this.commandedPower = false;
       this.pendingCommandFields = {};
       try {
-        await this.sendCommand(this.usesFpwrProtocol ? { fpwr: PROTOCOL.OFF } : { fmod: PROTOCOL.OFF });
+        await this.sendCommand(this.usesGen2Protocol ? { fpwr: PROTOCOL.OFF } : { fmod: PROTOCOL.OFF });
       } finally {
         this.turningOff = false;
       }
@@ -280,9 +279,13 @@ export class DysonLinkDevice extends DysonDevice {
 
   /**
    * Set jet focus (front airflow direction) on or off
+   *
+   * Gen2 devices take the airflow direction in `fdir`; only the gen1 HP02
+   * uses `ffoc`.
    */
   async setJetFocus(on: boolean): Promise<void> {
-    await this.queueCommand({ ffoc: on ? PROTOCOL.ON : PROTOCOL.OFF });
+    const value = on ? PROTOCOL.ON : PROTOCOL.OFF;
+    await this.queueCommand(this.usesGen2Protocol ? { fdir: value } : { ffoc: value });
   }
 
   /**
@@ -366,7 +369,9 @@ export class DysonLinkDevice extends DysonDevice {
 
     this.emit('debug', `Received state: fmod=${productState.fmod}, auto=${productState.auto}, fnsp=${productState.fnsp}`);
 
-    const parsedState = MessageCodec.parseRawState(productState);
+    const parsedState = MessageCodec.parseRawState(productState, {
+      airflowField: this.usesGen2Protocol ? 'fdir' : 'ffoc',
+    });
 
     // Once the device reports the power state we commanded, it's confirmed
     if (parsedState.isOn !== undefined && parsedState.isOn === this.commandedPower) {
